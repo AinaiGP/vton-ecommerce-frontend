@@ -16,7 +16,7 @@ export default function TryOnResult({ resultImage, productName, productPrice }) 
       {/* Info Section */}
       <div className={styles.resultInfo}>
         <h2 className={styles.productTitle}>{productName}</h2>
-        <p className={styles.productPrice}>${productPrice.toFixed(2)}</p>
+        <p className={styles.productPrice}>EGP {productPrice.toFixed(2)}</p>
         <p className={styles.resultNote}>
           This is your personalized try-on result. See how this style looks on you!
         </p>

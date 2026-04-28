@@ -1,0 +1,531 @@
+@import "./variables.css";
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ivory);
+}
+
+.main {
+  flex: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 20px;
+  width: 100%;
+}
+
+/* Breadcrumb */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  font-size: 13px;
+}
+
+.breadcrumb a {
+  color: var(--charcoal-muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.breadcrumb a:hover {
+  color: var(--burgundy);
+}
+
+.breadSep {
+  color: var(--ivory-darker);
+}
+
+.breadCurrent {
+  color: var(--charcoal);
+  font-weight: 600;
+}
+
+/* Header Card */
+.headerCard {
+  background: white;
+  padding: 24px;
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--ivory-dark);
+  margin-bottom: 24px;
+}
+
+.headerInfo {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.orderId {
+  margin: 0 0 4px;
+  font-family: 'Playfair Display', serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--charcoal);
+}
+
+.orderDate {
+  margin: 0;
+  color: var(--charcoal-muted);
+  font-size: 14px;
+}
+
+.headerStatus {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.statusBadge {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.orderTotal {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--burgundy);
+}
+
+/* Layout */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--ivory-dark);
+  margin-bottom: 24px;
+}
+
+.cardTitle {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--charcoal);
+}
+
+.cardSub {
+  margin: 0 0 24px;
+  color: var(--charcoal-muted);
+  font-size: 14px;
+}
+
+/* Stepper */
+.stepperContainer {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  margin-bottom: 32px;
+  padding: 0 10px;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+}
+
+.stepMarker {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.iconCircle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--ivory);
+  border: 2px solid var(--ivory-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--charcoal-muted);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 2;
+  position: relative;
+}
+
+.stepActive .iconCircle {
+  background: var(--burgundy);
+  border-color: var(--burgundy);
+  color: white;
+  box-shadow: 0 0 0 5px rgba(139, 72, 82, 0.1);
+}
+
+.connector {
+  flex: 1;
+  height: 3px;
+  background: var(--ivory-dark);
+  position: absolute;
+  top: 22px;
+  left: calc(50% + 22px);
+  width: calc(100% - 44px);
+  z-index: 1;
+}
+
+.connectorActive {
+  background: var(--burgundy);
+  animation: fillConnector 0.6s ease forwards;
+}
+
+.stepInfo {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.stepLabel {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--charcoal-muted);
+  white-space: nowrap;
+}
+
+.stepActive .stepLabel {
+  color: var(--charcoal);
+}
+
+.stepTime {
+  font-size: 11px;
+  color: var(--charcoal-muted);
+}
+
+@keyframes fillConnector {
+  from { width: 0; }
+  to { width: calc(100% - 44px); }
+}
+
+/* Demo Btn */
+.demoBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: 2px dashed var(--gold);
+  background: var(--ivory);
+  color: var(--charcoal);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.demoBtn:hover:not(:disabled) {
+  background: white;
+  border-color: var(--burgundy);
+  color: var(--burgundy);
+}
+
+.demoBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Items List */
+.itemsList {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.item {
+  display: flex;
+  gap: 16px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--ivory-dark);
+}
+
+.item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.itemImg {
+  width: 80px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.itemInfoContent {
+  flex: 1;
+}
+
+.itemNameRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.itemName {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--charcoal);
+}
+
+.vtonBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: linear-gradient(135deg, var(--gold) 0%, #E5C38F 100%);
+  color: var(--charcoal);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.itemMeta {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--charcoal-muted);
+}
+
+.itemPrice {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--burgundy);
+}
+
+/* Sidebar */
+.sidebarTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--charcoal);
+  margin: 0 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deliveryContent {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.deliveryRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.sidebarIcon {
+  color: var(--gold);
+  flex-shrink: 0;
+}
+
+.addressText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--charcoal);
+}
+
+.sidebarLabel {
+  margin: 0;
+  font-size: 11px;
+  color: var(--charcoal-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sidebarVal {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--ivory-dark);
+  margin: 4px 0;
+}
+
+.mapWrap {
+  margin-top: 24px;
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  height: 140px;
+}
+
+.mapPlaceholder {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.8);
+}
+
+.mapOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(139, 72, 82, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mapPinPulse {
+  color: var(--burgundy);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Sidebar Actions */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.supportBtn, .cancelBtn, .reorderBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.supportBtn {
+  background: var(--charcoal);
+  color: white;
+  border: none;
+}
+
+.cancelBtn {
+  background: white;
+  color: #ef4444;
+  border: 1px solid #fee2e2;
+}
+
+.cancelBtn:disabled {
+  background: var(--ivory);
+  color: var(--charcoal-muted);
+  border-color: var(--ivory-dark);
+  cursor: not-allowed;
+}
+
+.reorderBtn {
+  background: var(--burgundy);
+  color: white;
+  border: none;
+}
+
+/* RTL Support */
+[dir="rtl"] .orderStatus {
+  align-items: flex-start;
+}
+
+[dir="rtl"] .connector {
+  left: auto;
+  right: calc(50% + 22px);
+}
+
+[dir="rtl"] .iconCircle {
+  transform: scaleX(-1);
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .sidebar {
+    order: -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .stepperContainer {
+    flex-direction: column;
+    gap: 32px;
+    padding-left: 20px;
+  }
+  
+  .step {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 16px;
+    text-align: left;
+  }
+  
+  .stepMarker {
+    width: auto;
+  }
+  
+  .connector {
+    width: 3px;
+    height: calc(100% + 12px);
+    top: 44px;
+    left: 20px;
+  }
+  
+  .stepInfo {
+    margin-top: 0;
+    text-align: left;
+  }
+  
+  [dir="rtl"] .stepperContainer {
+    padding-left: 0;
+    padding-right: 20px;
+  }
+  
+  [dir="rtl"] .step {
+    text-align: right;
+  }
+  
+  [dir="rtl"] .connector {
+    left: auto;
+    right: 20px;
+  }
+}

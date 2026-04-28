@@ -48,6 +48,12 @@
   max-width: 200px;
   flex-shrink: 0;
   cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sortSelect:focus {
+  border-color: var(--burgundy);
+  box-shadow: 0 0 0 3px rgba(139, 72, 82, 0.1);
 }
 
 .pagination {
@@ -73,6 +79,12 @@
 .pageButton:hover:not(:disabled) {
   border-color: var(--burgundy);
   color: var(--burgundy);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.pageButton:active:not(:disabled) {
+  transform: translateY(0) scale(0.9);
 }
 
 .pageButton:disabled {

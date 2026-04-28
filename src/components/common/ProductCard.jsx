@@ -1,69 +1,127 @@
-import { ShoppingBag, Eye } from "lucide-react";
+import { useState } from "react";
+import { ShoppingBag, Star, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import styles from "../../styles/ProductCard.module.css";
-import { formatPrice, getProductImage } from "../../utils/productHelpers";
+import {
+  formatPrice, getProductImage, getUniqueColors, getSizeRange,
+} from "../../utils/productHelpers";
+import { useLanguage } from "../../context/LanguageContext";
 
-export default function ProductCard({ product, onTryOn, onAddToCart }) {
+/* ─── Mini star row ─── */
+function Stars({ value }) {
+  return (
+    <span className={styles.stars}>
+      {[1, 2, 3, 4, 5].map(n => (
+        <Star
+          key={n}
+          size={12}
+          fill={value >= n ? "var(--gold)" : "none"}
+          stroke={value >= n ? "var(--gold)" : "#ccc"}
+        />
+      ))}
+    </span>
+  );
+}
+
+export default function ProductCard({ product }) {
+  const { t } = useLanguage();
+  const [activeColorId, setActiveColorId] = useState(null);
+
   if (!product) return null;
 
-  const imageUrl = getProductImage(product);
-  const initials = (product.name || "PR")
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const defaultImageUrl = getProductImage(product);
+  const colors   = getUniqueColors(product);
+  const sizeRange = getSizeRange(product);
+  const rating   = product.rating ?? 0;
+  const reviews  = product.reviewCount ?? 0;
+
+  // Image changes based on selected color
+  let imageUrl = defaultImageUrl;
+  if (activeColorId) {
+    const colorImg = product.images?.find(i => i.colorId === activeColorId)?.s3Url;
+    if (colorImg) imageUrl = colorImg;
+  }
+
+  const maxVisibleColors = 4;
+  const visibleColors = colors.slice(0, maxVisibleColors);
+  const remainingColorsCount = colors.length - maxVisibleColors;
 
   return (
     <div className={styles.card}>
+      {/* ── Image ── */}
       <Link to={`/product/${product.id}`} className={styles.imageWrapper}>
+        {/* Product image */}
         {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={product.name}
-            className={styles.productImage}
-          />
+          <img src={imageUrl} alt={product.name} className={styles.productImage} />
         ) : (
           <div className={styles.imagePlaceholder}>
-            <span>{initials}</span>
+            <span>{product.name?.charAt(0)}</span>
           </div>
         )}
-
-        {product.isLowStock === true && (
-          <span className={styles.lowStockBadge}>Low Stock</span>
-        )}
-
-        <div className={styles.imageOverlay}>
-          <button
-            className={styles.tryOnButton}
-            onClick={(e) => {
-              e.preventDefault();
-              onTryOn?.();
-            }}
-          >
-            <Eye size={20} />
-            <span>Try This On</span>
-          </button>
-        </div>
       </Link>
 
+      {/* ── Info ── */}
       <div className={styles.productInfo}>
-        <p className={styles.brandName}>{product.vendor?.brandName || ""}</p>
+        {/* Brand */}
+        {product.vendor?.brandName && (
+          <p className={styles.brandName}>{product.vendor.brandName}</p>
+        )}
 
+        {/* Name */}
         <Link to={`/product/${product.id}`} className={styles.productNameLink}>
           <h3 className={styles.productName}>{product.name}</h3>
         </Link>
-        <p className={styles.productPrice}>
-          {formatPrice(product.basePrice, product.currency)}
-        </p>
 
-        <button
-          className={styles.addToCartButton}
-          onClick={() => onAddToCart?.()}
-        >
-          <ShoppingBag size={18} />
-          <span>Add to Cart</span>
-        </button>
+        {/* Rating row */}
+        <div className={styles.ratingRow}>
+          <Stars value={Math.round(rating)} />
+          {rating > 0 && <span className={styles.ratingValue}>{rating.toFixed(1)}</span>}
+          {reviews > 0 && <span className={styles.reviewCount}>({reviews})</span>}
+        </div>
+
+        {/* Summary Info (Colors + Sizes) */}
+        <div className={styles.summaryInfo}>
+          {colors.length > 0 && (
+            <div className={styles.colorSwatches}>
+              {visibleColors.map(c => (
+                <button
+                  key={c.id}
+                  className={`${styles.colorSwatchBtn} ${activeColorId === c.id ? styles.colorSwatchBtnActive : ''}`}
+                  style={{ background: c.hexCode }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setActiveColorId(c.id);
+                  }}
+                  aria-label={c.name}
+                  title={c.name}
+                />
+              ))}
+              {remainingColorsCount > 0 && (
+                <span className={styles.colorsRemaining}>+{remainingColorsCount}</span>
+              )}
+            </div>
+          )}
+          
+          {sizeRange && (
+            <>
+              {colors.length > 0 && <span className={styles.summarySep}>·</span>}
+              <span className={styles.summaryItem}>{sizeRange}</span>
+            </>
+          )}
+        </div>
+
+        {/* Price */}
+        <div className={styles.priceRow}>
+          <p className={styles.productPrice}>
+            {formatPrice(product.basePrice, product.currency)}
+          </p>
+        </div>
+
+        {/* Actions */}
+        <Link to={`/product/${product.id}`} className={styles.viewDetailsBtn}>
+          <span>{t("product.view_details")}</span>
+          <ArrowRight size={14} />
+        </Link>
       </div>
     </div>
   );

@@ -62,7 +62,8 @@
 
   /* ── TYPOGRAPHY ── */
   --font-serif: "Playfair Display", "Georgia", "Times New Roman", serif;
-  --font-sans: "Lato", "Arial", sans-serif;
+  --font-sans: "Inter", "Lato", "Arial", sans-serif;
+  --font-arabic: "Cairo", sans-serif;
   --font-mono: "Courier New", monospace;
 
   /* Font Sizes */
@@ -137,9 +138,12 @@
   --content-max: 800px;
 
   /* ── TRANSITIONS ── */
-  --transition-fast: 150ms ease;
-  --transition-base: 300ms ease;
-  --transition-slow: 500ms ease;
+  --transition-fast: 200ms ease;
+  --transition-base: 350ms ease;
+  --transition-slow: 600ms ease;
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --reveal-delay: 100ms;
 
   /* ── Z-INDEX ── */
   --z-base: 1;

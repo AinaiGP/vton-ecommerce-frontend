@@ -1,249 +1,161 @@
+import { Bar } from "react-chartjs-2";
 import {
-  TrendingUp,
-  TrendingDown,
-  Eye,
-  ShoppingCart,
-  DollarSign,
-  Users,
-  Calendar,
-  ArrowUpRight,
-  ArrowDownRight,
-} from "lucide-react";
-import VendorSidebar from "../components/vendor/VendorSidebar";
-import VendorHeader from "../components/vendor/VendorHeader";
-import styles from "../styles/VendorAnalyticsPage.module.css";
+  Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip, Legend
+} from "chart.js";
+import { Eye, ShoppingCart, TrendingUp, Users, Zap, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import VendorLayout from "../components/vendor/VendorLayout";
+import p from "../styles/VendorPage.module.css";
 
-/* ── Static metrics ── */
-const keyMetrics = [
-  {
-    label: "Conversion Rate",
-    value: "4.2%",
-    change: "+0.8%",
-    trend: "up",
-    icon: TrendingUp,
-  },
-  {
-    label: "Avg Order Value",
-    value: "$312",
-    change: "+5.1%",
-    trend: "up",
-    icon: DollarSign,
-  },
-  {
-    label: "VTON Conversion",
-    value: "18.7%",
-    change: "+3.2%",
-    trend: "up",
-    icon: Eye,
-  },
-  {
-    label: "Return Rate",
-    value: "2.1%",
-    change: "-1.4%",
-    trend: "down",
-    icon: ShoppingCart,
-  },
+ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+
+const VTON_PRODUCTS = [
+  { name: "Silk Evening Gown", tryOns: 312, views: 1240, purchases: 89, rate: "28.5%", trend: "+12%" },
+  { name: "Cashmere Wrap Dress", tryOns: 245, views: 980, purchases: 67, rate: "27.3%", trend: "+8%" },
+  { name: "Velvet Abaya", tryOns: 176, views: 760, purchases: 42, rate: "23.9%", trend: "+3%" },
+  { name: "Embroidered Kaftan", tryOns: 198, views: 870, purchases: 54, rate: "27.3%", trend: "-2%" },
+  { name: "Linen Palazzo Set", tryOns: 134, views: 620, purchases: 38, rate: "28.4%", trend: "+15%" },
 ];
 
-const topProducts = [
-  { name: "Silk Evening Gown", views: 1240, tryOns: 312, sales: 89 },
-  { name: "Cashmere Wrap Dress", views: 980, tryOns: 245, sales: 67 },
-  { name: "Embroidered Kaftan", views: 870, tryOns: 198, sales: 54 },
-  { name: "Velvet Abaya", views: 760, tryOns: 176, sales: 42 },
-  { name: "Linen Palazzo Set", views: 620, tryOns: 134, sales: 38 },
+const METRICS = [
+  { label: "Total Try-Ons", value: "1,205", change: "+18.4%", up: true, icon: Eye, color: "#7c3aed", bg: "#f5f3ff" },
+  { label: "Led to Purchase", value: "226", change: "+22.1%", up: true, icon: ShoppingCart, color: "#16a34a", bg: "#dcfce7" },
+  { label: "VTON Conversion", value: "18.7%", change: "+3.2%", up: true, icon: TrendingUp, color: "#0891b2", bg: "#ecfeff" },
+  { label: "Unique Users", value: "892", change: "+9.6%", up: true, icon: Users, color: "#ca8a04", bg: "#fef9c3" },
 ];
 
-/* Chart bar data (visual-only percentage heights) */
-const monthlyData = [
-  { month: "Sep", revenue: 35, orders: 45 },
-  { month: "Oct", revenue: 52, orders: 58 },
-  { month: "Nov", revenue: 68, orders: 62 },
-  { month: "Dec", revenue: 90, orders: 85 },
-  { month: "Jan", revenue: 75, orders: 70 },
-  { month: "Feb", revenue: 82, orders: 78 },
-];
+const barData = {
+  labels: VTON_PRODUCTS.map(p => p.name.split(" ").slice(0, 2).join(" ")),
+  datasets: [
+    {
+      label: "Try-Ons",
+      data: VTON_PRODUCTS.map(p => p.tryOns),
+      backgroundColor: "rgba(139,72,82,0.8)", borderRadius: 6, borderSkipped: false,
+    },
+    {
+      label: "Purchases",
+      data: VTON_PRODUCTS.map(p => p.purchases),
+      backgroundColor: "rgba(212,175,122,0.8)", borderRadius: 6, borderSkipped: false,
+    },
+  ],
+};
+
+const barOpts = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: {
+    legend: { display: true, position: "top", labels: { usePointStyle: true, font: { size: 12 }, padding: 16 } },
+    tooltip: { mode: "index", intersect: false },
+  },
+  scales: {
+    x: { grid: { display: false }, border: { display: false }, ticks: { color: "#9ca3af", font: { size: 11 } } },
+    y: { grid: { color: "rgba(0,0,0,0.04)" }, border: { display: false }, ticks: { color: "#9ca3af", font: { size: 11 } } },
+  },
+};
 
 export default function VendorAnalyticsPage() {
   return (
-    <div className={styles.layout}>
-      <VendorSidebar activeRoute="/vendor/analytics" />
+    <VendorLayout pageTitle="Try-On Analytics" pageSubtitle="Virtual Try-On performance and conversion insights." breadcrumb="Try-On Analytics">
 
-      <div className={styles.main}>
-        <VendorHeader />
-
-        <div className={styles.content}>
-          {/* Head */}
-          <div className={styles.pageHead}>
-            <div>
-              <h1 className={styles.pageTitle}>Analytics</h1>
-              <p className={styles.pageSubtitle}>
-                Performance overview for last 30 days
-              </p>
-            </div>
-            <div className={styles.dateRange}>
-              <Calendar size={14} />
-              <span>Feb 1 – Feb 28, 2026</span>
-            </div>
-          </div>
-
-          {/* Key metrics row */}
-          <div className={styles.metricsRow}>
-            {keyMetrics.map((m) => {
-              const Icon = m.icon;
-              return (
-                <div key={m.label} className={styles.metricCard}>
-                  <div className={styles.metricIcon}>
-                    <Icon size={18} />
-                  </div>
-                  <div className={styles.metricContent}>
-                    <span className={styles.metricLabel}>{m.label}</span>
-                    <div className={styles.metricBottom}>
-                      <span className={styles.metricValue}>{m.value}</span>
-                      <span
-                        className={`${styles.metricBadge} ${m.trend === "up" ? styles.up : styles.down}`}
-                      >
-                        {m.trend === "up" ? (
-                          <ArrowUpRight size={12} />
-                        ) : (
-                          <ArrowDownRight size={12} />
-                        )}
-                        {m.change}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Charts area */}
-          <div className={styles.chartsGrid}>
-            {/* Revenue & Orders chart */}
-            <section className={styles.chartPanel}>
-              <div className={styles.chartHead}>
-                <h2 className={styles.chartTitle}>Revenue & Orders</h2>
-                <div className={styles.legend}>
-                  <span className={styles.legendItem}>
-                    <span
-                      className={`${styles.legendDot} ${styles.dotRevenue}`}
-                    />
-                    Revenue
-                  </span>
-                  <span className={styles.legendItem}>
-                    <span
-                      className={`${styles.legendDot} ${styles.dotOrders}`}
-                    />
-                    Orders
-                  </span>
-                </div>
-              </div>
-
-              {/* Visual bar chart */}
-              <div className={styles.chartArea}>
-                <div className={styles.yAxis}>
-                  <span>100%</span>
-                  <span>75%</span>
-                  <span>50%</span>
-                  <span>25%</span>
-                  <span>0%</span>
-                </div>
-                <div className={styles.barsContainer}>
-                  {monthlyData.map((d) => (
-                    <div key={d.month} className={styles.barGroup}>
-                      <div className={styles.bars}>
-                        <div
-                          className={`${styles.bar} ${styles.barRevenue}`}
-                          style={{ height: `${d.revenue}%` }}
-                        />
-                        <div
-                          className={`${styles.bar} ${styles.barOrders}`}
-                          style={{ height: `${d.orders}%` }}
-                        />
-                      </div>
-                      <span className={styles.barLabel}>{d.month}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
-
-            {/* Top products */}
-            <section className={styles.chartPanel}>
-              <div className={styles.chartHead}>
-                <h2 className={styles.chartTitle}>Top Products</h2>
-              </div>
-
-              <div className={styles.topList}>
-                {topProducts.map((p, i) => (
-                  <div key={p.name} className={styles.topItem}>
-                    <span className={styles.topRank}>{i + 1}</span>
-                    <div className={styles.topInfo}>
-                      <span className={styles.topName}>{p.name}</span>
-                      <div className={styles.topStats}>
-                        <span>
-                          <Eye size={12} /> {p.views}
-                        </span>
-                        <span>
-                          <Users size={12} /> {p.tryOns}
-                        </span>
-                        <span>
-                          <ShoppingCart size={12} /> {p.sales}
-                        </span>
-                      </div>
-                    </div>
-                    {/* Visual bar */}
-                    <div className={styles.topBar}>
-                      <div
-                        className={styles.topBarFill}
-                        style={{
-                          width: `${(p.sales / topProducts[0].sales) * 100}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          {/* VTON insights panel */}
-          <section className={styles.insightsPanel}>
-            <div className={styles.chartHead}>
-              <h2 className={styles.chartTitle}>Virtual Try-On Insights</h2>
-            </div>
-            <div className={styles.insightsGrid}>
-              <div className={styles.insightCard}>
-                <div className={`${styles.insightIcon} ${styles.iconBurgundy}`}>
-                  <Eye size={20} />
-                </div>
-                <span className={styles.insightValue}>1,205</span>
-                <span className={styles.insightLabel}>Total Try-Ons</span>
-              </div>
-              <div className={styles.insightCard}>
-                <div className={`${styles.insightIcon} ${styles.iconGold}`}>
-                  <ShoppingCart size={20} />
-                </div>
-                <span className={styles.insightValue}>226</span>
-                <span className={styles.insightLabel}>Led to Purchase</span>
-              </div>
-              <div className={styles.insightCard}>
-                <div className={`${styles.insightIcon} ${styles.iconSage}`}>
-                  <TrendingUp size={20} />
-                </div>
-                <span className={styles.insightValue}>18.7%</span>
-                <span className={styles.insightLabel}>VTON Conversion</span>
-              </div>
-              <div className={styles.insightCard}>
-                <div className={`${styles.insightIcon} ${styles.iconPurple}`}>
-                  <Users size={20} />
-                </div>
-                <span className={styles.insightValue}>892</span>
-                <span className={styles.insightLabel}>Unique Users</span>
-              </div>
-            </div>
-          </section>
+      {/* Insight callout */}
+      <div className={p.insightCallout}>
+        <div className={p.insightCalloutIcon}><Zap size={20} /></div>
+        <div>
+          <p className={p.insightCalloutTitle}>⭐ Products with VTON perform 3.2× better</p>
+          <p className={p.insightCalloutText}>Your VTON-enabled products have an average conversion rate of 18.7% — compared to just 5.8% for non-VTON products. Enable try-on on more products to boost revenue.</p>
         </div>
       </div>
-    </div>
+
+      {/* Metric cards */}
+      <div className={p.statsGrid}>
+        {METRICS.map(m => {
+          const Icon = m.icon;
+          return (
+            <div key={m.label} className={p.statCard} style={{ "--stat-color": m.color, "--stat-bg": m.bg }}>
+              <div className={p.statTop}>
+                <div>
+                  <p className={p.statLabel}>{m.label}</p>
+                  <p className={p.statValue}>{m.value}</p>
+                </div>
+                <div className={p.statIcon}><Icon size={20} /></div>
+              </div>
+              <div className={p.statFoot}>
+                <span className={`${p.statChange} ${m.up ? p.up : p.down}`}>
+                  {m.up ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}{m.change}
+                </span>
+                <span className={p.statMeta}>vs last month</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Bar chart */}
+      <div className={p.chartCard}>
+        <div className={p.chartHead}>
+          <div>
+            <h3 className={p.chartTitle}>Try-Ons vs Purchases by Product</h3>
+            <p className={p.chartSub}>Last 30 days</p>
+          </div>
+        </div>
+        <div className={p.chartBody} style={{ height: 260 }}>
+          <Bar data={barData} options={barOpts} />
+        </div>
+      </div>
+
+      {/* Per-product table */}
+      <div className={p.tableCard}>
+        <div className={p.chartHead} style={{ padding: "16px 20px" }}>
+          <h3 className={p.chartTitle}>Product-Level VTON Metrics</h3>
+          <span style={{ fontSize: 12, color: "var(--vdr-text-subtle)" }}>Sorted by try-ons</span>
+        </div>
+        <div className={p.tableWrap}>
+          <table className={p.table}>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Views</th>
+                <th>Try-Ons</th>
+                <th>Purchases</th>
+                <th>Conversion</th>
+                <th>Trend</th>
+                <th>Insight</th>
+              </tr>
+            </thead>
+            <tbody>
+              {VTON_PRODUCTS.map((prod, i) => (
+                <tr key={prod.name}>
+                  <td style={{ fontWeight: 600 }}>{prod.name}</td>
+                  <td style={{ color: "var(--vdr-text-muted)" }}>{prod.views.toLocaleString()}</td>
+                  <td style={{ fontWeight: 700 }}>{prod.tryOns}</td>
+                  <td style={{ fontWeight: 700, color: "#16a34a" }}>{prod.purchases}</td>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ flex: 1, height: 6, background: "var(--vdr-border)", borderRadius: 3, minWidth: 60 }}>
+                        <div style={{ height: "100%", width: prod.rate, background: "linear-gradient(90deg, var(--vdr-accent), #a78bfa)", borderRadius: 3 }} />
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--vdr-accent)", flexShrink: 0 }}>{prod.rate}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 12, fontWeight: 700, color: prod.trend.startsWith("+") ? "#16a34a" : "#dc2626" }}>
+                      {prod.trend.startsWith("+") ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                      {prod.trend}
+                    </span>
+                  </td>
+                  <td>
+                    {i === 0 && <span className={`${p.badge} ${p.badgeShipped}`}>🏆 Top Performer</span>}
+                    {prod.trend.startsWith("+") && parseFloat(prod.trend) >= 10 && i !== 0 && (
+                      <span className={`${p.badge} ${p.badgeActive}`}>📈 Growing</span>
+                    )}
+                    {prod.trend.startsWith("-") && (
+                      <span className={`${p.badge} ${p.badgePending}`}>⚠ Review</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </VendorLayout>
   );
 }

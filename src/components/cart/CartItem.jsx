@@ -10,7 +10,7 @@ export default function CartItem({ image, name, price, quantity, onQuantityChang
       {/* Details */}
       <div className={styles.itemDetails}>
         <h3 className={styles.itemName}>{name}</h3>
-        <p className={styles.itemPrice}>${price.toFixed(2)}</p>
+        <p className={styles.itemPrice}>EGP {price.toFixed(2)}</p>
 
         {/* Quantity Controls */}
         <div className={styles.quantityControls}>
@@ -34,7 +34,7 @@ export default function CartItem({ image, name, price, quantity, onQuantityChang
 
       {/* Total & Remove */}
       <div className={styles.itemActions}>
-        <p className={styles.itemTotal}>${(price * quantity).toFixed(2)}</p>
+        <p className={styles.itemTotal}>EGP {(price * quantity).toFixed(2)}</p>
         <button
           className={styles.removeButton}
           onClick={onRemove}

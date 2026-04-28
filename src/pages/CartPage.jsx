@@ -1,25 +1,57 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { ShoppingBag, ArrowLeft, Trash2, Plus, Minus } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ShoppingBag, Trash2, Plus, Minus, Sparkles, Tag, ArrowRight } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
+import { useLanguage } from "../context/LanguageContext";
 import styles from "../styles/CartPage.module.css";
 
-// Empty initial cart — user can browse even when empty
-const initialCart = [];
+// Rich mock data simulating VTON history
+const initialCart = [
+  { 
+    id: 1, 
+    name: "Silk Evening Gown", 
+    size: "M", 
+    color: "Burgundy",
+    price: 389, 
+    quantity: 1, 
+    image: "https://images.unsplash.com/photo-1566479179817-0b6cf9b3888e?w=80&h=100&fit=crop",
+    vtonTried: true 
+  },
+  { 
+    id: 2, 
+    name: "Gold Cuff Bracelet", 
+    size: "One Size", 
+    color: "Gold",
+    price: 89, 
+    quantity: 2, 
+    image: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=80&h=100&fit=crop",
+    vtonTried: false 
+  },
+  { 
+    id: 3, 
+    name: "Velvet Midi Dress", 
+    size: "S", 
+    color: "Emerald",
+    price: 245, 
+    quantity: 1, 
+    image: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=80&h=100&fit=crop",
+    vtonTried: true 
+  },
+];
 
 export default function CartPage() {
+  const { t, dir } = useLanguage();
   const [cartItems, setCartItems] = useState(initialCart);
+  const [promoCode, setPromoCode] = useState("");
+  const [discount, setDiscount]   = useState(0);
+  const navigate = useNavigate();
 
   const updateQuantity = (id, delta) => {
     setCartItems((prev) =>
-      prev
-        .map((item) =>
-          item.id === id
-            ? { ...item, quantity: Math.max(0, item.quantity + delta) }
-            : item,
-        )
-        .filter((item) => item.quantity > 0),
+      prev.map((item) =>
+        item.id === id ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
+      )
     );
   };
 
@@ -27,25 +59,34 @@ export default function CartPage() {
     setCartItems((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const subtotal = cartItems.reduce((s, i) => s + i.price * i.quantity, 0);
+  const applyPromo = (e) => {
+    e.preventDefault();
+    if (promoCode.toUpperCase() === "AINAI20") {
+      setDiscount(0.20);
+    } else {
+      alert("Invalid promo code");
+      setDiscount(0);
+    }
+  };
+
+  const subtotal = cartItems.reduce((s, i) => s + (i.price * i.quantity), 0);
   const shipping = subtotal > 0 ? (subtotal >= 500 ? 0 : 25) : 0;
-  const total = subtotal + shipping;
+  const discountAmount = subtotal * discount;
+  const total = subtotal - discountAmount + shipping;
 
   return (
     <div className={styles.pageWrapper}>
       <Header />
 
-      <main className={styles.mainContent}>
-        {/* Breadcrumb */}
+      <main className={`${styles.mainContent} animate-fade-in`}>
         <nav className={styles.breadcrumb}>
-          <Link to="/">Home</Link>
+          <Link to="/">{t("common.home")}</Link>
           <span className={styles.sep}>/</span>
-          <span className={styles.current}>Shopping Cart</span>
+          <span className={styles.current}>{t("cart.title")}</span>
         </nav>
 
         <h1 className={styles.pageTitle}>
-          <ShoppingBag size={28} />
-          Your Cart
+          {t("cart.title")}
           {cartItems.length > 0 && (
             <span className={styles.itemCount}>
               ({cartItems.reduce((s, i) => s + i.quantity, 0)} items)
@@ -54,126 +95,131 @@ export default function CartPage() {
         </h1>
 
         {cartItems.length === 0 ? (
-          /* ── Empty State ── */
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>
-              <ShoppingBag size={64} strokeWidth={1} />
+              <ShoppingBag size={80} strokeWidth={1} />
             </div>
-            <h2 className={styles.emptyTitle}>Your cart is empty</h2>
+            <h2 className={styles.emptyTitle}>{t("cart.empty")}</h2>
             <p className={styles.emptyMessage}>
-              Looks like you haven't added any items yet. Start exploring our
-              collection and find something you love!
+              {t("cart.emptySub")}
             </p>
             <Link to="/browse" className={styles.browseCta}>
-              Start Shopping
+              {t("cart.startShopping")} <ArrowRight size={18} style={{ transform: dir === 'rtl' ? 'rotate(180deg)' : 'none' }} />
             </Link>
           </div>
         ) : (
-          /* ── Cart Contents ── */
           <div className={styles.cartLayout}>
             {/* Items List */}
-            <section className={styles.itemsSection}>
+            <section className={`${styles.itemsSection} stagger-reveal active`}>
               {cartItems.map((item) => (
                 <div key={item.id} className={styles.cartItem}>
-                  <Link
-                    to={`/product/${item.id}`}
-                    className={styles.itemImageLink}
-                  >
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className={styles.itemImage}
-                    />
+                  <Link to={`/product/${item.id}`} className={styles.itemImageLink}>
+                    <img src={item.image} alt={item.name} className={styles.itemImage} />
                   </Link>
 
                   <div className={styles.itemDetails}>
-                    <Link
-                      to={`/product/${item.id}`}
-                      className={styles.itemName}
-                    >
-                      {item.name}
-                    </Link>
-                    {item.size && (
-                      <p className={styles.itemMeta}>Size: {item.size}</p>
-                    )}
-                    {item.color && (
-                      <p className={styles.itemMeta}>Color: {item.color}</p>
-                    )}
-                    <p className={styles.itemPrice}>${item.price.toFixed(2)}</p>
+                    <div className={styles.itemHeader}>
+                      <Link to={`/product/${item.id}`} className={styles.itemName}>
+                        {item.name}
+                      </Link>
+                      {item.vtonTried && (
+                        <div className={styles.vtonBadge} title="You tried this on virtually">
+                          <Sparkles size={12} /> {t("cart.triedBefore")}
+                        </div>
+                      )}
+                    </div>
 
-                    <div className={styles.quantityRow}>
-                      <button
-                        className={styles.qtyButton}
-                        onClick={() => updateQuantity(item.id, -1)}
-                        aria-label="Decrease"
-                      >
-                        <Minus size={16} />
-                      </button>
-                      <span className={styles.qtyValue}>{item.quantity}</span>
-                      <button
-                        className={styles.qtyButton}
-                        onClick={() => updateQuantity(item.id, 1)}
-                        aria-label="Increase"
-                      >
-                        <Plus size={16} />
+                    <p className={styles.itemMeta}>{t("cart.size")}: {item.size} | {t("cart.color")}: {item.color}</p>
+                    <p className={styles.itemPrice}>EGP {item.price.toFixed(2)}</p>
+
+                    <div className={styles.itemActions}>
+                      <div className={styles.quantityControl}>
+                        <button className={`${styles.qtyBtn} click-bounce`} onClick={() => updateQuantity(item.id, -1)} aria-label="Decrease">
+                          <Minus size={14} />
+                        </button>
+                        <span className={styles.qtyVal}>{item.quantity}</span>
+                        <button className={`${styles.qtyBtn} click-bounce`} onClick={() => updateQuantity(item.id, 1)} aria-label="Increase">
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                      <button className={`${styles.removeBtn} click-bounce`} onClick={() => removeItem(item.id)}>
+                        <Trash2 size={15} /> {t("cart.remove")}
                       </button>
                     </div>
                   </div>
 
-                  <div className={styles.itemRight}>
-                    <p className={styles.lineTotal}>
-                      ${(item.price * item.quantity).toFixed(2)}
-                    </p>
-                    <button
-                      className={styles.removeButton}
-                      onClick={() => removeItem(item.id)}
-                      aria-label="Remove"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                  <div className={styles.itemTotal}>
+                    <span className={styles.totalLabel}>{t("cart.total")}</span>
+                    <span className={styles.totalAmount}>EGP {(item.price * item.quantity).toFixed(2)}</span>
                   </div>
                 </div>
               ))}
             </section>
 
-            {/* Order Summary */}
-            <aside className={styles.summary}>
-              <h3 className={styles.summaryTitle}>Order Summary</h3>
+            {/* Order Summary & Promo */}
+            <aside className={styles.summarySidebar}>
+              <div className={styles.summaryCard}>
+                <h3 className={styles.summaryTitle}>{t("cart.summary")}</h3>
 
-              <div className={styles.summaryRow}>
-                <span>Subtotal</span>
-                <span>${subtotal.toFixed(2)}</span>
-              </div>
-              <div className={styles.summaryRow}>
-                <span>Shipping</span>
-                <span>
-                  {shipping === 0 ? "Free" : `$${shipping.toFixed(2)}`}
-                </span>
-              </div>
-              {subtotal > 0 && subtotal < 500 && (
-                <p className={styles.shippingHint}>
-                  Add ${(500 - subtotal).toFixed(2)} more for free shipping
-                </p>
-              )}
-              <div className={styles.summaryDivider} />
-              <div className={`${styles.summaryRow} ${styles.totalRow}`}>
-                <span>Total</span>
-                <span>${total.toFixed(2)}</span>
-              </div>
+                <form className={styles.promoForm} onSubmit={applyPromo}>
+                  <div className={styles.promoInputGroup}>
+                    <Tag size={16} className={styles.promoIcon} style={{ right: dir === 'rtl' ? '14px' : 'auto', left: dir === 'rtl' ? 'auto' : '14px' }} />
+                    <input 
+                      type="text" 
+                      placeholder={t("cart.promoPlaceholder")} 
+                      value={promoCode} 
+                      onChange={e => setPromoCode(e.target.value)} 
+                      className={styles.promoInput}
+                      style={{ padding: dir === 'rtl' ? '0 40px 0 14px' : '0 14px 0 40px' }}
+                    />
+                  </div>
+                  <button type="submit" className={`${styles.promoBtn} click-bounce`}>{t("cart.apply")}</button>
+                </form>
 
-              <button className={styles.checkoutButton}>
-                Proceed to Checkout
-              </button>
+                <div className={styles.summaryRows}>
+                  <div className={styles.summaryRow}>
+                    <span>{t("cart.subtotal")}</span>
+                    <span>EGP {subtotal.toFixed(2)}</span>
+                  </div>
+                  {discount > 0 && (
+                    <div className={`${styles.summaryRow} ${styles.discountRow}`}>
+                      <span>{t("cart.discount")} (20%)</span>
+                      <span>- EGP {discountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className={styles.summaryRow}>
+                    <span>{t("cart.shipping")}</span>
+                    <span>{shipping === 0 ? t("cart.free") : `EGP ${shipping.toFixed(2)}`}</span>
+                  </div>
+                </div>
 
-              <Link to="/browse" className={styles.continueShopping}>
-                <ArrowLeft size={16} />
-                Continue Shopping
-              </Link>
+                <div className={styles.summaryDivider} />
+
+                <div className={styles.totalRow}>
+                  <span>{t("cart.total")}</span>
+                  <span>EGP {total.toFixed(2)}</span>
+                </div>
+
+                {subtotal > 0 && subtotal < 500 && (
+                  <div className={styles.shippingNotice}>
+                    Spend EGP {(500 - subtotal).toFixed(2)} more to unlock Free Shipping
+                  </div>
+                )}
+
+                <button 
+                  className={`${styles.checkoutBtn} click-bounce`} 
+                  onClick={() => navigate("/checkout")}
+                >
+                  {t("cart.proceed")} <ArrowRight size={18} style={{ transform: dir === 'rtl' ? 'rotate(180deg)' : 'none' }} />
+                </button>
+                <Link to="/browse" className={styles.continueLink}>
+                  {t("cart.continue")}
+                </Link>
+              </div>
             </aside>
           </div>
         )}
       </main>
-
       <Footer />
     </div>
   );

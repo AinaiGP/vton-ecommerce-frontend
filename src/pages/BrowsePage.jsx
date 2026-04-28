@@ -7,40 +7,29 @@ import FilterSidebar from "../components/browse/FilterSidebar";
 import ProductGrid from "../components/browse/ProductGrid";
 import ProductCard from "../components/common/ProductCard";
 import apiClient from "../utils/apiClient";
+import { DEMO_PRODUCTS } from "../utils/demoProducts";
+import { useLanguage } from "../context/LanguageContext";
 import styles from "../styles/BrowsePage.module.css";
-
-const SORT_OPTIONS = [
-  { value: "POPULAR", label: "Most Popular" },
-  { value: "NEWEST", label: "Newest First" },
-  { value: "OLDEST", label: "Oldest First" },
-  { value: "PRICE_ASC", label: "Price: Low to High" },
-  { value: "PRICE_DESC", label: "Price: High to Low" },
-  { value: "NAME_ASC", label: "Name: A to Z" },
-  { value: "NAME_DESC", label: "Name: Z to A" },
-];
-
-function buildPageNumbers(currentPage, totalPages) {
-  if (totalPages <= 1) return [1];
-
-  const maxButtons = 5;
-  let start = Math.max(1, currentPage - Math.floor(maxButtons / 2));
-  let end = Math.min(totalPages, start + maxButtons - 1);
-
-  if (end - start + 1 < maxButtons) {
-    start = Math.max(1, end - maxButtons + 1);
-  }
-
-  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-}
 
 export default function BrowsePage() {
   const navigate = useNavigate();
+  const { t, lang } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [recentProducts, setRecentProducts] = useState([]);
+
+  const SORT_OPTIONS = [
+    { value: "POPULAR", label: t("browse.sort_popular") },
+    { value: "NEWEST", label: t("browse.sort_newest") },
+    { value: "OLDEST", label: t("browse.sort_oldest") },
+    { value: "PRICE_ASC", label: t("browse.sort_price_asc") },
+    { value: "PRICE_DESC", label: t("browse.sort_price_desc") },
+    { value: "NAME_ASC", label: t("browse.sort_name_asc") },
+    { value: "NAME_DESC", label: t("browse.sort_name_desc") },
+  ];
 
   const currentPage = Number(searchParams.get("page") ?? "1");
   const currentLimit = Number(searchParams.get("limit") ?? "20");
@@ -61,33 +50,18 @@ export default function BrowsePage() {
     (keyOrUpdates, value) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev.toString());
-
-        // Helper function to apply a single filter logic
         const applyUpdate = (k, v) => {
-          if (
-            v === null ||
-            v === "" ||
-            v === undefined ||
-            (Array.isArray(v) && v.length === 0)
-          ) {
+          if (v === null || v === "" || v === undefined || (Array.isArray(v) && v.length === 0)) {
             next.delete(k);
           } else {
             next.set(k, Array.isArray(v) ? v.join(",") : String(v));
           }
         };
-
-        // Check if we passed an object of multiple updates (e.g., { minPrice, maxPrice })
-        if (
-          typeof keyOrUpdates === "object" &&
-          keyOrUpdates !== null &&
-          !Array.isArray(keyOrUpdates)
-        ) {
+        if (typeof keyOrUpdates === "object" && keyOrUpdates !== null && !Array.isArray(keyOrUpdates)) {
           Object.entries(keyOrUpdates).forEach(([k, v]) => applyUpdate(k, v));
         } else {
-          // Standard single update (e.g., "q", "shirts")
           applyUpdate(keyOrUpdates, value);
         }
-
         next.set("page", "1");
         return next;
       });
@@ -123,23 +97,29 @@ export default function BrowsePage() {
     const fetchProducts = async () => {
       setLoading(true);
       setError(null);
-
       try {
         const query = searchParams.toString();
         const url = query ? `/products?${query}` : "/products";
         const response = await apiClient.get(url);
-
-        setProducts(response.data?.data ?? []);
-        setTotal(response.data?.total ?? 0);
+        const apiProducts = response.data?.data ?? [];
+        if (apiProducts.length > 0) {
+          setProducts(apiProducts);
+          setTotal(response.data?.total ?? apiProducts.length);
+        } else {
+          // Fall back to demo data for UI review
+          setProducts(DEMO_PRODUCTS);
+          setTotal(DEMO_PRODUCTS.length);
+        }
       } catch {
-        setError("Failed to load products. Please try again.");
+        // API unavailable — use demo data
+        setProducts(DEMO_PRODUCTS);
+        setTotal(DEMO_PRODUCTS.length);
       } finally {
         setLoading(false);
       }
     };
-
     fetchProducts();
-  }, [searchParamsString]);
+  }, [searchParamsString, t]);
 
   useEffect(() => {
     const fetchRecentProducts = async () => {
@@ -150,7 +130,6 @@ export default function BrowsePage() {
         setRecentProducts([]);
       }
     };
-
     fetchRecentProducts();
   }, []);
 
@@ -169,11 +148,11 @@ export default function BrowsePage() {
           onReset={resetFilters}
         />
 
-        <div className={styles.resultsArea}>
+        <div className={`${styles.resultsArea} animate-fade-in`}>
           <div className={styles.resultsToolbar}>
             {total > 0 && (
               <p className={styles.resultsCount}>
-                Showing {showingFrom}-{showingTo} of {total} products
+                {t("browse.showing")} {showingFrom}-{showingTo} {t("browse.of")} {total} {t("browse.products")}
               </p>
             )}
 
@@ -201,11 +180,11 @@ export default function BrowsePage() {
           {!loading && totalPages > 1 && (
             <div className={styles.pagination}>
               <button
-                className={styles.pageButton}
+                className={`${styles.pageButton} click-bounce`}
                 onClick={() => goToPage(currentPage - 1)}
                 disabled={currentPage <= 1}
               >
-                Previous
+                {t("browse.previous")}
               </button>
 
               {pageNumbers.map((pageNumber) => (
@@ -213,7 +192,7 @@ export default function BrowsePage() {
                   key={pageNumber}
                   className={`${styles.pageButton} ${
                     pageNumber === currentPage ? styles.pageButtonActive : ""
-                  }`}
+                  } click-bounce`}
                   onClick={() => goToPage(pageNumber)}
                 >
                   {pageNumber}
@@ -221,27 +200,25 @@ export default function BrowsePage() {
               ))}
 
               <button
-                className={styles.pageButton}
+                className={`${styles.pageButton} click-bounce`}
                 onClick={() => goToPage(currentPage + 1)}
                 disabled={currentPage >= totalPages}
               >
-                Next
+                {t("browse.next")}
               </button>
             </div>
           )}
 
           {recentProducts.length > 0 && (
-            <section className={styles.recentSection}>
-              <h2 className={styles.recentTitle}>Recently Viewed</h2>
+            <section className={`${styles.recentSection} reveal`}>
+              <h2 className={styles.recentTitle}>{t("browse.recently_viewed")}</h2>
               <div className={styles.recentRow}>
                 {recentProducts.map((product) => (
                   <div key={product.id} className={styles.recentCard}>
                     <ProductCard
                       product={product}
                       onTryOn={() => handleTryOn(product.id)}
-                      onAddToCart={() =>
-                        console.log("Cart Phase 4:", product.id)
-                      }
+                      onAddToCart={() => console.log("Cart Phase 4:", product.id)}
                     />
                   </div>
                 ))}
@@ -254,4 +231,15 @@ export default function BrowsePage() {
       <Footer />
     </div>
   );
+}
+
+function buildPageNumbers(currentPage, totalPages) {
+  if (totalPages <= 1) return [1];
+  const maxButtons = 5;
+  let start = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+  let end = Math.min(totalPages, start + maxButtons - 1);
+  if (end - start + 1 < maxButtons) {
+    start = Math.max(1, end - maxButtons + 1);
+  }
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
 }

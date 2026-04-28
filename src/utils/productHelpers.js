@@ -48,10 +48,20 @@ export function getUniqueSizes(product) {
 export function formatPrice(amount, currency) {
   if (typeof amount !== "number" || Number.isNaN(amount)) return "";
 
-  if (currency === "USD") {
-    return `$${amount.toFixed(2)}`;
+  if (currency === "EGP") {
+    return `EGP ${amount.toFixed(2)}`;
   }
 
   const normalizedCurrency = currency || "EGP";
   return `${normalizedCurrency} ${amount.toFixed(2)}`;
+}
+
+export function getSizeRange(product) {
+  const sizes = getUniqueSizes(product);
+  if (sizes.length === 0) return "";
+  if (sizes.length === 1) return sizes[0].label;
+
+  // Attempt to identify start and end based on common size orders
+  const labels = sizes.map((s) => s.label);
+  return `${labels[0]}–${labels[labels.length - 1]}`;
 }

@@ -50,7 +50,7 @@ export default function CartDrawer({ isOpen, onClose, items = [] }) {
             <div className={styles.cartSummary}>
               <div className={styles.summaryRow}>
                 <span>Subtotal</span>
-                <span>${subtotal.toFixed(2)}</span>
+                <span>EGP {subtotal.toFixed(2)}</span>
               </div>
               <div className={styles.summaryRow}>
                 <span>Shipping</span>
@@ -58,12 +58,12 @@ export default function CartDrawer({ isOpen, onClose, items = [] }) {
               </div>
               <div className={styles.summaryRow}>
                 <span>Tax</span>
-                <span>${tax.toFixed(2)}</span>
+                <span>EGP {tax.toFixed(2)}</span>
               </div>
               <div className={styles.summaryDivider} />
               <div className={styles.summaryTotal}>
                 <span>Total</span>
-                <span>${total.toFixed(2)}</span>
+                <span>EGP {total.toFixed(2)}</span>
               </div>
             </div>
 
