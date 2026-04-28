@@ -1,0 +1,48 @@
+@import "./variables.css";
+.page { min-height: 100vh; display: flex; flex-direction: column; background: var(--ivory); }
+.main { flex: 1; max-width: 1300px; margin: 0 auto; padding: 48px 24px; width: 100%; }
+.pageHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 36px; gap: 16px; }
+.title { display: flex; align-items: center; gap: 10px; font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; color: var(--charcoal); margin: 0; }
+.sub { font-size: 14px; color: var(--charcoal-muted); margin: 4px 0 0; }
+.clearBtn { font-size: 13px; color: var(--charcoal-muted); background: none; border: 1px solid var(--ivory-dark); border-radius: 8px; padding: 8px 14px; cursor: pointer; transition: all 0.15s; }
+.clearBtn:hover { border-color: var(--error); color: var(--error); }
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 80px 24px; text-align: center; }
+.emptyIcon { color: var(--ivory-darker); }
+.empty h2 { font-family: 'Playfair Display', serif; font-size: 24px; color: var(--charcoal); }
+.empty p { color: var(--charcoal-muted); max-width: 320px; }
+.browseCta { padding: 13px 28px; border-radius: 12px; background: var(--burgundy); color: white; text-decoration: none; font-weight: 600; transition: all 0.15s; margin-top: 8px; }
+.browseCta:hover { background: var(--burgundy-dark); transform: translateY(-2px); }
+:global([data-dark="1"]) .browseCta {
+  background: #1e1612;
+  color: #D4AF7A;
+  box-shadow: inset 0 0 0 1px rgba(212,175,122,0.25);
+}
+:global([data-dark="1"]) .browseCta:hover { background: #D4AF7A; color: #1e1612; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+.card { display: flex; flex-direction: column; background: white; border-radius: 16px; overflow: hidden; box-shadow: var(--shadow-sm); transition: transform 0.2s, box-shadow 0.2s; }
+.card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+.imgWrap { position: relative; aspect-ratio: 3/4; display: block; overflow: hidden; }
+.img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.35s; }
+.card:hover .img { transform: scale(1.05); }
+.badge { position: absolute; top: 10px; left: 10px; background: var(--burgundy); color: white; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; }
+.removeBtn { position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,0.9); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.removeBtn:hover { background: var(--error); color: white; }
+.info { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
+.cat { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--charcoal-muted); font-weight: 600; }
+.name { font-size: 15px; font-weight: 600; color: var(--charcoal); margin: 0; }
+.price { font-size: 15px; font-weight: 700; color: var(--burgundy); margin: 0; }
+.cardActions { display: flex; gap: 8px; margin-top: 4px; }
+.cartBtn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border-radius: 10px; background: var(--burgundy); color: white; font-size: 13px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s; }
+.cartBtn:hover { background: var(--burgundy-dark); }
+:global([data-dark="1"]) .cartBtn {
+  background: #1e1612;
+  color: #D4AF7A;
+  box-shadow: inset 0 0 0 1px rgba(212,175,122,0.25);
+}
+:global([data-dark="1"]) .cartBtn:hover { background: #D4AF7A; color: #1e1612; }
+.cartBtnAdded { background: #16a34a !important; }
+.trashBtn { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--ivory-dark); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--charcoal-muted); transition: all 0.15s; }
+.trashBtn:hover { border-color: var(--error); color: var(--error); }
+@media(max-width:1100px){.grid{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:768px){.grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:480px){.grid{grid-template-columns:1fr;}}

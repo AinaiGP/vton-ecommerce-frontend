@@ -4,6 +4,7 @@ import {
   ClipboardList,
   BarChart3,
   TicketCheck,
+  Inbox,
   Settings,
   LogOut,
   ChevronLeft,
@@ -19,6 +20,7 @@ const navItems = [
   { icon: ClipboardList, label: "Orders", to: "/vendor/orders" },
   { icon: BarChart3, label: "Analytics", to: "/vendor/analytics" },
   { icon: TicketCheck, label: "Tickets", to: "/vendor/tickets" },
+  { icon: Inbox, label: "Messages", to: "/vendor/messages" },
 ];
 
 const bottomItems = [

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLanguage } from "../../context/LanguageContext";
 import styles from "../../styles/AinaiLogo.module.css";
 
 /* ─────────────────────────────────────────────
@@ -23,6 +24,19 @@ export default function AinaiLogo({
   animated = true,
 }) {
   const [blink, setBlink] = useState(false);
+  const [isDark, setIsDark] = useState(
+    () => document.documentElement.getAttribute("data-dark") === "1"
+  );
+  const { lang, dir } = useLanguage();
+
+  // Track dark-mode changes reactively
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.getAttribute("data-dark") === "1");
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-dark"] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!animated) return;
@@ -34,8 +48,13 @@ export default function AinaiLogo({
     return () => clearInterval(interval);
   }, [animated]);
 
+  // In dark mode: upgrade "light" variant → "dark" (same look as login page)
+  // "dark" and "colored" variants already look good on dark backgrounds
+  const resolvedVariant = isDark && variant === "light" ? "dark" : variant;
+
   const sizeClass = styles[`size_${size}`] || styles.size_md;
-  const variantClass = styles[`variant_${variant}`] || styles.variant_light;
+  const variantClass = styles[`variant_${resolvedVariant}`] || styles.variant_light;
+
 
   return (
     <div className={`${styles.logoWrapper} ${sizeClass} ${variantClass}`}>
@@ -55,9 +74,12 @@ export default function AinaiLogo({
 
       {/* Text */}
       {showText && (
-        <div className={styles.textGroup}>
-          <span className={styles.brandText}>AINAI</span>
-          {showArabic && <span className={styles.arabicText}>عَيناي</span>}
+        <div className={styles.textGroup} style={{ fontFamily: lang === 'ar' ? "'Amiri', serif" : "'Inter', sans-serif" }}>
+          {lang === 'en' ? (
+            <span className={styles.brandText} style={{ animation: "fadeIn 0.4s ease-out" }}>AINAI</span>
+          ) : (
+            <span className={styles.arabicText} style={{ animation: "fadeIn 0.4s ease-out", fontSize: "1.1em", fontWeight: 700 }}>عَيناي</span>
+          )}
         </div>
       )}
 

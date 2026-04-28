@@ -12,7 +12,7 @@ const stats = [
   {
     id: "sales",
     label: "Total Sales",
-    value: "$24,780",
+    value: "EGP 24,780",
     change: "+12.5%",
     trend: "up",
     icon: DollarSign,
@@ -39,7 +39,7 @@ const stats = [
   {
     id: "revenue",
     label: "Revenue",
-    value: "$8,420",
+    value: "EGP 8,420",
     change: "-3.4%",
     trend: "down",
     icon: TrendingUp,

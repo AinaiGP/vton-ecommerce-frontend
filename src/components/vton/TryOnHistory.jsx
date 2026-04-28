@@ -57,7 +57,7 @@ export default function TryOnHistory({ items = [] }) {
             {/* Info */}
             <div className={styles.cardInfo}>
               <h3 className={styles.cardProductName}>{item.productName}</h3>
-              <p className={styles.cardProductPrice}>${item.productPrice.toFixed(2)}</p>
+              <p className={styles.cardProductPrice}>EGP {item.productPrice.toFixed(2)}</p>
               <p className={styles.cardDate}>{formatDate(item.dateCreated)}</p>
             </div>
 

@@ -18,31 +18,27 @@ export default function DashboardPage() {
 
           {/* Dashboard Grid */}
           <div className={styles.dashboardGrid}>
-            {/* Card 1: Account Info */}
             <div className={styles.card}>
               <div className={styles.cardIcon}>👤</div>
-              <h3 className={styles.cardTitle}>My Account</h3>
-              <p className={styles.cardDescription}>View and update your profile information</p>
-              <Link to="#" className={styles.cardLink}>Manage Account</Link>
+              <h3 className={styles.cardTitle}>My Profile</h3>
+              <p className={styles.cardDescription}>Update your name, email, photo, password &amp; addresses</p>
+              <Link to="/profile" className={styles.cardLink}>Manage Profile</Link>
             </div>
 
-            {/* Card 2: Orders */}
             <div className={styles.card}>
               <div className={styles.cardIcon}>📦</div>
               <h3 className={styles.cardTitle}>My Orders</h3>
-              <p className={styles.cardDescription}>Track your orders and view history</p>
-              <Link to="#" className={styles.cardLink}>View Orders</Link>
+              <p className={styles.cardDescription}>Track orders, cancel or submit return requests</p>
+              <Link to="/orders" className={styles.cardLink}>View Orders</Link>
             </div>
 
-            {/* Card 3: Favorites */}
             <div className={styles.card}>
               <div className={styles.cardIcon}>❤️</div>
               <h3 className={styles.cardTitle}>Saved Items</h3>
-              <p className={styles.cardDescription}>Access your favorite pieces</p>
-              <Link to="#" className={styles.cardLink}>View Saved</Link>
+              <p className={styles.cardDescription}>Access your favourite pieces</p>
+              <Link to="/wishlist" className={styles.cardLink}>View Saved</Link>
             </div>
 
-            {/* Card 4: Try-On History */}
             <div className={styles.card}>
               <div className={styles.cardIcon}>📸</div>
               <h3 className={styles.cardTitle}>Try-On History</h3>
@@ -50,20 +46,32 @@ export default function DashboardPage() {
               <Link to="/try-on-history" className={styles.cardLink}>View History</Link>
             </div>
 
-            {/* Card 5: Addresses */}
             <div className={styles.card}>
-              <div className={styles.cardIcon}>🏠</div>
-              <h3 className={styles.cardTitle}>Addresses</h3>
-              <p className={styles.cardDescription}>Manage your shipping addresses</p>
-              <Link to="#" className={styles.cardLink}>Manage Addresses</Link>
+              <div className={styles.cardIcon}>👗</div>
+              <h3 className={styles.cardTitle}>My Wardrobe</h3>
+              <p className={styles.cardDescription}>Upload clothes, build outfits &amp; get AI style picks</p>
+              <Link to="/wardrobe" className={styles.cardLink}>Open Wardrobe</Link>
             </div>
 
-            {/* Card 6: Settings */}
             <div className={styles.card}>
-              <div className={styles.cardIcon}>⚙️</div>
-              <h3 className={styles.cardTitle}>Settings</h3>
-              <p className={styles.cardDescription}>Update preferences and notifications</p>
-              <Link to="#" className={styles.cardLink}>Go to Settings</Link>
+              <div className={styles.cardIcon}>🎫</div>
+              <h3 className={styles.cardTitle}>Support Tickets</h3>
+              <p className={styles.cardDescription}>Get help with orders, products or technical issues</p>
+              <Link to="/tickets" className={styles.cardLink}>View Tickets</Link>
+            </div>
+
+            <div className={styles.card}>
+              <div className={styles.cardIcon}>↩️</div>
+              <h3 className={styles.cardTitle}>Return Requests</h3>
+              <p className={styles.cardDescription}>Message vendors about returns and track refunds</p>
+              <Link to="/returns" className={styles.cardLink}>My Returns</Link>
+            </div>
+
+            <div className={styles.card}>
+              <div className={styles.cardIcon}>🏪</div>
+              <h3 className={styles.cardTitle}>Sell on AINAI</h3>
+              <p className={styles.cardDescription}>Apply to become a vendor and sell your fashion brand</p>
+              <Link to="/apply-vendor" className={styles.cardLink}>Apply as Vendor</Link>
             </div>
           </div>
 
@@ -76,12 +84,12 @@ export default function DashboardPage() {
                 <div className={styles.activityItem}>
                   <span className={styles.activityBadge}>Purchase</span>
                   <span className={styles.activityText}>Silk Jalabiya purchased</span>
-                  <span className={styles.activityDate}>Feb 28, 2025</span>
+                  <span className={styles.activityDate}>Apr 18, 2026</span>
                 </div>
                 <div className={styles.activityItem}>
                   <span className={styles.activityBadge}>Try-On</span>
                   <span className={styles.activityText}>Tried on Embroidered Kaftan</span>
-                  <span className={styles.activityDate}>Feb 27, 2025</span>
+                  <span className={styles.activityDate}>Apr 17, 2026</span>
                 </div>
               </div>
             </div>

@@ -1,0 +1,69 @@
+@import "./variables.css";
+.page { min-height: 100vh; display: flex; flex-direction: column; background: var(--ivory); }
+.main { flex: 1; max-width: 900px; margin: 0 auto; padding: 48px 24px; width: 100%; }
+.pageHead { margin-bottom: 36px; }
+.title { display: flex; align-items: center; gap: 10px; font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; color: var(--charcoal); margin: 0 0 4px; }
+.sub { font-size: 14px; color: var(--charcoal-muted); }
+.empty { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 80px 24px; text-align: center; color: var(--charcoal-muted); }
+.browseCta { padding: 12px 28px; border-radius: 10px; background: var(--burgundy); color: white; text-decoration: none; font-weight: 600; margin-top: 8px; }
+:global([data-dark="1"]) .browseCta { background: #1e1612; color: #D4AF7A; box-shadow: inset 0 0 0 1px rgba(212,175,122,0.25); }
+:global([data-dark="1"]) .browseCta:hover { background: #D4AF7A; color: #1e1612; }
+.list { display: flex; flex-direction: column; gap: 16px; }
+.orderCard { background: white; border-radius: 16px; overflow: hidden; box-shadow: var(--shadow-sm); border: 1px solid var(--ivory-dark); }
+.orderHead { width: 100%; display: flex; align-items: center; gap: 16px; padding: 18px 20px; background: none; border: none; cursor: pointer; text-align: left; transition: background 0.15s; }
+.orderHead:hover { background: var(--ivory); }
+.orderMeta { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.orderId { font-weight: 700; color: var(--charcoal); font-size: 14px; font-family: monospace; }
+.orderDate { font-size: 12px; color: var(--charcoal-muted); }
+.orderBadge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.orderTotal { font-size: 15px; font-weight: 700; color: var(--charcoal); }
+.chevron { color: var(--charcoal-muted); transition: transform 0.2s; }
+.chevronOpen { transform: rotate(90deg); }
+.orderBody { border-top: 1px solid var(--ivory-dark); padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+/* Tracker */
+.tracker { display: flex; align-items: center; gap: 0; }
+.trackStep { display: flex; align-items: center; flex: 1; }
+.trackDot { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--ivory-dark); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--charcoal-muted); background: white; flex-shrink: 0; }
+.trackDotActive { border-color: var(--burgundy); background: var(--burgundy); color: white; }
+.trackLabel { font-size: 11px; color: var(--charcoal-muted); white-space: nowrap; margin: 0 6px; }
+.trackLabelActive { color: var(--burgundy); font-weight: 600; }
+.trackLine { flex: 1; height: 2px; background: var(--ivory-dark); }
+.trackLineActive { background: var(--burgundy); }
+/* Items */
+.items { display: flex; flex-direction: column; gap: 12px; }
+.item { display: flex; align-items: center; gap: 14px; }
+.itemImg { width: 56px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+.itemInfo { flex: 1; }
+.itemName { font-size: 14px; font-weight: 600; color: var(--charcoal); margin: 0 0 2px; }
+.itemMeta { font-size: 12px; color: var(--charcoal-muted); margin: 0; }
+.itemPrice { font-size: 14px; font-weight: 700; color: var(--burgundy); }
+@media(max-width:640px){.tracker{flex-direction:column;align-items:flex-start;gap:8px;}.trackLine{display:none;}}
+
+.trackBtn {
+  background: var(--gold);
+  color: var(--charcoal);
+  border: none;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.trackBtn:hover {
+  background: var(--burgundy);
+  color: white;
+  transform: translateY(-1px);
+}
+
+:global([data-dark="1"]) .trackBtn {
+  background: rgba(212,175,122,0.15);
+  color: #D4AF7A;
+  box-shadow: inset 0 0 0 1px rgba(212,175,122,0.2);
+}
+:global([data-dark="1"]) .trackBtn:hover {
+  background: #D4AF7A;
+  color: #1e1612;
+}

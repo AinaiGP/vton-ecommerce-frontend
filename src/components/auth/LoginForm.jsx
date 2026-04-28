@@ -1,6 +1,6 @@
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { GoogleIcon } from "../common/SocialIcons";
 import { forgotPassword, loginUser } from "../../utils/authFunctions";
 import { useAuth } from "../../context/AuthContext";
@@ -134,14 +134,12 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
             <input type="checkbox" className={styles.checkbox} />
             <span>Remember me</span>
           </label>
-          <button
-            type="button"
+          <Link
+            to="/auth/forgot-password"
             className={styles.forgotLink}
-            onClick={handleForgotPassword}
-            disabled={forgotLoading}
           >
-            {forgotLoading ? "Sending..." : "Forgot password?"}
-          </button>
+            Forgot password?
+          </Link>
         </div>
 
         {/* Submit */}
