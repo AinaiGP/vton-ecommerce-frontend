@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
@@ -15,6 +16,13 @@ export default function HomePage() {
   const { t, lang } = useLanguage();
   const navigate = useNavigate();
 
+  const [featuredProducts, setFeaturedProducts] = useState([]);
+  const [testimonials, setTestimonials] = useState([]);
+
+  useEffect(() => {
+    // TODO: wire to real API endpoint — Phase X
+  }, []);
+
   const CATEGORIES = [
     { label: t("category.dresses"), emoji: "👗", to: "/browse?category=dresses", color: "#fdf2f4", icon: <Shirt size={24} /> },
     { label: t("category.abayas"), emoji: "🕌", to: "/browse?category=abayas", color: "#f3f0ff", icon: <Sparkles size={24} /> },
@@ -24,24 +32,11 @@ export default function HomePage() {
     { label: t("category.sale"), emoji: "🏷️", to: "/browse?sale=true", color: "#fef2f2", icon: <Zap size={24} /> },
   ];
 
-  const FEATURED = [
-    { id: 1, name: lang === "ar" ? "ثوب سهرة حريري" : "Silk Evening Gown", price: 389, image: "/1.jpg", badge: t("badge.new"), category: t("category.dresses") },
-    { id: 2, name: lang === "ar" ? "قفطان مطرز" : "Embroidered Kaftan", price: 450, image: "/2.jpg", badge: t("badge.bestseller"), category: lang === "ar" ? "تقليدي" : "Traditional" },
-    { id: 3, name: lang === "ar" ? "فستان كشمير ملفوف" : "Cashmere Wrap Dress", price: 275, image: "/3.jpg", badge: t("badge.ainai"), category: t("category.dresses") },
-    { id: 4, name: lang === "ar" ? "عباية مخملية" : "Velvet Abaya", price: 320, image: "/4.jpg", badge: t("badge.limited"), category: t("category.abayas") },
-  ];
-
   const HOW_IT_WORKS = [
     { icon: <Camera size={32} />, title: lang === "ar" ? "ارفع صورتك" : "Upload Your Photo", desc: lang === "ar" ? "التقط صورة واضحة لنفسك في إضاءة جيدة." : "Take a clear photo of yourself in good lighting." },
     { icon: <Shirt size={32} />, title: lang === "ar" ? "اختر التصميم" : "Pick Your Style", desc: lang === "ar" ? "تصفح آلاف القطع من أفضل المصممين." : "Browse thousands of pieces from top designers." },
     { icon: <Sparkles size={32} />, title: lang === "ar" ? "جرب افتراضياً" : "Virtual Try-On", desc: lang === "ar" ? "شاهد كيف يبدو الزي عليك بدقة مذهلة." : "See exactly how it looks on you with AI precision." },
     { icon: <ArrowRight size={32} />, title: lang === "ar" ? "تسوق بثقة" : "Shop Confidently", desc: lang === "ar" ? "اشترِ ما يناسبك تماماً في المرة الأولى." : "Buy what fits you perfectly the first time." },
-  ];
-
-  const TESTIMONIALS_NEW = [
-    { name: "Emma R.", role: "Fashion Designer", text: lang === "ar" ? "أنا مهووسة بمجموعتهم الأخيرة! كل قطعة تبدو عالية الجودة وتناسبني بشكل رائع. كان التسليم سريعاً." : "I'm obsessed with their latest collection! Every piece feels high-quality and fits beautifully. The delivery was quick, and the packaging looked so elegant.", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop" },
-    { name: "John K.", role: "Web Designer", text: lang === "ar" ? "التصاميم أنيقة وعصرية للغاية - بالضبط ما كنت أبحث عنه! تجربة التسوق كانت سلسة وممتعة." : "The designs are so elegant and trendy — exactly what I was looking for! From browsing to checkout, the whole shopping experience was smooth and enjoyable.", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop" },
-    { name: "Sarah L.", role: "Civil Engineer", text: lang === "ar" ? "هذه العلامة التجارية لا تخيب ظني أبداً! تبدو المجموعة فاخرة وبأسعار معقولة. فريق الدعم متعاون جداً." : "This brand never disappoints! The collection feels premium yet affordable, and their customer support team is so helpful with sizing and recommendations.", avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=100&h=100&fit=crop" },
   ];
 
   const BADGE_COLORS = { [t("badge.new")]: "#16a34a", [t("badge.bestseller")]: "#d4af7a", [t("badge.ainai")]: "#8b4852", [t("badge.limited")]: "#7c3aed" };
@@ -83,20 +78,24 @@ export default function HomePage() {
           <h2 className={styles.sectionTitleNew}>{lang === "ar" ? "أحدث المنتجات" : "Latest Products"}</h2>
         </div>
         <div className={`${styles.latestGrid} stagger-reveal`}>
-          {FEATURED.slice(0, 3).map(p => (
-            <div key={p.id} className={styles.productCardSimple} onClick={() => navigate(`/product/${p.id}`)}>
-              <div className={`${styles.productImgSimpleWrap} hover-zoom`}>
-                <img src={p.image} alt={p.name} className={styles.productImgSimple} />
+          {featuredProducts.length === 0 ? (
+            <p className={styles.emptyState}>No products available yet.</p>
+          ) : (
+            featuredProducts.slice(0, 3).map(p => (
+              <div key={p.id} className={styles.productCardSimple} onClick={() => navigate(`/product/${p.id}`)}>
+                <div className={`${styles.productImgSimpleWrap} hover-zoom`}>
+                  <img src={p.image} alt={p.name} className={styles.productImgSimple} />
+                </div>
+                <div className={styles.productInfoSimple}>
+                  <h3 className={styles.productNameSimple}>{p.name}</h3>
+                  <p className={styles.productPriceSimple}>EGP {p.price.toFixed(2)}</p>
+                  <button className={`${styles.addToCartLink} click-bounce`}>
+                    {t("common.add_to_cart")} <ArrowRight size={14} />
+                  </button>
+                </div>
               </div>
-              <div className={styles.productInfoSimple}>
-                <h3 className={styles.productNameSimple}>{p.name}</h3>
-                <p className={styles.productPriceSimple}>EGP {p.price.toFixed(2)}</p>
-                <button className={`${styles.addToCartLink} click-bounce`}>
-                  {t("common.add_to_cart")} <ArrowRight size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </section>
 
@@ -208,19 +207,23 @@ export default function HomePage() {
           <Link to="/browse" className={`${styles.btnSeeAll} click-bounce`}>{lang === "ar" ? "مشاهدة الكل ↗" : "See all ↗"}</Link>
         </div>
         <div className={`${styles.testimonialGridNew} stagger-reveal`}>
-          {TESTIMONIALS_NEW.map((t, i) => (
-            <div key={i} className={`${styles.testiCardNew} card`}>
-              <div className={styles.testiStars}>{"★".repeat(5)}</div>
-              <p className={styles.testiTextNew}>{t.text}</p>
-              <div className={styles.testiUserNew}>
-                <img src={t.avatar} alt={t.name} className={styles.testiAvatarNew} />
-                <div>
-                  <h4 className={styles.testiNameNew}>{t.name}</h4>
-                  <p className={styles.testiRoleNew}>{t.role}</p>
+          {testimonials.length === 0 ? (
+            <p className={styles.emptyState}>No testimonials available yet.</p>
+          ) : (
+            testimonials.map((t, i) => (
+              <div key={i} className={`${styles.testiCardNew} card`}>
+                <div className={styles.testiStars}>{"★".repeat(5)}</div>
+                <p className={styles.testiTextNew}>{t.text}</p>
+                <div className={styles.testiUserNew}>
+                  <img src={t.avatar} alt={t.name} className={styles.testiAvatarNew} />
+                  <div>
+                    <h4 className={styles.testiNameNew}>{t.name}</h4>
+                    <p className={styles.testiRoleNew}>{t.role}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </section>
 

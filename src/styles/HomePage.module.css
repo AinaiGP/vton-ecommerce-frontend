@@ -627,3 +627,23 @@
   .seasonalGrid { grid-template-columns: 1fr; }
   .logoCloud { font-size: 16px; gap: 20px; flex-wrap: wrap; }
 }
+
+/* Empty State */
+.emptyState {
+  text-align: center;
+  color: var(--charcoal-muted);
+  padding: 60px 20px;
+  font-size: 16px;
+  font-weight: 500;
+  background: #fdfaf7;
+  border-radius: 32px;
+  border: 2px dashed rgba(0,0,0,0.05);
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+:global([data-dark="1"]) .emptyState {
+  background: #2a221c;
+  border-color: rgba(212,175,122,0.1);
+  color: var(--gold-dark);
+}

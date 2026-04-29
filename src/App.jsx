@@ -1,4 +1,4 @@
-import { Navigate, Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route, useLocation } from "react-router-dom";
 import FloatingChatWidget from "./components/chat/FloatingChatWidget";
 import HomePage from "./pages/HomePage";
 import BrowsePage from "./pages/BrowsePage";
@@ -43,6 +43,7 @@ import AdminStaff from "./pages/admin/AdminStaff";
 import AdminVendorApplications from "./pages/admin/AdminVendorApplications";
 import AdminInvitations from "./pages/admin/AdminInvitations";
 import AdminProfile from "./pages/admin/AdminProfile";
+import GoogleOnboardingModal from "./components/auth/GoogleOnboardingModal";
 
 import SupportDashboard from "./pages/support/SupportDashboard";
 import SupportTickets from "./pages/support/SupportTickets";
@@ -59,7 +60,8 @@ import { useAuth } from "./context/AuthContext";
 import { useEffect } from "react";
 
 function App() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, needsOnboarding } = useAuth();
+  const location = useLocation();
 
   useEffect(() => {
     const observerOptions = {
@@ -75,14 +77,39 @@ function App() {
       });
     }, observerOptions);
 
-    const revealElements = document.querySelectorAll(".reveal, .stagger-reveal");
-    revealElements.forEach((el) => observer.observe(el));
+    const observeNewElements = () => {
+      const revealElements = document.querySelectorAll(".reveal, .stagger-reveal");
+      revealElements.forEach((el) => observer.observe(el));
+    };
 
-    return () => observer.disconnect();
-  }, []);
+    // Initial observation
+    observeNewElements();
+
+    // Use MutationObserver to catch elements added dynamically later
+    const mutationObserver = new MutationObserver(() => {
+      observeNewElements();
+    });
+
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    // Fallback: Ensure everything is observed after a delay
+    const timer = setTimeout(observeNewElements, 1000);
+
+    return () => {
+      observer.disconnect();
+      mutationObserver.disconnect();
+      clearTimeout(timer);
+    };
+  }, [location.pathname]);
 
   return (
     <>
+      {needsOnboarding && location.pathname !== "/onboarding" && (
+        <GoogleOnboardingModal />
+      )}
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/browse" element={<BrowsePage />} />
@@ -91,6 +118,10 @@ function App() {
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route
+          path="/onboarding"
+          element={<GoogleOnboardingModal isPage={true} />}
+        />
         <Route path="/try-on-history" element={<TryOnHistoryPage />} />
         <Route path="/ai-try-on" element={<AITryOnPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
@@ -105,7 +136,10 @@ function App() {
         <Route path="/vendor/settings" element={<VendorSettingsPage />} />
         <Route path="/vendor/inventory" element={<VendorInventoryPage />} />
         <Route path="/vendor/refunds" element={<VendorRefundsPage />} />
-        <Route path="/vendors/storefront/:id" element={<VendorStorefrontPage />} />
+        <Route
+          path="/vendors/storefront/:id"
+          element={<VendorStorefrontPage />}
+        />
         <Route path="/profile" element={<CustomerProfilePage />} />
         <Route path="/wishlist" element={<WishlistPage />} />
         <Route path="/wardrobe" element={<WardrobePage />} />
@@ -127,7 +161,10 @@ function App() {
         <Route path="/admin/reports" element={<AdminReports />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
         <Route path="/admin/staff" element={<AdminStaff />} />
-        <Route path="/admin/vendor-applications" element={<AdminVendorApplications />} />
+        <Route
+          path="/admin/vendor-applications"
+          element={<AdminVendorApplications />}
+        />
         <Route path="/admin/invitations" element={<AdminInvitations />} />
         <Route path="/admin/profile" element={<AdminProfile />} />
 

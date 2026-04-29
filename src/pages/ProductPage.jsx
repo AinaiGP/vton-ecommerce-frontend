@@ -121,11 +121,18 @@ export default function ProductPage() {
     );
   }, [product, selectedColor, selectedSize]);
 
-  const isAddToCartDisabled =
-    !selectedVariant || (selectedVariant?.availableQuantity ?? 0) <= 0;
+  const hasSelectedVariant = Boolean(selectedVariant);
+  const availableQty = hasSelectedVariant
+    ? (selectedVariant.physicalQuantity ?? 0) -
+      (selectedVariant.reservedQuantity ?? 0)
+    : 0;
+  const isLowStock =
+    hasSelectedVariant && availableQty > 0 && availableQty < 10;
+  const isOutOfStock = hasSelectedVariant && availableQty <= 0;
+  const isAddToCartDisabled = !hasSelectedVariant || isOutOfStock;
 
   const handleAddToCart = () => {
-    if (!selectedVariant || (selectedVariant.availableQuantity ?? 0) <= 0) {
+    if (!selectedVariant || isOutOfStock) {
       return;
     }
 
@@ -284,8 +291,10 @@ export default function ProductPage() {
                   const variantForSize = variantsForSelectedColor.find(
                     (variant) => variant?.size?.id === size.id,
                   );
-                  const outOfStock =
-                    (variantForSize?.availableQuantity ?? 0) <= 0;
+                  const sizeAvailableQty =
+                    (variantForSize?.physicalQuantity ?? 0) -
+                    (variantForSize?.reservedQuantity ?? 0);
+                  const outOfStock = sizeAvailableQty <= 0;
                   return (
                     <button
                       key={size.id}
@@ -301,6 +310,13 @@ export default function ProductPage() {
                 })}
               </div>
             </div>
+
+            {isLowStock && (
+              <p className={styles.lowStockNotice}>Only {availableQty} left</p>
+            )}
+            {isOutOfStock && (
+              <p className={styles.outOfStockNotice}>Out of Stock</p>
+            )}
 
             <div className={styles.actions}>
               <button

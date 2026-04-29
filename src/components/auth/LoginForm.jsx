@@ -11,50 +11,90 @@ import { useAuth } from "../../context/AuthContext";
    Receives CSS module styles as a prop.
 ───────────────────────────────────────────── */
 
+const decodeJwtPayload = (token) => {
+  try {
+    const base64 = token.split('.')[1]
+      .replace(/-/g, '+').replace(/_/g, '/');
+    const normalized = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4), '='
+    );
+    return JSON.parse(atob(normalized));
+  } catch {
+    return null;
+  }
+};
+
 export default function LoginForm({ styles, onSwitchToSignup }) {
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
-  const [error, setError] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [forgotMessage, setForgotMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError("");
-    const result = await loginUser(formData.email, formData.password);
+    setErrorMessage("");
 
-    if (result.status) {
-      login(
-        result.data.user,
-        result.data.accessToken,
-        result.data.refreshToken,
-      );
-
-      const role = result.data.user?.role;
-      if (role === "vendor") {
-        navigate("/vendor");
-      } else if (role === "admin") {
-        navigate("/admin");
+    let result;
+    try {
+      result = await loginUser(formData.email, formData.password);
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 401 || status === 400 || status === 404) {
+        setErrorMessage("Invalid email or password. Please try again.");
       } else {
-        navigate("/");
+        setErrorMessage("Something went wrong. Please try again.");
       }
-    } else {
-      setError(result.message);
+      setLoading(false);
+      return; // stop here, do not proceed
     }
 
+    // only reaches here on success
+    const accessToken = result?.accessToken;
+    if (!accessToken) {
+      setErrorMessage('Something went wrong. Please try again.');
+      setLoading(false);
+      return;
+    }
+
+    const payload = decodeJwtPayload(accessToken);
+    const user = {
+      id: payload?.sub || payload?.id || null,
+      email: payload?.email || null,
+      role: payload?.role || null,
+      isOnboardingComplete: payload?.isOnboardingComplete ?? true,
+    };
+
+    if (!user.id || !user.email) {
+      setErrorMessage('Something went wrong. Please try again.');
+      setLoading(false);
+      return;
+    }
+
+    login(user, accessToken, result.refreshToken, rememberMe);
+
     setLoading(false);
+
+    if (user.role === 'vendor') {
+      navigate('/vendor', { replace: true });
+    } else if (user.role === 'admin') {
+      navigate('/admin', { replace: true });
+    } else {
+      navigate('/', { replace: true });
+    }
   };
 
   const handleForgotPassword = async () => {
     setForgotMessage("");
-    setError("");
+    setErrorMessage("");
 
     if (!formData.email) {
-      setError("Please enter your email first.");
+      setErrorMessage("Please enter your email first.");
       return;
     }
 
@@ -63,7 +103,7 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
     if (result.status) {
       setForgotMessage("If this email exists, a reset link was sent.");
     } else {
-      setError(result.message);
+      setErrorMessage(result.message);
     }
     setForgotLoading(false);
   };
@@ -126,18 +166,23 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
+          {errorMessage && (
+            <p className={styles.errorMessage}>{errorMessage}</p>
+          )}
         </div>
 
         {/* Remember / Forgot */}
         <div className={styles.rememberForgot}>
           <label className={styles.checkboxLabel}>
-            <input type="checkbox" className={styles.checkbox} />
+            <input
+              type="checkbox"
+              className={styles.checkbox}
+              checked={rememberMe}
+              onChange={(event) => setRememberMe(event.target.checked)}
+            />
             <span>Remember me</span>
           </label>
-          <Link
-            to="/auth/forgot-password"
-            className={styles.forgotLink}
-          >
+          <Link to="/auth/forgot-password" className={styles.forgotLink}>
             Forgot password?
           </Link>
         </div>
@@ -152,7 +197,6 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
         </button>
       </form>
 
-      {error && <p className={styles.formMessageError}>{error}</p>}
       {forgotMessage && (
         <p className={styles.formMessageInfo}>{forgotMessage}</p>
       )}

@@ -1,10 +1,32 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Users, Store, Package, ShoppingCart,
-  BarChart2, LifeBuoy, Settings, LogOut, ChevronLeft,
-  Shield, Bell, Search, Sun, Moon, ChevronDown, Menu,
-  X, User, Lock, Globe, Home, UserPlus, Mail, FileCheck, Inbox
+  LayoutDashboard,
+  Users,
+  Store,
+  Package,
+  ShoppingCart,
+  BarChart2,
+  LifeBuoy,
+  Settings,
+  LogOut,
+  ChevronLeft,
+  Shield,
+  Bell,
+  Search,
+  Sun,
+  Moon,
+  ChevronDown,
+  Menu,
+  X,
+  User,
+  Lock,
+  Globe,
+  Home,
+  UserPlus,
+  Mail,
+  FileCheck,
+  Inbox,
 } from "lucide-react";
 import styles from "../../styles/AdminLayout.module.css";
 import { useLanguage } from "../../context/LanguageContext";
@@ -15,44 +37,38 @@ const NAV_SECTIONS = [
     label: "Main",
     items: [
       { icon: LayoutDashboard, label: "Dashboard", to: "/admin/dashboard" },
-      { icon: Users,           label: "Users",     to: "/admin/users" },
-      { icon: Store,           label: "Vendors",   to: "/admin/vendors" },
-      { icon: Package,         label: "Products",  to: "/admin/products" },
-      { icon: ShoppingCart,    label: "Orders",    to: "/admin/orders", badge: "5" },
+      { icon: Users, label: "Users", to: "/admin/users" },
+      { icon: Store, label: "Vendors", to: "/admin/vendors" },
+      { icon: Package, label: "Products", to: "/admin/products" },
+      { icon: ShoppingCart, label: "Orders", to: "/admin/orders" },
     ],
   },
   {
     label: "Insights",
     items: [
       { icon: BarChart2, label: "Reports", to: "/admin/reports" },
-      { icon: LifeBuoy,  label: "Support", to: "/admin/tickets", badge: "3" },
+      { icon: LifeBuoy, label: "Support", to: "/admin/tickets" },
     ],
   },
   {
     label: "System",
-    items: [
-      { icon: Settings, label: "Settings", to: "/admin/settings" },
-    ],
+    items: [{ icon: Settings, label: "Settings", to: "/admin/settings" }],
   },
 ];
 
-const NOTIFICATIONS = [
-  { id: 1, text: "New vendor application from Urban Threads", time: "2 min ago",  unread: true },
-  { id: 2, text: "Order #1082 has been placed",               time: "14 min ago", unread: true },
-  { id: 3, text: "Support ticket TKT-1025 needs reply",       time: "1 hour ago", unread: true },
-  { id: 4, text: "Monthly revenue report is ready",           time: "3 hours ago",unread: false },
-  { id: 5, text: "System update completed successfully",      time: "Yesterday",  unread: false },
-];
+const NOTIFICATIONS = [];
 
 /* ─── Sidebar ────────────────────────────── */
 function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const { t, lang } = useLanguage();
 
   const handleLogout = async () => {
-    try { await logout(); } catch (_) {}
+    try {
+      await logout();
+    } catch (_) {}
     navigate("/auth");
   };
 
@@ -60,34 +76,66 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
     {
       label: t("admin.main"),
       items: [
-        { icon: LayoutDashboard, label: t("admin.dashboard"), to: "/admin/dashboard" },
-        { icon: Users,           label: t("admin.users"),     to: "/admin/users" },
-        { icon: Store,           label: t("admin.vendors"),   to: "/admin/vendors" },
-        { icon: Package,         label: t("admin.products"),  to: "/admin/products" },
-        { icon: ShoppingCart,    label: t("admin.orders"),    to: "/admin/orders", badge: "5" },
+        {
+          icon: LayoutDashboard,
+          label: t("admin.dashboard"),
+          to: "/admin/dashboard",
+        },
+        { icon: Users, label: t("admin.users"), to: "/admin/users" },
+        { icon: Store, label: t("admin.vendors"), to: "/admin/vendors" },
+        { icon: Package, label: t("admin.products"), to: "/admin/products" },
+        {
+          icon: ShoppingCart,
+          label: t("admin.orders"),
+          to: "/admin/orders",
+        },
       ],
     },
     {
       label: lang === "ar" ? "إدارة الفريق" : "Team & Access",
       items: [
-        { icon: UserPlus,   label: lang === "ar" ? "إدارة الموظفين" : "Staff",               to: "/admin/staff" },
-        { icon: FileCheck,  label: lang === "ar" ? "طلبات البائعين" : "Vendor Applications",  to: "/admin/vendor-applications" },
-        { icon: Mail,       label: lang === "ar" ? "الدعوات" : "Invitations",                to: "/admin/invitations" },
+        {
+          icon: UserPlus,
+          label: lang === "ar" ? "إدارة الموظفين" : "Staff",
+          to: "/admin/staff",
+        },
+        {
+          icon: FileCheck,
+          label: lang === "ar" ? "طلبات البائعين" : "Vendor Applications",
+          to: "/admin/vendor-applications",
+        },
+        {
+          icon: Mail,
+          label: lang === "ar" ? "الدعوات" : "Invitations",
+          to: "/admin/invitations",
+        },
       ],
     },
     {
       label: t("admin.insights"),
       items: [
         { icon: BarChart2, label: t("admin.reports"), to: "/admin/reports" },
-        { icon: LifeBuoy,  label: t("admin.support"), to: "/admin/tickets", badge: "3" },
-        { icon: Inbox,     label: lang === "ar" ? "الرسائل" : "Messages",   to: "/admin/messages", badge: "2" },
+        {
+          icon: LifeBuoy,
+          label: t("admin.support"),
+          to: "/admin/tickets",
+        },
+        {
+          icon: Inbox,
+          label: lang === "ar" ? "الرسائل" : "Messages",
+          to: "/admin/messages",
+        },
       ],
     },
     {
       label: t("admin.system"),
       items: [
-        { icon: User,     label: lang === "ar" ? "ملف شخصي" : "My Profile", to: "/admin/profile" },
-        { icon: Settings, label: t("vendor.settings"),                       to: "/admin/settings" },
+        {
+          icon: User,
+          label: lang === "ar" ? "ملف شخصي" : "My Profile",
+          to: "/admin/profile",
+        },
+        { icon: Settings, label: t("vendor.settings"), to: "/admin/settings" },
       ],
     },
   ];
@@ -96,11 +144,17 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
     <>
       {mobileOpen && <div className={styles.overlay} onClick={onMobileClose} />}
       <aside
-        className={[styles.sidebar, collapsed ? styles.collapsed : "", mobileOpen ? styles.mobileOpen : ""].join(" ")}
+        className={[
+          styles.sidebar,
+          collapsed ? styles.collapsed : "",
+          mobileOpen ? styles.mobileOpen : "",
+        ].join(" ")}
       >
         {/* Brand */}
         <div className={styles.brand}>
-          <div className={styles.brandLogo}><Shield size={20} /></div>
+          <div className={styles.brandLogo}>
+            <Shield size={20} />
+          </div>
           {!collapsed && (
             <div className={styles.brandText}>
               <span className={styles.brandName}>{t("admin.title")}</span>
@@ -118,13 +172,22 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
                 <Link
                   key={to}
                   to={to}
-                  className={[styles.navItem, location.pathname === to ? styles.active : ""].join(" ")}
+                  className={[
+                    styles.navItem,
+                    location.pathname === to ? styles.active : "",
+                  ].join(" ")}
                   title={collapsed ? label : undefined}
                   onClick={onMobileClose}
                 >
-                  <span className={styles.navIcon}><Icon size={18} /></span>
-                  {!collapsed && <span className={styles.navLabel}>{label}</span>}
-                  {!collapsed && badge && <span className={styles.navBadge}>{badge}</span>}
+                  <span className={styles.navIcon}>
+                    <Icon size={18} />
+                  </span>
+                  {!collapsed && (
+                    <span className={styles.navLabel}>{label}</span>
+                  )}
+                  {!collapsed && badge && (
+                    <span className={styles.navBadge}>{badge}</span>
+                  )}
                 </Link>
               ))}
             </div>
@@ -141,26 +204,57 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
             title={collapsed ? t("profile.view_store") : undefined}
             onClick={onMobileClose}
           >
-            <span className={styles.navIcon}><Home size={18} /></span>
-            {!collapsed && <span className={styles.navLabel}>{t("profile.view_store")}</span>}
+            <span className={styles.navIcon}>
+              <Home size={18} />
+            </span>
+            {!collapsed && (
+              <span className={styles.navLabel}>{t("profile.view_store")}</span>
+            )}
           </Link>
 
           {/* Logout */}
           <button
             className={styles.navItem}
-            style={{ width: "calc(100% - 16px)", margin: "0 8px 6px", border: "none", background: "none", fontFamily: "inherit", cursor: "pointer", textAlign: lang === "ar" ? "right" : "left" }}
+            style={{
+              width: "calc(100% - 16px)",
+              margin: "0 8px 6px",
+              border: "none",
+              background: "none",
+              fontFamily: "inherit",
+              cursor: "pointer",
+              textAlign: lang === "ar" ? "right" : "left",
+            }}
             title={collapsed ? t("profile.logout") : undefined}
             onClick={handleLogout}
           >
-            <span className={styles.navIcon}><LogOut size={18} /></span>
-            {!collapsed && <span className={styles.navLabel}>{t("profile.logout")}</span>}
+            <span className={styles.navIcon}>
+              <LogOut size={18} />
+            </span>
+            {!collapsed && (
+              <span className={styles.navLabel}>{t("profile.logout")}</span>
+            )}
           </button>
 
-          <button className={styles.collapseBtn} onClick={onToggle} aria-label={t("admin.collapse")}>
+          <button
+            className={styles.collapseBtn}
+            onClick={onToggle}
+            aria-label={t("admin.collapse")}
+          >
             <ChevronLeft
               size={16}
-              className={[styles.collapseIcon, collapsed ? styles.flipped : ""].join(" ")}
-              style={{ transform: collapsed ? (lang === "ar" ? "rotate(0deg)" : "rotate(180deg)") : (lang === "ar" ? "rotate(180deg)" : "rotate(0deg)") }}
+              className={[
+                styles.collapseIcon,
+                collapsed ? styles.flipped : "",
+              ].join(" ")}
+              style={{
+                transform: collapsed
+                  ? lang === "ar"
+                    ? "rotate(0deg)"
+                    : "rotate(180deg)"
+                  : lang === "ar"
+                    ? "rotate(180deg)"
+                    : "rotate(0deg)",
+              }}
             />
             {!collapsed && <span>{t("admin.collapse")}</span>}
           </button>
@@ -168,11 +262,11 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
 
         {/* User pill */}
         <div className={styles.userPill}>
-          <div className={styles.userAvatar}>A</div>
+          <div className={styles.userAvatar}>{(user?.firstName?.[0] || user?.email?.[0] || "A").toUpperCase()}</div>
           {!collapsed && (
             <div className={styles.userInfo}>
-              <span className={styles.userName}>Admin</span>
-              <span className={styles.userRole}>System Administrator</span>
+              <span className={styles.userName}>{user?.firstName} {user?.lastName}</span>
+              <span className={styles.userRole}>{user?.email}</span>
             </div>
           )}
         </div>
@@ -183,32 +277,43 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
 
 /* ─── Header ─────────────────────────────── */
 function AdminHeader({ onMenuToggle, dark, onDarkToggle }) {
-  const [notifOpen, setNotifOpen]     = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [notifs, setNotifs]           = useState(NOTIFICATIONS);
-  const unreadCount = notifs.filter(n => n.unread).length;
-  const notifRef   = useRef(null);
+  const [notifs, setNotifs] = useState(NOTIFICATIONS);
+  const unreadCount = notifs.filter((n) => n.unread).length;
+  const notifRef = useRef(null);
   const profileRef = useRef(null);
   const { lang, toggleLanguage, t } = useLanguage();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
 
   const NAV_SECTIONS = [
     {
       label: t("admin.main"),
       items: [
-        { icon: LayoutDashboard, label: t("admin.title"),    to: "/admin/dashboard" },
-        { icon: Users,           label: t("admin.users"),     to: "/admin/users" },
-        { icon: Store,           label: t("admin.vendors"),   to: "/admin/vendors" },
-        { icon: Package,         label: t("admin.products"),  to: "/admin/products" },
-        { icon: ShoppingCart,    label: t("admin.orders"),    to: "/admin/orders", badge: "5" },
+        {
+          icon: LayoutDashboard,
+          label: t("admin.title"),
+          to: "/admin/dashboard",
+        },
+        { icon: Users, label: t("admin.users"), to: "/admin/users" },
+        { icon: Store, label: t("admin.vendors"), to: "/admin/vendors" },
+        { icon: Package, label: t("admin.products"), to: "/admin/products" },
+        {
+          icon: ShoppingCart,
+          label: t("admin.orders"),
+          to: "/admin/orders",
+        },
       ],
     },
     {
       label: t("admin.insights"),
       items: [
         { icon: BarChart2, label: t("admin.reports"), to: "/admin/reports" },
-        { icon: LifeBuoy,  label: t("admin.support"), to: "/admin/tickets", badge: "3" },
+        {
+          label: t("admin.support"),
+          to: "/admin/tickets",
+        },
       ],
     },
     {
@@ -221,30 +326,43 @@ function AdminHeader({ onMenuToggle, dark, onDarkToggle }) {
 
   useEffect(() => {
     const handler = (e) => {
-      if (notifRef.current   && !notifRef.current.contains(e.target))   setNotifOpen(false);
-      if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target))
+        setNotifOpen(false);
+      if (profileRef.current && !profileRef.current.contains(e.target))
+        setProfileOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const markAllRead = () => setNotifs(notifs.map((n) => ({ ...n, unread: false })));
+  const markAllRead = () =>
+    setNotifs(notifs.map((n) => ({ ...n, unread: false })));
 
   const handleLogout = async () => {
     setProfileOpen(false);
-    try { await logout(); } catch (_) {}
+    try {
+      await logout();
+    } catch (_) {}
     navigate("/auth");
   };
 
   return (
     <header className={styles.header}>
       <div className={styles.headerLeft}>
-        <button className={styles.menuBtn} onClick={onMenuToggle} aria-label="Toggle menu">
+        <button
+          className={styles.menuBtn}
+          onClick={onMenuToggle}
+          aria-label="Toggle menu"
+        >
           <Menu size={20} />
         </button>
         <div className={styles.searchWrap}>
           <Search size={15} className={styles.searchIcon} />
-          <input type="text" placeholder={t("admin.search_placeholder")} className={styles.searchInput} />
+          <input
+            type="text"
+            placeholder={t("admin.search_placeholder")}
+            className={styles.searchInput}
+          />
           <kbd className={styles.kbd}>/</kbd>
         </div>
       </div>
@@ -256,14 +374,26 @@ function AdminHeader({ onMenuToggle, dark, onDarkToggle }) {
           onClick={toggleLanguage}
           aria-label="Switch language"
           title={lang === "en" ? "Switch to Arabic" : "Switch to English"}
-          style={{ fontSize: 12, fontWeight: 700, width: "auto", padding: "0 10px", gap: 4, display: "flex", alignItems: "center" }}
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            width: "auto",
+            padding: "0 10px",
+            gap: 4,
+            display: "flex",
+            alignItems: "center",
+          }}
         >
           <Globe size={15} />
           {lang === "en" ? "AR" : "EN"}
         </button>
 
         {/* Dark mode toggle */}
-        <button className={styles.iconBtn} onClick={onDarkToggle} aria-label="Toggle dark mode">
+        <button
+          className={styles.iconBtn}
+          onClick={onDarkToggle}
+          aria-label="Toggle dark mode"
+        >
           {dark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
 
@@ -271,7 +401,10 @@ function AdminHeader({ onMenuToggle, dark, onDarkToggle }) {
         <div ref={notifRef} style={{ position: "relative" }}>
           <button
             className={styles.iconBtn}
-            onClick={() => { setNotifOpen((v) => !v); setProfileOpen(false); }}
+            onClick={() => {
+              setNotifOpen((v) => !v);
+              setProfileOpen(false);
+            }}
             aria-label="Notifications"
           >
             <Bell size={18} />
@@ -281,12 +414,23 @@ function AdminHeader({ onMenuToggle, dark, onDarkToggle }) {
           {notifOpen && (
             <div className={styles.notifPanel}>
               <div className={styles.notifHeader}>
-                <h3 className={styles.notifTitle}>{t("profile.notifications")} {unreadCount > 0 && `(${unreadCount})`}</h3>
-                <button className={styles.notifMarkAll} onClick={markAllRead}>{t("profile.mark_all_read")}</button>
+                <h3 className={styles.notifTitle}>
+                  {t("profile.notifications")}{" "}
+                  {unreadCount > 0 && `(${unreadCount})`}
+                </h3>
+                <button className={styles.notifMarkAll} onClick={markAllRead}>
+                  {t("profile.mark_all_read")}
+                </button>
               </div>
               <ul className={styles.notifList}>
                 {notifs.map((n) => (
-                  <li key={n.id} className={[styles.notifItem, n.unread ? styles.unread : ""].join(" ")}>
+                  <li
+                    key={n.id}
+                    className={[
+                      styles.notifItem,
+                      n.unread ? styles.unread : "",
+                    ].join(" ")}
+                  >
                     {n.unread && <span className={styles.notifDotInline} />}
                     <div className={styles.notifBody}>
                       <p className={styles.notifText}>{n.text}</p>
@@ -303,37 +447,61 @@ function AdminHeader({ onMenuToggle, dark, onDarkToggle }) {
         <div ref={profileRef} className={styles.profileWrap}>
           <button
             className={styles.profileBtn}
-            onClick={() => { setProfileOpen((v) => !v); setNotifOpen(false); }}
+            onClick={() => {
+              setProfileOpen((v) => !v);
+              setNotifOpen(false);
+            }}
           >
-            <div className={styles.profileAvat}>A</div>
-            <span className={styles.profileName}>Admin</span>
-            <ChevronDown size={14} className={[styles.profileChevron, profileOpen ? styles.open : ""].join(" ")} />
+            <div className={styles.profileAvat}>{(user?.firstName?.[0] || user?.email?.[0] || "A").toUpperCase()}</div>
+            <span className={styles.profileName}>{user?.firstName} {user?.lastName}</span>
+            <ChevronDown
+              size={14}
+              className={[
+                styles.profileChevron,
+                profileOpen ? styles.open : "",
+              ].join(" ")}
+            />
           </button>
 
           {profileOpen && (
             <div className={styles.profileMenu}>
               <div className={styles.profileMenuInfo}>
-                <span className={styles.profileMenuName}>System Admin</span>
-                <span className={styles.profileMenuRole}>admin@ainai.com</span>
+                <span className={styles.profileMenuName}>{user?.firstName} {user?.lastName}</span>
+                <span className={styles.profileMenuRole}>{user?.email}</span>
               </div>
               <ul className={styles.profileMenuList}>
                 <li>
-                  <Link to="/admin/settings" className={styles.profileMenuItem} onClick={() => setProfileOpen(false)}>
+                  <Link
+                    to="/admin/settings"
+                    className={styles.profileMenuItem}
+                    onClick={() => setProfileOpen(false)}
+                  >
                     <User size={15} /> {t("profile.settings")}
                   </Link>
                 </li>
                 <li>
-                  <Link to="/" className={styles.profileMenuItem} onClick={() => setProfileOpen(false)}>
+                  <Link
+                    to="/"
+                    className={styles.profileMenuItem}
+                    onClick={() => setProfileOpen(false)}
+                  >
                     <Home size={15} /> {t("profile.view_store")}
                   </Link>
                 </li>
                 <li>
-                  <Link to="/admin/settings" className={styles.profileMenuItem} onClick={() => setProfileOpen(false)}>
+                  <Link
+                    to="/admin/settings"
+                    className={styles.profileMenuItem}
+                    onClick={() => setProfileOpen(false)}
+                  >
                     <Lock size={15} /> {t("profile.password")}
                   </Link>
                 </li>
                 <li>
-                  <button className={`${styles.profileMenuItem} ${styles.danger}`} onClick={handleLogout}>
+                  <button
+                    className={`${styles.profileMenuItem} ${styles.danger}`}
+                    onClick={handleLogout}
+                  >
                     <LogOut size={15} /> {t("profile.logout")}
                   </button>
                 </li>
@@ -347,14 +515,24 @@ function AdminHeader({ onMenuToggle, dark, onDarkToggle }) {
 }
 
 /* ─── Layout shell ────────────────────────── */
-export default function AdminLayout({ children, pageTitle, pageSubtitle, breadcrumb }) {
-  const [collapsed, setCollapsed]   = useState(false);
+export default function AdminLayout({
+  children,
+  pageTitle,
+  pageSubtitle,
+  breadcrumb,
+}) {
+  const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [dark, setDark]             = useState(() => localStorage.getItem("adm-theme") === "dark");
+  const [dark, setDark] = useState(
+    () => localStorage.getItem("adm-theme") === "dark",
+  );
 
   useEffect(() => {
     localStorage.setItem("adm-theme", dark ? "dark" : "light");
-    document.documentElement.setAttribute("data-adm-theme", dark ? "dark" : "light");
+    document.documentElement.setAttribute(
+      "data-adm-theme",
+      dark ? "dark" : "light",
+    );
   }, [dark]);
 
   const toggleDark = () => {
@@ -363,7 +541,7 @@ export default function AdminLayout({ children, pageTitle, pageSubtitle, breadcr
 
   const toggleSidebar = () => {
     if (window.innerWidth <= 1024) setMobileOpen((v) => !v);
-    else                           setCollapsed((v) => !v);
+    else setCollapsed((v) => !v);
   };
 
   return (
@@ -375,8 +553,14 @@ export default function AdminLayout({ children, pageTitle, pageSubtitle, breadcr
         onMobileClose={() => setMobileOpen(false)}
       />
 
-      <div className={[styles.main, collapsed ? styles.collapsed : ""].join(" ")}>
-        <AdminHeader onMenuToggle={toggleSidebar} dark={dark} onDarkToggle={toggleDark} />
+      <div
+        className={[styles.main, collapsed ? styles.collapsed : ""].join(" ")}
+      >
+        <AdminHeader
+          onMenuToggle={toggleSidebar}
+          dark={dark}
+          onDarkToggle={toggleDark}
+        />
 
         <main className={styles.content}>
           {(pageTitle || breadcrumb) && (
@@ -385,12 +569,17 @@ export default function AdminLayout({ children, pageTitle, pageSubtitle, breadcr
                 {breadcrumb && (
                   <div className={styles.pageBreadcrumb}>
                     <Link to="/admin/dashboard">Admin</Link>
-                    <ChevronLeft size={12} style={{ transform: "rotate(180deg)" }} />
+                    <ChevronLeft
+                      size={12}
+                      style={{ transform: "rotate(180deg)" }}
+                    />
                     <span>{breadcrumb}</span>
                   </div>
                 )}
-                {pageTitle    && <h1 className={styles.pageTitle}>{pageTitle}</h1>}
-                {pageSubtitle && <p  className={styles.pageSubtitle}>{pageSubtitle}</p>}
+                {pageTitle && <h1 className={styles.pageTitle}>{pageTitle}</h1>}
+                {pageSubtitle && (
+                  <p className={styles.pageSubtitle}>{pageSubtitle}</p>
+                )}
               </div>
             </div>
           )}

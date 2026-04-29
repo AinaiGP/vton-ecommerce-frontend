@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ShoppingBag, Trash2, Plus, Minus, Sparkles, Tag, ArrowRight } from "lucide-react";
 import Header from "../components/common/Header";
@@ -7,45 +7,16 @@ import { useLanguage } from "../context/LanguageContext";
 import styles from "../styles/CartPage.module.css";
 
 // Rich mock data simulating VTON history
-const initialCart = [
-  { 
-    id: 1, 
-    name: "Silk Evening Gown", 
-    size: "M", 
-    color: "Burgundy",
-    price: 389, 
-    quantity: 1, 
-    image: "https://images.unsplash.com/photo-1566479179817-0b6cf9b3888e?w=80&h=100&fit=crop",
-    vtonTried: true 
-  },
-  { 
-    id: 2, 
-    name: "Gold Cuff Bracelet", 
-    size: "One Size", 
-    color: "Gold",
-    price: 89, 
-    quantity: 2, 
-    image: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=80&h=100&fit=crop",
-    vtonTried: false 
-  },
-  { 
-    id: 3, 
-    name: "Velvet Midi Dress", 
-    size: "S", 
-    color: "Emerald",
-    price: 245, 
-    quantity: 1, 
-    image: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=80&h=100&fit=crop",
-    vtonTried: true 
-  },
-];
-
 export default function CartPage() {
   const { t, dir } = useLanguage();
-  const [cartItems, setCartItems] = useState(initialCart);
+  const [cartItems, setCartItems] = useState([]);
   const [promoCode, setPromoCode] = useState("");
   const [discount, setDiscount]   = useState(0);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // TODO: wire to real API endpoint — Phase X
+  }, []);
 
   const updateQuantity = (id, delta) => {
     setCartItems((prev) =>

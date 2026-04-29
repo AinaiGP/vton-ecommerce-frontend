@@ -40,12 +40,9 @@ export const loginUser = async (email, password) => {
       password,
     });
 
-    return { status: true, data: response.data };
+    return response.data;
   } catch (error) {
-    return {
-      status: false,
-      message: getErrorMessage(error, "Login failed."),
-    };
+    throw error;
   }
 };
 

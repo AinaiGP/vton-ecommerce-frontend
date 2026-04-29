@@ -1,7 +1,14 @@
+import { useEffect, useState } from "react";
 import { Bell, Search, Menu, ChevronDown, Sun, Moon } from "lucide-react";
 import styles from "../../styles/VendorHeader.module.css";
 
 export default function VendorHeader({ onMenuToggle }) {
+  const [notificationCount] = useState(0);
+
+  useEffect(() => {
+    // TODO: wire vendor notifications to real API
+  }, []);
+
   return (
     <header className={styles.header}>
       {/* Left: hamburger + page title area */}
@@ -36,7 +43,7 @@ export default function VendorHeader({ onMenuToggle }) {
         {/* Notifications */}
         <button className={styles.iconBtn} aria-label="Notifications">
           <Bell size={18} />
-          <span className={styles.notifDot} />
+          {notificationCount > 0 && <span className={styles.notifDot} />}
         </button>
 
         {/* Profile pill */}

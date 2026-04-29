@@ -1,16 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Star, MessageSquare, X, Check, Filter } from "lucide-react";
 import VendorLayout from "../components/vendor/VendorLayout";
 import p from "../styles/VendorPage.module.css";
-
-const REVIEWS = [
-  { id: 1, name: "Sara Al-Rashid", initials: "SA", product: "Silk Evening Gown", rating: 5, date: "Apr 18, 2026", comment: "Absolutely stunning! The fabric is luxurious and the fit is perfect. Wore it to a wedding and received so many compliments.", reply: null },
-  { id: 2, name: "Layla Hassan", initials: "LH", product: "Cashmere Wrap Dress", rating: 4, date: "Apr 16, 2026", comment: "Beautiful dress, very comfortable. The colour is a bit different from the photos but still gorgeous.", reply: "Thank you Layla! We appreciate your honest feedback and will update our photos soon. 💜" },
-  { id: 3, name: "Nour Khalil", initials: "NK", product: "Embroidered Kaftan", rating: 5, date: "Apr 14, 2026", comment: "The embroidery detail is exquisite. Fast shipping too! Will definitely order again.", reply: null },
-  { id: 4, name: "Amira Fayed", initials: "AF", product: "Linen Palazzo Set", rating: 3, date: "Apr 12, 2026", comment: "The quality is okay but I expected better stitching at this price point. The style is nice though.", reply: null },
-  { id: 5, name: "Dina Mansour", initials: "DM", product: "Beaded Clutch Bag", rating: 5, date: "Apr 10, 2026", comment: "Perfect evening bag! Holds more than expected and the beading is flawless.", reply: "Thank you so much Dina! We're thrilled you love it. ✨" },
-  { id: 6, name: "Hana Saeed", initials: "HS", product: "Velvet Abaya", rating: 4, date: "Apr 8, 2026", comment: "Elegant and well-made. The velvet feels premium. Sizing runs slightly large in my experience.", reply: null },
-];
 
 function StarRow({ rating, size = 15 }) {
   return (
@@ -25,12 +16,16 @@ function StarRow({ rating, size = 15 }) {
 const FILTERS = ["All", "5★", "4★", "3★ & below"];
 
 export default function VendorReviewsPage() {
-  const [reviews, setReviews] = useState(REVIEWS);
+  const [reviews, setReviews] = useState([]);
   const [filter, setFilter] = useState("All");
   const [replyTarget, setReplyTarget] = useState(null);
   const [replyText, setReplyText] = useState("");
 
-  const totalRating = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
+  useEffect(() => {
+    // TODO: wire to real API endpoint — Phase X
+  }, []);
+
+  const totalRating = reviews.length > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
 
   const filtered = reviews.filter(r => {
     if (filter === "5★") return r.rating === 5;

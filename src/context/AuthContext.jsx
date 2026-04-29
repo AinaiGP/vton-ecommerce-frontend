@@ -2,6 +2,7 @@ import { createContext, useState, useContext, useEffect } from "react";
 import {
   clearAll,
   getAccessToken,
+  getTokenStorageType,
   getUserData,
   setTokens,
   setUserData,
@@ -17,10 +18,16 @@ export const AuthProvider = ({ children }) => {
   const storedUser = getUserData();
   const storedAccessToken = getAccessToken();
   const hasSession = Boolean(storedUser && storedAccessToken);
+  const needsOnboardingInitial = Boolean(
+    storedUser && storedUser.isOnboardingComplete === false,
+  );
 
   const [user, setUser] = useState(hasSession ? storedUser : null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(hasSession);
+  const [needsOnboarding, setNeedsOnboarding] = useState(
+    needsOnboardingInitial,
+  );
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -28,11 +35,19 @@ export const AuthProvider = ({ children }) => {
     });
   }, []);
 
-  const login = (userData, accessToken, refreshToken) => {
-    setUser(userData);
-    setTokens(accessToken, refreshToken);
+  const login = (userData, accessToken, refreshToken, rememberMe = true) => {
+    setTokens(accessToken, refreshToken, rememberMe);
     setUserData(userData);
+    setUser(userData);
     setIsAuthenticated(true);
+    setNeedsOnboarding(userData?.isOnboardingComplete === false);
+  };
+
+  const completeOnboarding = (updatedUser) => {
+    const rememberMe = getTokenStorageType() === "local";
+    setUser(updatedUser);
+    setUserData(updatedUser, rememberMe);
+    setNeedsOnboarding(false);
   };
 
   const logout = async () => {
@@ -47,7 +62,16 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated, isLoading, userRole, login, logout }}
+      value={{
+        user,
+        isAuthenticated,
+        isLoading,
+        userRole,
+        needsOnboarding,
+        login,
+        logout,
+        completeOnboarding,
+      }}
     >
       {children}
     </AuthContext.Provider>

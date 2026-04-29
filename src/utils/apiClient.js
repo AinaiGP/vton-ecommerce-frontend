@@ -3,6 +3,7 @@ import {
   clearAll,
   getAccessToken,
   getRefreshToken,
+  getTokenStorageType,
   setTokens,
 } from "./localStorage";
 
@@ -75,7 +76,8 @@ function attachResponseInterceptor(client, retryClient) {
 
         const { accessToken, refreshToken: newRefreshToken } =
           refreshResponse.data;
-        setTokens(accessToken, newRefreshToken);
+        const rememberMe = getTokenStorageType() === "local";
+        setTokens(accessToken, newRefreshToken, rememberMe);
 
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return retryClient(originalRequest);

@@ -161,3 +161,16 @@
   .progressLabel { display: none; }
   .progressLine { width: 40px; }
 }
+
+/* Empty State */
+.emptyState {
+  text-align: center;
+  color: var(--charcoal-muted);
+  padding: 40px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--ivory);
+  border-radius: 12px;
+  border: 1px dashed var(--ivory-dark);
+  grid-column: 1 / -1;
+}

@@ -55,6 +55,7 @@ export default function RegistrationForm({ styles, onSwitchToLogin }) {
         result.data.user,
         result.data.accessToken,
         result.data.refreshToken,
+        true,
       );
 
       const role = result.data.user?.role;

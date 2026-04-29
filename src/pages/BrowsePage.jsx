@@ -7,7 +7,6 @@ import FilterSidebar from "../components/browse/FilterSidebar";
 import ProductGrid from "../components/browse/ProductGrid";
 import ProductCard from "../components/common/ProductCard";
 import apiClient from "../utils/apiClient";
-import { DEMO_PRODUCTS } from "../utils/demoProducts";
 import { useLanguage } from "../context/LanguageContext";
 import styles from "../styles/BrowsePage.module.css";
 
@@ -51,13 +50,22 @@ export default function BrowsePage() {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev.toString());
         const applyUpdate = (k, v) => {
-          if (v === null || v === "" || v === undefined || (Array.isArray(v) && v.length === 0)) {
+          if (
+            v === null ||
+            v === "" ||
+            v === undefined ||
+            (Array.isArray(v) && v.length === 0)
+          ) {
             next.delete(k);
           } else {
             next.set(k, Array.isArray(v) ? v.join(",") : String(v));
           }
         };
-        if (typeof keyOrUpdates === "object" && keyOrUpdates !== null && !Array.isArray(keyOrUpdates)) {
+        if (
+          typeof keyOrUpdates === "object" &&
+          keyOrUpdates !== null &&
+          !Array.isArray(keyOrUpdates)
+        ) {
           Object.entries(keyOrUpdates).forEach(([k, v]) => applyUpdate(k, v));
         } else {
           applyUpdate(keyOrUpdates, value);
@@ -106,14 +114,12 @@ export default function BrowsePage() {
           setProducts(apiProducts);
           setTotal(response.data?.total ?? apiProducts.length);
         } else {
-          // Fall back to demo data for UI review
-          setProducts(DEMO_PRODUCTS);
-          setTotal(DEMO_PRODUCTS.length);
+          setProducts([]);
+          setTotal(0);
         }
       } catch {
-        // API unavailable — use demo data
-        setProducts(DEMO_PRODUCTS);
-        setTotal(DEMO_PRODUCTS.length);
+        setProducts([]);
+        setTotal(0);
       } finally {
         setLoading(false);
       }
@@ -152,7 +158,8 @@ export default function BrowsePage() {
           <div className={styles.resultsToolbar}>
             {total > 0 && (
               <p className={styles.resultsCount}>
-                {t("browse.showing")} {showingFrom}-{showingTo} {t("browse.of")} {total} {t("browse.products")}
+                {t("browse.showing")} {showingFrom}-{showingTo} {t("browse.of")}{" "}
+                {total} {t("browse.products")}
               </p>
             )}
 
@@ -211,14 +218,18 @@ export default function BrowsePage() {
 
           {recentProducts.length > 0 && (
             <section className={`${styles.recentSection} reveal`}>
-              <h2 className={styles.recentTitle}>{t("browse.recently_viewed")}</h2>
+              <h2 className={styles.recentTitle}>
+                {t("browse.recently_viewed")}
+              </h2>
               <div className={styles.recentRow}>
                 {recentProducts.map((product) => (
                   <div key={product.id} className={styles.recentCard}>
                     <ProductCard
                       product={product}
                       onTryOn={() => handleTryOn(product.id)}
-                      onAddToCart={() => console.log("Cart Phase 4:", product.id)}
+                      onAddToCart={() =>
+                        console.log("Cart Phase 4:", product.id)
+                      }
                     />
                   </div>
                 ))}

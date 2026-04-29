@@ -1,9 +1,13 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Phone, User } from "lucide-react";
 import apiClient from "../../utils/apiClient";
+import { useAuth } from "../../context/AuthContext";
 import styles from "../../styles/GoogleOnboardingModal.module.css";
 
-export default function GoogleOnboardingModal({ onComplete }) {
+export default function GoogleOnboardingModal({ isPage = false }) {
+  const navigate = useNavigate();
+  const { needsOnboarding, completeOnboarding } = useAuth();
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -64,8 +68,17 @@ export default function GoogleOnboardingModal({ onComplete }) {
     setIsSubmitting(true);
 
     try {
-      await apiClient.post("/customers/onboarding", buildPayload());
-      onComplete();
+      const response = await apiClient.post(
+        "/customers/onboarding",
+        buildPayload(),
+      );
+      const updatedUser = response?.data?.user ?? response?.data;
+      if (updatedUser) {
+        completeOnboarding(updatedUser);
+        if (isPage) {
+          navigate("/", { replace: true });
+        }
+      }
     } catch (requestError) {
       const backendMessage = requestError?.response?.data?.message;
       const message = Array.isArray(backendMessage)
@@ -77,9 +90,17 @@ export default function GoogleOnboardingModal({ onComplete }) {
     }
   };
 
+  if (!isPage && !needsOnboarding) {
+    return null;
+  }
+
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true">
-      <div className={styles.modalCard}>
+    <div
+      className={isPage ? styles.pageShell : styles.overlay}
+      role={isPage ? undefined : "dialog"}
+      aria-modal={isPage ? undefined : "true"}
+    >
+      <div className={isPage ? styles.pageCard : styles.modalCard}>
         <h2 className={styles.title}>Complete your profile</h2>
         <p className={styles.subtitle}>
           Just a few details to personalize AINAI.

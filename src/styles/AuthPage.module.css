@@ -345,6 +345,14 @@
   text-align: center;
 }
 
+.errorMessage {
+  color: #e53e3e;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  font-weight: 500;
+  display: block;
+}
+
 .formMessageInfo {
   margin: 0;
   color: #055160;

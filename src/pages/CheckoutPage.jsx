@@ -9,16 +9,12 @@ import styles from "../styles/CheckoutPage.module.css";
 const STEPS = ["Shipping", "Payment", "Confirm"];
 
 // Mock dataset with VTON history flag included
-const ITEMS = [
-  { id: 1, name: "Silk Evening Gown", size: "M", price: 389, qty: 1, image: "https://images.unsplash.com/photo-1566479179817-0b6cf9b3888e?w=80&h=100&fit=crop", vtonTried: true },
-  { id: 2, name: "Gold Cuff Bracelet", size: "One size", price: 89, qty: 1, image: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=80&h=100&fit=crop", vtonTried: false },
-];
-
 export default function CheckoutPage() {
   const { t, dir } = useLanguage();
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checkoutItems, setCheckoutItems] = useState([]);
 
   const [form, setForm] = useState({ 
     first: "", last: "", email: "", phone: "", 
@@ -27,15 +23,14 @@ export default function CheckoutPage() {
   
   const [errors, setErrors] = useState({});
 
+  useEffect(() => {
+    // TODO: wire to real API endpoint — Phase X
+  }, []);
+
   // Auto-fill logic mock
   useEffect(() => {
     if (form.savedAddress) {
-      setForm(prev => ({ 
-        ...prev, 
-        first: "Sara", last: "Al-Rashid", email: "sara@example.com", 
-        phone: "+971 50 123 4567", address: "123 Sheikh Zayed Road", city: "Dubai"
-      }));
-      setErrors({});
+      // TODO: wire to real user data — Phase X
     } else {
       setForm(prev => ({ 
         ...prev, 
@@ -44,8 +39,8 @@ export default function CheckoutPage() {
     }
   }, [form.savedAddress]);
 
-  const subtotal = ITEMS.reduce((s, i) => s + i.price * i.qty, 0);
-  const shipping = subtotal >= 500 ? 0 : 25;
+  const subtotal = checkoutItems.reduce((s, i) => s + i.price * i.qty, 0);
+  const shipping = subtotal >= 500 ? 0 : (checkoutItems.length > 0 ? 25 : 0);
   const total = subtotal + shipping;
 
   const updateForm = (k, v) => {
@@ -276,23 +271,27 @@ export default function CheckoutPage() {
             <div className={styles.summaryCard}>
               <h3 className={styles.summaryTitle}>{t("checkout.inCart")}</h3>
               <div className={styles.summaryItems}>
-                {ITEMS.map(i => (
-                  <div key={i.id} className={styles.summaryItem}>
-                    <img src={i.image} alt={i.name} className={styles.summaryImg} />
-                    <div className={styles.summaryItemInfo}>
-                      <div style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "2px" }}>
-                        <p className={styles.summaryItemName}>{i.name}</p>
-                        {i.vtonTried && (
-                          <div className={styles.vtonBadgeSmall} title="Tried virtually">
-                            <Sparkles size={10} />
-                          </div>
-                        )}
+                {checkoutItems.length === 0 ? (
+                  <p className={styles.emptyState}>No items in checkout.</p>
+                ) : (
+                  checkoutItems.map(i => (
+                    <div key={i.id} className={styles.summaryItem}>
+                      <img src={i.image} alt={i.name} className={styles.summaryImg} />
+                      <div className={styles.summaryItemInfo}>
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "2px" }}>
+                          <p className={styles.summaryItemName}>{i.name}</p>
+                          {i.vtonTried && (
+                            <div className={styles.vtonBadgeSmall} title="Tried virtually">
+                              <Sparkles size={10} />
+                            </div>
+                          )}
+                        </div>
+                        <p className={styles.summaryItemMeta}>Qty: {i.qty} | Size: {i.size}</p>
+                        <span className={styles.summaryItemPrice}>EGP {i.price.toFixed(2)}</span>
                       </div>
-                      <p className={styles.summaryItemMeta}>Qty: {i.qty} | Size: {i.size}</p>
-                      <span className={styles.summaryItemPrice}>EGP {i.price.toFixed(2)}</span>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
               <div className={styles.summaryDivider} />
               <div className={styles.summaryRow}><span>{t("cart.subtotal")}</span><span>EGP {subtotal.toFixed(2)}</span></div>

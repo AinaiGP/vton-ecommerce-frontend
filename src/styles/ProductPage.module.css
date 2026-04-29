@@ -384,6 +384,20 @@
   align-items: center;
 }
 
+.lowStockNotice {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-error, #e53e3e);
+}
+
+.outOfStockNotice {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-error, #e53e3e);
+}
+
 .addToCartButton {
   flex: 1;
   display: flex;

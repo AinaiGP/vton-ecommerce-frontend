@@ -393,13 +393,13 @@
 
 .storeKpiGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
 .storeKpiCard {
-  background: var(--sup-bg); border: 1px solid var(--sup-border); borderRadius: 10px;
+  background: var(--sup-bg); border: 1px solid var(--sup-border); border-radius: 10px;
   padding: 12px 14px;
 }
 
 .storeInfoRow { 
   display: flex; align-items: center; gap: 10px; padding: 8px 0; 
-  border-bottom: 1px solid var(--sup-border); fontSize: 13px; color: var(--sup-text); 
+  border-bottom: 1px solid var(--sup-border); font-size: 13px; color: var(--sup-text); 
 }
 
 @keyframes slideInRight {
