@@ -242,7 +242,7 @@ export default function RegistrationForm({ styles, onSwitchToLogin }) {
           type="button"
           className={styles.socialButton}
           onClick={() => {
-            window.location.href = "http://localhost:3000/auth/google";
+            window.location.href = `${import.meta.env.VITE_API_URL}/auth/google`;
           }}
         >
           <GoogleIcon />

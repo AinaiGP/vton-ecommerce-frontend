@@ -30,6 +30,11 @@ function attachAuthInterceptor(client) {
         config.headers.Authorization = `Bearer ${accessToken}`;
       }
 
+      const cartId = localStorage.getItem("cartId");
+      if (cartId) {
+        config.headers["x-cart-id"] = cartId;
+      }
+
       return config;
     },
     (error) => Promise.reject(error),

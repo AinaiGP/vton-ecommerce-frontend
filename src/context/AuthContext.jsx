@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = (userData, accessToken, refreshToken, rememberMe = true) => {
     setTokens(accessToken, refreshToken, rememberMe);
-    setUserData(userData);
+    setUserData(userData, rememberMe);
     setUser(userData);
     setIsAuthenticated(true);
     setNeedsOnboarding(userData?.isOnboardingComplete === false);

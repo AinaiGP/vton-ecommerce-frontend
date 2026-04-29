@@ -44,6 +44,7 @@ import AdminVendorApplications from "./pages/admin/AdminVendorApplications";
 import AdminInvitations from "./pages/admin/AdminInvitations";
 import AdminProfile from "./pages/admin/AdminProfile";
 import GoogleOnboardingModal from "./components/auth/GoogleOnboardingModal";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 import SupportDashboard from "./pages/support/SupportDashboard";
 import SupportTickets from "./pages/support/SupportTickets";
@@ -122,59 +123,378 @@ function App() {
           path="/onboarding"
           element={<GoogleOnboardingModal isPage={true} />}
         />
-        <Route path="/try-on-history" element={<TryOnHistoryPage />} />
-        <Route path="/ai-try-on" element={<AITryOnPage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/vendor" element={<VendorDashboardPage />} />
-        <Route path="/vendor/products" element={<VendorProductsPage />} />
-        <Route path="/vendor/orders" element={<VendorOrdersPage />} />
-        <Route path="/vendor/analytics" element={<VendorAnalyticsPage />} />
-        <Route path="/vendor/tickets" element={<VendorTicketsPage />} />
-        <Route path="/vendor/messages" element={<VendorMessagesPage />} />
-        <Route path="/vendor/earnings" element={<VendorEarningsPage />} />
-        <Route path="/vendor/reviews" element={<VendorReviewsPage />} />
-        <Route path="/vendor/settings" element={<VendorSettingsPage />} />
-        <Route path="/vendor/inventory" element={<VendorInventoryPage />} />
-        <Route path="/vendor/refunds" element={<VendorRefundsPage />} />
+        <Route
+          path="/try-on-history"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <TryOnHistoryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ai-try-on"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <AITryOnPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Vendor Routes */}
+        <Route
+          path="/vendor"
+          element={
+            <ProtectedRoute requiredRole="vendor">
+              <VendorDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor/products"
+          element={
+            <ProtectedRoute requiredRole="vendor">
+              <VendorProductsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor/orders"
+          element={
+            <ProtectedRoute requiredRole="vendor">
+              <VendorOrdersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor/analytics"
+          element={
+            <ProtectedRoute requiredRole="vendor">
+              <VendorAnalyticsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor/tickets"
+          element={
+            <ProtectedRoute requiredRole="vendor">
+              <VendorTicketsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor/messages"
+          element={
+            <ProtectedRoute requiredRole="vendor">
+              <VendorMessagesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor/earnings"
+          element={
+            <ProtectedRoute requiredRole="vendor">
+              <VendorEarningsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor/reviews"
+          element={
+            <ProtectedRoute requiredRole="vendor">
+              <VendorReviewsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor/settings"
+          element={
+            <ProtectedRoute requiredRole="vendor">
+              <VendorSettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor/inventory"
+          element={
+            <ProtectedRoute requiredRole="vendor">
+              <VendorInventoryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor/refunds"
+          element={
+            <ProtectedRoute requiredRole="vendor">
+              <VendorRefundsPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/vendors/storefront/:id"
           element={<VendorStorefrontPage />}
         />
-        <Route path="/profile" element={<CustomerProfilePage />} />
-        <Route path="/wishlist" element={<WishlistPage />} />
-        <Route path="/wardrobe" element={<WardrobePage />} />
-        <Route path="/orders" element={<OrdersPage />} />
-        <Route path="/orders/:id" element={<OrderTrackingPage />} />
-        <Route path="/checkout" element={<CheckoutPage />} />
-        <Route path="/tickets" element={<CustomerTicketsPage />} />
-        <Route path="/returns" element={<CustomerReturnsPage />} />
-        <Route path="/my-account" element={<CustomerHubPage />} />
-        <Route path="/apply-vendor" element={<VendorApplicationPage />} />
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        <Route path="/admin/vendors" element={<AdminVendors />} />
-        <Route path="/admin/users" element={<AdminUsers />} />
-        <Route path="/admin/categories" element={<AdminCategories />} />
-        <Route path="/admin/tickets" element={<AdminTickets />} />
-        <Route path="/admin/messages" element={<AdminMessagesPage />} />
-        <Route path="/admin/products" element={<AdminProducts />} />
-        <Route path="/admin/orders" element={<AdminOrders />} />
-        <Route path="/admin/reports" element={<AdminReports />} />
-        <Route path="/admin/settings" element={<AdminSettings />} />
-        <Route path="/admin/staff" element={<AdminStaff />} />
+
+        {/* Customer Profile & Hub */}
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <CustomerProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/wishlist"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <WishlistPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/wardrobe"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <WardrobePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <OrdersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders/:id"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <OrderTrackingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/checkout"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <CheckoutPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/tickets"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <CustomerTicketsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/returns"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <CustomerReturnsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/my-account"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <CustomerHubPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/apply-vendor"
+          element={
+            <ProtectedRoute requiredRole="customer">
+              <VendorApplicationPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Admin Routes */}
+        <Route
+          path="/admin/dashboard"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/vendors"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminVendors />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminUsers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/categories"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminCategories />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/tickets"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminTickets />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/messages"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminMessagesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/products"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminProducts />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/orders"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminOrders />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reports"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminReports />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/settings"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/staff"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminStaff />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/admin/vendor-applications"
-          element={<AdminVendorApplications />}
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminVendorApplications />
+            </ProtectedRoute>
+          }
         />
-        <Route path="/admin/invitations" element={<AdminInvitations />} />
-        <Route path="/admin/profile" element={<AdminProfile />} />
+        <Route
+          path="/admin/invitations"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminInvitations />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/profile"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminProfile />
+            </ProtectedRoute>
+          }
+        />
 
-        <Route path="/support" element={<SupportDashboard />} />
-        <Route path="/support/tickets" element={<SupportTickets />} />
-        <Route path="/support/chat" element={<SupportLiveChat />} />
-        <Route path="/support/users" element={<SupportUsers />} />
-        <Route path="/support/reports" element={<SupportReports />} />
-        <Route path="/support/settings" element={<SupportSettings />} />
-        <Route path="/support/profile" element={<SupportProfile />} />
+        {/* Support Routes */}
+        <Route
+          path="/support"
+          element={
+            <ProtectedRoute requiredRole="technical_support">
+              <SupportDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/support/tickets"
+          element={
+            <ProtectedRoute requiredRole="technical_support">
+              <SupportTickets />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/support/chat"
+          element={
+            <ProtectedRoute requiredRole="technical_support">
+              <SupportLiveChat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/support/users"
+          element={
+            <ProtectedRoute requiredRole="technical_support">
+              <SupportUsers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/support/reports"
+          element={
+            <ProtectedRoute requiredRole="technical_support">
+              <SupportReports />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/support/settings"
+          element={
+            <ProtectedRoute requiredRole="technical_support">
+              <SupportSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/support/profile"
+          element={
+            <ProtectedRoute requiredRole="technical_support">
+              <SupportProfile />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
       <FloatingChatWidget />
     </>

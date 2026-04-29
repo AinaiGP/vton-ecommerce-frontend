@@ -41,7 +41,8 @@ export const getRefreshToken = () => {
 export const getCartId = () => getFromStorage(CART_ID_KEY);
 
 export const getUserData = () => {
-  const rawUser = localStorage.getItem(USER_KEY);
+  const rawUser =
+    localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
   if (!rawUser) {
     return null;
   }
@@ -73,7 +74,8 @@ export const setCartId = (id, rememberMe = true) => {
 };
 
 export const setUserData = (user, rememberMe = true) => {
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  const storage = rememberMe ? localStorage : sessionStorage;
+  storage.setItem(USER_KEY, JSON.stringify(user));
 };
 
 export const getTokenStorageType = () => {
@@ -93,4 +95,5 @@ export const clearAll = () => {
   localStorage.removeItem(CART_ID_KEY);
   localStorage.removeItem(USER_KEY);
   sessionStorage.removeItem(CART_ID_KEY);
+  sessionStorage.removeItem(USER_KEY);
 };
