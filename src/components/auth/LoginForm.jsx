@@ -73,6 +73,9 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
       role: payload?.role || null,
       isOnboardingComplete: payload?.isOnboardingComplete ?? true,
       authProvider: payload?.authProvider,
+      firstName: payload?.firstName,
+      lastName: payload?.lastName,
+      brandName: payload?.brandName,
     };
 
     if (!user.id || !user.email) {

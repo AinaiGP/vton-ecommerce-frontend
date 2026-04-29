@@ -95,12 +95,6 @@ const CUSTOMER_PAGES = [
         label: "Checkout",
         desc: "Complete your purchase",
       },
-      {
-        to: "/ai-try-on",
-        icon: Zap,
-        label: "AI Virtual Try-On",
-        desc: "Try clothes on virtually using AI",
-      },
     ],
   },
 ];
@@ -223,24 +217,6 @@ export default function CustomerHubPage() {
               }}
             >
               <ShoppingBag size={16} /> Shop Now
-            </Link>
-            <Link
-              to="/ai-try-on"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 7,
-                padding: "11px 22px",
-                borderRadius: 12,
-                background: "var(--gold, #D4AF7A)",
-                color: "#1a1210",
-                textDecoration: "none",
-                fontWeight: 700,
-                fontSize: 14,
-                transition: "filter 0.15s",
-              }}
-            >
-              <Eye size={16} /> Virtual Try-On
             </Link>
           </div>
         </div>

@@ -150,7 +150,7 @@ export default function ProductCard({ product }) {
 
         {/* Actions */}
         <Link to={`/product/${product.id}`} className={styles.viewDetailsBtn}>
-          <span>{t("product.view_details")}</span>
+          <span>{t("View Product")}</span>
           <ArrowRight size={14} />
         </Link>
       </div>

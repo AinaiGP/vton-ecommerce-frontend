@@ -48,6 +48,9 @@ export default function AuthCallbackPage() {
       role: payload?.role || null,
       isOnboardingComplete: isOnboardingComplete,
       authProvider: 'google',
+      firstName: payload?.firstName,
+      lastName: payload?.lastName,
+      brandName: payload?.brandName,
     };
 
     if (!user.id || !user.email || !user.role) {

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Bell, Search, Menu, ChevronDown, Sun, Moon } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
 import styles from "../../styles/VendorHeader.module.css";
 
 export default function VendorHeader({ onMenuToggle }) {
   const [notificationCount] = useState(0);
+  const { user } = useAuth();
 
   useEffect(() => {
     // TODO: wire vendor notifications to real API
@@ -48,10 +50,10 @@ export default function VendorHeader({ onMenuToggle }) {
 
         {/* Profile pill */}
         <button className={styles.profilePill}>
-          <div className={styles.avatar}>V</div>
+          <div className={styles.avatar}>{(user?.brandName?.[0] || user?.firstName?.[0] || user?.email?.[0] || "V").toUpperCase()}</div>
           <div className={styles.profileText}>
-            <span className={styles.profileName}>Vendor</span>
-            <span className={styles.profileRole}>Store Owner</span>
+            <span className={styles.profileName}>{user?.brandName || "My Store"}</span>
+            <span className={styles.profileRole}>{user?.email || "Store Owner"}</span>
           </div>
           <ChevronDown size={14} className={styles.chevron} />
         </button>

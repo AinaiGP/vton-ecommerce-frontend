@@ -96,8 +96,13 @@ function Sidebar({ collapsed, onToggle, mobileOpen, onClose }) {
           </div>
           {!collapsed && (
             <div className={s.brandText}>
-              <span className={s.brandName}>{t("vendor.title")}</span>
-              <span className={s.brandSub}>{t("vendor.tagline")}</span>
+              <span className={s.brandName}>
+                {user?.brandName ||
+                  (user?.firstName
+                    ? `${user.firstName} ${user.lastName}`
+                    : "Vendor")}
+              </span>
+              <span className={s.brandSub}>{user?.email}</span>
             </div>
           )}
         </div>
@@ -171,14 +176,7 @@ function Sidebar({ collapsed, onToggle, mobileOpen, onClose }) {
           </button>
         </div>
 
-        {/* Vendor pill */}
-          <div className={s.vendorAvatar}>{(user?.firstName?.[0] || user?.email?.[0] || "V").toUpperCase()}</div>
-          {!collapsed && (
-            <div>
-              <span className={s.vendorName}>{user?.firstName} {user?.lastName}</span>
-              <span className={s.vendorHandle}>{user?.email}</span>
-            </div>
-          )}
+
       </aside>
     </>
   );
@@ -316,8 +314,8 @@ function Header({ onMenuToggle, dark, onDarkToggle }) {
               setNotifOpen(false);
             }}
           >
-            <div className={s.profileAvat}>{(user?.firstName?.[0] || user?.email?.[0] || "V").toUpperCase()}</div>
-            <span className={s.profileName}>{user?.firstName} {user?.lastName}</span>
+            <div className={s.profileAvat}>{(user?.brandName?.[0] || user?.firstName?.[0] || user?.email?.[0] || "V").toUpperCase()}</div>
+            <span className={s.profileName}>{user?.brandName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Vendor'}</span>
             <ChevronDown
               size={13}
               className={[s.profileChevron, profileOpen ? s.open : ""].join(
@@ -328,7 +326,7 @@ function Header({ onMenuToggle, dark, onDarkToggle }) {
           {profileOpen && (
             <div className={s.profileMenu}>
               <div className={s.profileInfo}>
-                <span className={s.profileInfoName}>{user?.firstName} {user?.lastName}</span>
+                <span className={s.profileInfoName}>{user?.brandName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Vendor'}</span>
                 <span className={s.profileInfoSub}>{user?.email}</span>
               </div>
               <ul className={s.profileMenuList}>
