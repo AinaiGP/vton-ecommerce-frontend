@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../utils/apiClient";
 import { formatPrice, getProductImage } from "../../utils/productHelpers";
 import styles from "../../styles/FloatingChatWidget.module.css";
@@ -85,6 +86,8 @@ function parseReplySegments(reply) {
 
 function ChatProductCard({ imageUrl, altName }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated } = useAuth();
   const [product, setProduct] = useState(null);
   const [status, setStatus] = useState("loading"); // loading | found | notfound
 
@@ -166,11 +169,22 @@ function ChatProductCard({ imageUrl, altName }) {
           </button>
           <button
             className={`${styles.chatProductCardBtn} ${styles.chatProductCardBtnSecondary}`}
-            onClick={() =>
+            onClick={() => {
+              if (!isAuthenticated) {
+                navigate("/auth", { 
+                  state: { 
+                    from: { 
+                      pathname: `/product/${product.id}`, 
+                      state: { autoTriggerTryOn: true } 
+                    } 
+                  } 
+                });
+                return;
+              }
               navigate(`/product/${product.id}`, {
                 state: { autoTriggerTryOn: true },
-              })
-            }
+              });
+            }}
           >
             Try This On
           </button>

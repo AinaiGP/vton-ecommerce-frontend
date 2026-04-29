@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { ShoppingBag, Trash2, Plus, Minus, Sparkles, Tag, ArrowRight } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
+import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import styles from "../styles/CartPage.module.css";
 
@@ -12,7 +13,9 @@ export default function CartPage() {
   const [cartItems, setCartItems] = useState([]);
   const [promoCode, setPromoCode] = useState("");
   const [discount, setDiscount]   = useState(0);
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     // TODO: wire to real API endpoint — Phase X
@@ -179,7 +182,13 @@ export default function CartPage() {
 
                 <button 
                   className={`${styles.checkoutBtn} click-bounce`} 
-                  onClick={() => navigate("/checkout")}
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      navigate("/auth", { state: { from: location } });
+                      return;
+                    }
+                    navigate("/checkout");
+                  }}
                 >
                   {t("cart.proceed")} <ArrowRight size={18} style={{ transform: dir === 'rtl' ? 'rotate(180deg)' : 'none' }} />
                 </button>

@@ -2,8 +2,9 @@ import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { GoogleIcon } from "../common/SocialIcons";
-import { forgotPassword, loginUser } from "../../utils/authFunctions";
+import { forgotPassword, loginUser, getRedirectPathByRole } from "../../utils/authFunctions";
 import { useAuth } from "../../context/AuthContext";
+import { useLocation } from "react-router-dom";
 
 /* ─────────────────────────────────────────────
    LoginForm – Embeddable login form component
@@ -33,7 +34,10 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
+  
+  const from = location.state?.from?.pathname;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -68,6 +72,7 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
       email: payload?.email || null,
       role: payload?.role || null,
       isOnboardingComplete: payload?.isOnboardingComplete ?? true,
+      authProvider: payload?.authProvider,
     };
 
     if (!user.id || !user.email) {
@@ -80,12 +85,10 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
 
     setLoading(false);
 
-    if (user.role === 'vendor') {
-      navigate('/vendor', { replace: true });
-    } else if (user.role === 'admin') {
-      navigate('/admin', { replace: true });
+    if (from && from !== '/auth') {
+      navigate(from, { replace: true });
     } else {
-      navigate('/', { replace: true });
+      navigate(getRedirectPathByRole(user.role), { replace: true });
     }
   };
 

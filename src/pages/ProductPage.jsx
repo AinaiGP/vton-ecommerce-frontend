@@ -13,6 +13,7 @@ import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import VtonModal from "../components/vton/VtonModal";
 import LoadingSpinner from "../components/common/LoadingSpinner";
+import { useAuth } from "../context/AuthContext";
 import apiClient from "../utils/apiClient";
 import {
   formatPrice,
@@ -36,6 +37,7 @@ export default function ProductPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const { isAuthenticated } = useAuth();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -330,7 +332,13 @@ export default function ProductPage() {
 
               <button
                 className={styles.wishlistButton}
-                onClick={() => setIsWishlisted(!isWishlisted)}
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    navigate("/auth", { state: { from: location } });
+                    return;
+                  }
+                  setIsWishlisted(!isWishlisted);
+                }}
                 aria-label="Add to wishlist"
               >
                 <Heart
@@ -343,7 +351,13 @@ export default function ProductPage() {
 
             <button
               className={styles.tryOnButton}
-              onClick={() => setVtonOpen(true)}
+              onClick={() => {
+                if (!isAuthenticated) {
+                  navigate("/auth", { state: { from: location } });
+                  return;
+                }
+                setVtonOpen(true);
+              }}
             >
               <Eye size={22} />
               <span>Virtual Try-On</span>

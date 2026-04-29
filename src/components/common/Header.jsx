@@ -121,16 +121,18 @@ export default function Header() {
     return (f + " " + l).trim() || user.email || "";
   };
 
-  const getProfilePath = () => {
-    switch (userRole) {
-      case "vendor": return "/vendor";
-      case "admin":  return "/admin/dashboard";
-      default:       return "/profile";
-    }
-  };
+  const isCustomer = userRole === 'customer';
+  const isVendor = userRole === 'vendor';
+  const isAdmin = userRole === 'admin';
+  const isTechSupport = userRole === 'technical_support';
+  const isGuest = !isAuthenticated;
 
-  // Is this a regular customer (not vendor/admin)?
-  const isCustomer = isAuthenticated && userRole !== "vendor" && userRole !== "admin";
+  const getProfilePath = () => {
+    if (isVendor) return "/vendor";
+    if (isAdmin) return "/admin/dashboard";
+    if (isTechSupport) return "/support";
+    return "/profile";
+  };
 
   // Customer quick-links for the dropdown
   const CUSTOMER_MENU = [
@@ -190,30 +192,34 @@ export default function Header() {
               </div>
             </div>
 
-            {/* My Account Dropdown */}
-            <div className={styles.dropdownWrap}>
-              <span className={styles.navLink}>{lang === "ar" ? "حسابي" : "My Account"} <ChevronDown size={13} className={styles.chevron} /></span>
-              <div className={styles.dropdownMenu}>
-                <Link to="/my-account" className={styles.dropdownItem}><LayoutGrid size={14} /> {lang === "ar" ? "لوحة الحساب" : "Account Hub"}</Link>
-                <Link to="/profile"    className={styles.dropdownItem}><User size={14} /> {lang === "ar" ? "ملفي الشخصي" : "My Profile"}</Link>
-                <Link to="/orders"     className={styles.dropdownItem}><Package size={14} /> {lang === "ar" ? "طلباتي" : "My Orders"}</Link>
-                <Link to="/wishlist"   className={styles.dropdownItem}><Heart size={14} /> {lang === "ar" ? "المفضلة" : "Wishlist"}</Link>
-                <Link to="/wardrobe"   className={styles.dropdownItem}><Shirt size={14} /> {lang === "ar" ? "خزانتي" : "My Wardrobe"}</Link>
-                <Link to="/tickets"    className={styles.dropdownItem}><MessageSquare size={14} /> {lang === "ar" ? "تذاكر الدعم" : "Support Tickets"}</Link>
-                <Link to="/returns"    className={styles.dropdownItem}><RotateCcw size={14} /> {lang === "ar" ? "الإرجاع والاسترداد" : "Returns & Refunds"}</Link>
-                <Link to="/ai-try-on"  className={styles.dropdownItem}><Zap size={14} /> {lang === "ar" ? "التجربة الافتراضية" : "AI Try-On"}</Link>
+            {/* My Account Dropdown - Customer Only */}
+            {isCustomer && (
+              <div className={styles.dropdownWrap}>
+                <span className={styles.navLink}>{lang === "ar" ? "حسابي" : "My Account"} <ChevronDown size={13} className={styles.chevron} /></span>
+                <div className={styles.dropdownMenu}>
+                  <Link to="/my-account" className={styles.dropdownItem}><LayoutGrid size={14} /> {lang === "ar" ? "لوحة الحساب" : "Account Hub"}</Link>
+                  <Link to="/profile"    className={styles.dropdownItem}><User size={14} /> {lang === "ar" ? "ملفي الشخصي" : "My Profile"}</Link>
+                  <Link to="/orders"     className={styles.dropdownItem}><Package size={14} /> {lang === "ar" ? "طلباتي" : "My Orders"}</Link>
+                  <Link to="/wishlist"   className={styles.dropdownItem}><Heart size={14} /> {lang === "ar" ? "المفضلة" : "Wishlist"}</Link>
+                  <Link to="/wardrobe"   className={styles.dropdownItem}><Shirt size={14} /> {lang === "ar" ? "خزانتي" : "My Wardrobe"}</Link>
+                  <Link to="/tickets"    className={styles.dropdownItem}><MessageSquare size={14} /> {lang === "ar" ? "تذاكر الدعم" : "Support Tickets"}</Link>
+                  <Link to="/returns"    className={styles.dropdownItem}><RotateCcw size={14} /> {lang === "ar" ? "الإرجاع والاسترداد" : "Returns & Refunds"}</Link>
+                  <Link to="/ai-try-on"  className={styles.dropdownItem}><Zap size={14} /> {lang === "ar" ? "التجربة الافتراضية" : "AI Try-On"}</Link>
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Platform Dropdown */}
-            <div className={styles.dropdownWrap}>
-              <span className={styles.navLink}>{t("common.platform")} <ChevronDown size={13} className={styles.chevron} /></span>
-              <div className={styles.dropdownMenu}>
-                <Link to="/vendor"           className={styles.dropdownItem}><LayoutDashboard size={14} /> {t("common.vendor")}</Link>
-                <Link to="/support"          className={styles.dropdownItem}><Headphones size={14} /> {t("common.support")}</Link>
-                <Link to="/admin/dashboard"  className={styles.dropdownItem}><ShieldCheck size={14} /> {t("common.admin")}</Link>
+            {/* Platform Dropdown - Role Specific */}
+            {(isVendor || isTechSupport || isAdmin) && (
+              <div className={styles.dropdownWrap}>
+                <span className={styles.navLink}>{t("common.platform")} <ChevronDown size={13} className={styles.chevron} /></span>
+                <div className={styles.dropdownMenu}>
+                  {isVendor && <Link to="/vendor"           className={styles.dropdownItem}><LayoutDashboard size={14} /> {t("common.vendor")}</Link>}
+                  {isTechSupport && <Link to="/support"          className={styles.dropdownItem}><Headphones size={14} /> {t("common.support")}</Link>}
+                  {isAdmin && <Link to="/admin/dashboard"  className={styles.dropdownItem}><ShieldCheck size={14} /> {t("common.admin")}</Link>}
+                </div>
               </div>
-            </div>
+            )}
           </nav>
 
           {/* ── Right actions ── */}
@@ -245,10 +251,14 @@ export default function Header() {
             )}
 
             {/* Wishlist */}
-            <Link to="/wishlist" className={styles.iconBtn} aria-label="Wishlist"><Heart size={20} /></Link>
+            {(isGuest || isCustomer) && (
+              <Link to="/wishlist" className={styles.iconBtn} aria-label="Wishlist"><Heart size={20} /></Link>
+            )}
 
             {/* Cart */}
-            <Link to="/cart" className={styles.iconBtn} aria-label="Cart"><ShoppingBag size={20} /></Link>
+            {(isGuest || isCustomer) && (
+              <Link to="/cart" className={styles.iconBtn} aria-label="Cart"><ShoppingBag size={20} /></Link>
+            )}
 
             {/* ── Auth section ── */}
             {isAuthenticated ? (
@@ -315,14 +325,14 @@ export default function Header() {
                         );
                       })
                     ) : (
-                      /* Vendor/Admin links */
+                      /* Vendor/Admin/Support links */
                       <Link
                         to={getProfilePath()}
                         className={styles.avatarDropItem}
                         onClick={() => setProfileOpen(false)}
                       >
                         <span className={styles.avatarDropItemIcon}><LayoutGrid size={15} /></span>
-                        <span>{lang === "ar" ? "لوحة التحكم" : "Dashboard"}</span>
+                        <span>{isAdmin ? (lang === "ar" ? "لوحة الإدارة" : "Admin Panel") : isTechSupport ? (lang === "ar" ? "لوحة الدعم" : "Support Desk") : (lang === "ar" ? "لوحة البائع" : "Vendor Portal")}</span>
                         <ChevronRight size={13} className={styles.avatarDropChevron} />
                       </Link>
                     )}
@@ -400,14 +410,27 @@ export default function Header() {
             <hr className={styles.drawerDivider} />
 
             {/* Customer pages */}
-            <Link to="/my-account" className={styles.drawerLink} onClick={() => setMobileOpen(false)}>📋 {lang === "ar" ? "لوحة حسابي" : "Account Hub"}</Link>
-            <Link to="/wishlist"   className={styles.drawerLink} onClick={() => setMobileOpen(false)}>{t("common.wishlist")} ♡</Link>
-            <Link to="/cart"       className={styles.drawerLink} onClick={() => setMobileOpen(false)}>{t("common.cart")} 🛍</Link>
-            <Link to="/orders"     className={styles.drawerLink} onClick={() => setMobileOpen(false)}>{t("common.orders")}</Link>
-            <Link to="/wardrobe"   className={styles.drawerLink} onClick={() => setMobileOpen(false)}>👗 {lang === "ar" ? "خزانتي" : "My Wardrobe"}</Link>
-            <Link to="/tickets"    className={styles.drawerLink} onClick={() => setMobileOpen(false)}>🎫 {lang === "ar" ? "تذاكر الدعم" : "Support Tickets"}</Link>
-            <Link to="/returns"    className={styles.drawerLink} onClick={() => setMobileOpen(false)}>↩ {lang === "ar" ? "الإرجاع والاسترداد" : "Returns & Refunds"}</Link>
-            <Link to="/ai-try-on"  className={styles.drawerLink} onClick={() => setMobileOpen(false)}>⚡ {lang === "ar" ? "التجربة الافتراضية" : "AI Try-On"}</Link>
+            {(isGuest || isCustomer) && (
+              <>
+                <Link to="/my-account" className={styles.drawerLink} onClick={() => setMobileOpen(false)}>📋 {lang === "ar" ? "لوحة حسابي" : "Account Hub"}</Link>
+                <Link to="/wishlist"   className={styles.drawerLink} onClick={() => setMobileOpen(false)}>{t("common.wishlist")} ♡</Link>
+                <Link to="/cart"       className={styles.drawerLink} onClick={() => setMobileOpen(false)}>{t("common.cart")} 🛍</Link>
+                <Link to="/orders"     className={styles.drawerLink} onClick={() => setMobileOpen(false)}>{t("common.orders")}</Link>
+                <Link to="/wardrobe"   className={styles.drawerLink} onClick={() => setMobileOpen(false)}>👗 {lang === "ar" ? "خزانتي" : "My Wardrobe"}</Link>
+                <Link to="/tickets"    className={styles.drawerLink} onClick={() => setMobileOpen(false)}>🎫 {lang === "ar" ? "تذاكر الدعم" : "Support Tickets"}</Link>
+                <Link to="/returns"    className={styles.drawerLink} onClick={() => setMobileOpen(false)}>↩ {lang === "ar" ? "الإرجاع والاسترداد" : "Returns & Refunds"}</Link>
+                <Link to="/ai-try-on"  className={styles.drawerLink} onClick={() => setMobileOpen(false)}>⚡ {lang === "ar" ? "التجربة الافتراضية" : "AI Try-On"}</Link>
+              </>
+            )}
+
+            {/* Platform pages */}
+            {!isGuest && !isCustomer && (
+              <>
+                {isVendor && <Link to="/vendor" className={styles.drawerLink} onClick={() => setMobileOpen(false)}>🏬 {lang === "ar" ? "لوحة البائع" : "Vendor Portal"}</Link>}
+                {isTechSupport && <Link to="/support" className={styles.drawerLink} onClick={() => setMobileOpen(false)}>🎧 {lang === "ar" ? "لوحة الدعم" : "Support Desk"}</Link>}
+                {isAdmin && <Link to="/admin/dashboard" className={styles.drawerLink} onClick={() => setMobileOpen(false)}>🛡️ {lang === "ar" ? "لوحة الإدارة" : "Admin Panel"}</Link>}
+              </>
+            )}
 
             <hr className={styles.drawerDivider} />
 

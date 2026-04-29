@@ -18,8 +18,10 @@ export const AuthProvider = ({ children }) => {
   const storedUser = getUserData();
   const storedAccessToken = getAccessToken();
   const hasSession = Boolean(storedUser && storedAccessToken);
+  
+  const isGoogleUserInitial = storedUser?.authProvider === 'google';
   const needsOnboardingInitial = Boolean(
-    storedUser && storedUser.isOnboardingComplete === false,
+    isGoogleUserInitial && storedUser?.isOnboardingComplete === false,
   );
 
   const [user, setUser] = useState(hasSession ? storedUser : null);
@@ -40,7 +42,9 @@ export const AuthProvider = ({ children }) => {
     setUserData(userData, rememberMe);
     setUser(userData);
     setIsAuthenticated(true);
-    setNeedsOnboarding(userData?.isOnboardingComplete === false);
+    
+    const isGoogleUser = userData?.authProvider === 'google';
+    setNeedsOnboarding(isGoogleUser && userData?.isOnboardingComplete === false);
   };
 
   const completeOnboarding = (updatedUser) => {

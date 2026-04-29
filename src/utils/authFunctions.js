@@ -93,3 +93,18 @@ export const forgotPassword = async (email) => {
     };
   }
 };
+
+/**
+ * Maps user roles to their respective dashboard or landing paths.
+ * @param {string} role - The user role string from the backend.
+ * @returns {string} The path to redirect to.
+ */
+export const getRedirectPathByRole = (role) => {
+  const map = {
+    customer: "/",
+    vendor: "/vendor",
+    admin: "/admin",
+    technical_support: "/support",
+  };
+  return map[role] || "/auth";
+};

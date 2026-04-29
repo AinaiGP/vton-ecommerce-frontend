@@ -44,7 +44,7 @@ import AdminVendorApplications from "./pages/admin/AdminVendorApplications";
 import AdminInvitations from "./pages/admin/AdminInvitations";
 import AdminProfile from "./pages/admin/AdminProfile";
 import GoogleOnboardingModal from "./components/auth/GoogleOnboardingModal";
-import ProtectedRoute from "./components/ProtectedRoute";
+import ProtectedRoute, { CustomerRoute } from "./components/ProtectedRoute";
 
 import SupportDashboard from "./pages/support/SupportDashboard";
 import SupportTickets from "./pages/support/SupportTickets";
@@ -58,10 +58,18 @@ import CustomerTicketsPage from "./pages/CustomerTicketsPage";
 import CustomerReturnsPage from "./pages/CustomerReturnsPage";
 import CustomerHubPage from "./pages/CustomerHubPage";
 import { useAuth } from "./context/AuthContext";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 function App() {
-  const { isAuthenticated, needsOnboarding } = useAuth();
+  const { isAuthenticated, needsOnboarding, userRole } = useAuth();
   const location = useLocation();
 
   useEffect(() => {
@@ -80,13 +88,17 @@ function App() {
 
     const observeNewElements = () => {
       const revealElements = document.querySelectorAll(".reveal, .stagger-reveal");
-      revealElements.forEach((el) => observer.observe(el));
+      revealElements.forEach((el) => {
+        if (!el.classList.contains("active")) {
+          observer.observe(el);
+        }
+      });
     };
 
-    // Initial observation
+    // Run immediately and on route changes
     observeNewElements();
 
-    // Use MutationObserver to catch elements added dynamically later
+    // Use MutationObserver for dynamic content
     const mutationObserver = new MutationObserver(() => {
       observeNewElements();
     });
@@ -96,23 +108,24 @@ function App() {
       subtree: true,
     });
 
-    // Fallback: Ensure everything is observed after a delay
-    const timer = setTimeout(observeNewElements, 1000);
-
     return () => {
       observer.disconnect();
       mutationObserver.disconnect();
-      clearTimeout(timer);
     };
   }, [location.pathname]);
 
   return (
     <>
+      <ScrollToTop />
       {needsOnboarding && location.pathname !== "/onboarding" && (
         <GoogleOnboardingModal />
       )}
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route
+          path="/admin"
+          element={<Navigate to="/admin/dashboard" replace />}
+        />
         <Route path="/browse" element={<BrowsePage />} />
         <Route path="/product/:id" element={<ProductPage />} />
         <Route path="/cart" element={<CartPage />} />
@@ -126,25 +139,25 @@ function App() {
         <Route
           path="/try-on-history"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <TryOnHistoryPage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
         <Route
           path="/ai-try-on"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <AITryOnPage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <DashboardPage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
 
@@ -246,81 +259,81 @@ function App() {
         <Route
           path="/profile"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <CustomerProfilePage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
         <Route
           path="/wishlist"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <WishlistPage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
         <Route
           path="/wardrobe"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <WardrobePage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
         <Route
           path="/orders"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <OrdersPage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
         <Route
           path="/orders/:id"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <OrderTrackingPage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
         <Route
           path="/checkout"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <CheckoutPage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
         <Route
           path="/tickets"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <CustomerTicketsPage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
         <Route
           path="/returns"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <CustomerReturnsPage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
         <Route
           path="/my-account"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <CustomerHubPage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
         <Route
           path="/apply-vendor"
           element={
-            <ProtectedRoute requiredRole="customer">
+            <CustomerRoute>
               <VendorApplicationPage />
-            </ProtectedRoute>
+            </CustomerRoute>
           }
         />
 
@@ -496,7 +509,7 @@ function App() {
           }
         />
       </Routes>
-      <FloatingChatWidget />
+      {(!isAuthenticated || userRole === "customer") && <FloatingChatWidget />}
     </>
   );
 }

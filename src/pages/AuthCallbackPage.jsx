@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import { useAuth } from "../context/AuthContext";
+import { getRedirectPathByRole } from "../utils/authFunctions";
 
 const decodeJwtPayload = (token) => {
   const payloadPart = token?.split(".")[1];
@@ -32,23 +33,6 @@ export default function AuthCallbackPage() {
   const isOnboardingComplete = payload?.isOnboardingComplete ?? true;
   const callbackRole = payload?.role || null;
 
-  const redirectByRole = useMemo(
-    () => (role) => {
-      if (role === "vendor") {
-        navigate("/vendor", { replace: true });
-        return;
-      }
-
-      if (role === "admin") {
-        navigate("/admin", { replace: true });
-        return;
-      }
-
-      navigate("/", { replace: true });
-    },
-    [navigate],
-  );
-
   useEffect(() => {
     if (!accessToken || !refreshToken) {
       navigate("/auth", {
@@ -63,6 +47,7 @@ export default function AuthCallbackPage() {
       email: payload?.email || null,
       role: payload?.role || null,
       isOnboardingComplete: isOnboardingComplete,
+      authProvider: 'google',
     };
 
     if (!user.id || !user.email || !user.role) {
@@ -83,7 +68,7 @@ export default function AuthCallbackPage() {
       return;
     }
 
-    redirectByRole(user.role);
+    navigate(getRedirectPathByRole(user.role), { replace: true });
   }, [
     accessToken,
     isOnboardingComplete,
@@ -93,7 +78,6 @@ export default function AuthCallbackPage() {
     payload?.id,
     payload?.role,
     payload?.sub,
-    redirectByRole,
     refreshToken,
   ]);
 
