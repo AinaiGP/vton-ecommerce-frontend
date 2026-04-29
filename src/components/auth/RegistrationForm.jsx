@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { GoogleIcon } from "../common/SocialIcons";
 import { registerUser } from "../../utils/authFunctions";
 import { useAuth } from "../../context/AuthContext";
+import ContentModal from "../common/ContentModal";
 
 /* ─────────────────────────────────────────────
    RegistrationForm – Embeddable signup form
@@ -23,6 +24,10 @@ export default function RegistrationForm({ styles, onSwitchToLogin }) {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+
   const navigate = useNavigate();
   const { login } = useAuth();
 
@@ -205,16 +210,24 @@ export default function RegistrationForm({ styles, onSwitchToLogin }) {
         {/* Terms */}
         <div className={styles.termsWrapper}>
           <label className={styles.checkboxLabel}>
-            <input type="checkbox" className={styles.checkbox} />
+            <input type="checkbox" className={styles.checkbox} required />
             <span>
               I agree to the{" "}
-              <a href="#" className={styles.termsLink}>
+              <button
+                type="button"
+                className={styles.inlineLink}
+                onClick={() => setShowTerms(true)}
+              >
                 Terms &amp; Conditions
-              </a>{" "}
+              </button>{" "}
               and{" "}
-              <a href="#" className={styles.termsLink}>
+              <button
+                type="button"
+                className={styles.inlineLink}
+                onClick={() => setShowPrivacy(true)}
+              >
                 Privacy Policy
-              </a>
+              </button>
             </span>
           </label>
         </div>
@@ -261,6 +274,62 @@ export default function RegistrationForm({ styles, onSwitchToLogin }) {
           Sign in
         </button>
       </p>
+
+      {/* Legal Modals */}
+      {showPrivacy && (
+        <ContentModal title="Privacy Policy" onClose={() => setShowPrivacy(false)}>
+          <div style={{ fontSize: '0.9rem', lineHeight: '1.6', color: '#333' }}>
+            <p><strong>Last updated: January 2026</strong></p>
+            <p>At AINAI, we are committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you visit our platform.</p>
+            
+            <h3 style={{ fontSize: '1rem', marginTop: '1.25rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>What data we collect</h3>
+            <ul>
+              <li><strong>Personal Information:</strong> Name, email address, shipping address, and phone number.</li>
+              <li><strong>Payment Information:</strong> Processed securely via Stripe.</li>
+              <li><strong>Browsing Behavior:</strong> Pages viewed, products searched, and interaction data.</li>
+              <li><strong>Virtual Try-On Photos:</strong> Photos you upload for the Virtual Try-On feature.</li>
+            </ul>
+
+            <h3 style={{ fontSize: '1rem', marginTop: '1.25rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>How we use your data</h3>
+            <p>We use your information to process orders, personalize your shopping experience, and improve our AI features.</p>
+
+            <h3 style={{ fontSize: '1rem', marginTop: '1.25rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>Data storage and security</h3>
+            <p>Your data is encrypted and stored securely on Amazon Web Services (AWS).</p>
+
+            <h3 style={{ fontSize: '1rem', marginTop: '1.25rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>Virtual Try-On Photos</h3>
+            <p>Photos uploaded for Virtual Try-On are processed in real-time. These photos are not stored permanently unless you save them to your wardrobe.</p>
+
+            <h3 style={{ fontSize: '1rem', marginTop: '1.25rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>Contact</h3>
+            <p>For any privacy-related inquiries, please contact us at <a href="mailto:ainai.egy@outlook.com">ainai.egy@outlook.com</a>.</p>
+          </div>
+        </ContentModal>
+      )}
+
+      {showTerms && (
+        <ContentModal title="Terms of Service" onClose={() => setShowTerms(false)}>
+          <div style={{ fontSize: '0.9rem', lineHeight: '1.6', color: '#333' }}>
+            <p><strong>Last updated: January 2026</strong></p>
+            
+            <h3 style={{ fontSize: '1rem', marginTop: '1.25rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>1. Acceptance of terms</h3>
+            <p>By accessing or using the AINAI platform, you agree to be bound by these Terms of Service and all applicable laws in the Arab Republic of Egypt.</p>
+
+            <h3 style={{ fontSize: '1rem', marginTop: '1.25rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>2. Account responsibilities</h3>
+            <p>You are responsible for maintaining the confidentiality of your account credentials.</p>
+
+            <h3 style={{ fontSize: '1rem', marginTop: '1.25rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>3. Prohibited conduct</h3>
+            <p>Users are prohibited from engaging in fraudulent activities or unauthorized scraping.</p>
+
+            <h3 style={{ fontSize: '1rem', marginTop: '1.25rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>4. Virtual Try-On feature</h3>
+            <p>The Virtual Try-On feature is provided for illustrative purposes. Uploaded photos are used solely for generating the preview.</p>
+
+            <h3 style={{ fontSize: '1rem', marginTop: '1.25rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>5. Governing law</h3>
+            <p>These terms are governed by the laws of the Arab Republic of Egypt.</p>
+
+            <h3 style={{ fontSize: '1rem', marginTop: '1.25rem', marginBottom: '0.5rem', color: '#1a1a1a' }}>6. Contact</h3>
+            <p>For questions regarding these terms, please contact us at <a href="mailto:ainai.egy@outlook.com">ainai.egy@outlook.com</a>.</p>
+          </div>
+        </ContentModal>
+      )}
     </div>
   );
 }

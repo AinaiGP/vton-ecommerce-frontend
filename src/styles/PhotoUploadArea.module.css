@@ -1,8 +1,10 @@
 @import "./variables.css";
 
 .uploadShell {
-  width: 100%;
-  max-width: 460px;
+  width: 90%;
+  /* Clamp(min, dynamic, max) - keeps it between 320px and 520px */
+  max-width: clamp(320px, 50vw, 520px);
+  margin: 0 auto;
 }
 
 .fileInput {
@@ -11,7 +13,8 @@
 
 .uploadZone {
   width: 100%;
-  min-height: 260px;
+  /* Scales the height based on the viewport height, but caps it */
+  min-height: clamp(180px, 25vh, 240px);
   border: 2px dashed var(--burgundy-light);
   border-radius: var(--radius-lg);
   background: linear-gradient(
@@ -19,34 +22,28 @@
     rgba(247, 243, 237, 0.95) 0%,
     rgba(255, 255, 255, 1) 100%
   );
-  padding: var(--space-8);
+  padding: clamp(16px, 2vw, 24px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
+  gap: clamp(10px, 1.5vh, 16px);
   text-align: center;
   cursor: pointer;
   transition:
     border-color var(--transition-fast),
-    box-shadow var(--transition-fast),
-    transform var(--transition-fast);
+    box-shadow var(--transition-fast);
 }
 
 .uploadZone:hover {
   border-color: var(--burgundy);
   box-shadow: var(--shadow-burgundy);
-  transform: translateY(-1px);
-}
-
-.uploadZone:focus-visible {
-  outline: 3px solid var(--gold);
-  outline-offset: 3px;
 }
 
 .iconWrap {
-  width: 72px;
-  height: 72px;
+  /* Icon stays proportional: between 48px and 64px */
+  width: clamp(48px, 6vw, 64px);
+  height: clamp(48px, 6vw, 64px);
   border-radius: var(--radius-circle);
   background: var(--white);
   border: 1px solid var(--ivory-dark);
@@ -56,36 +53,43 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* 3. Dynamic Typography 
+   This is the key to preventing the 'zoomed in' look on mobile. */
 .title {
   margin: 0;
   font-family: var(--font-serif);
-  font-size: var(--text-lg);
+  /* Text will scale between 15px and 18px based on screen width */
+  font-size: clamp(15px, 1.2vw, 18px);
   color: var(--charcoal);
   font-weight: var(--weight-semibold);
+  line-height: 1.3;
 }
 
 .subtitle {
   margin: 0;
   color: var(--burgundy);
   font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-wide);
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  font-size: var(--text-xs);
+  font-size: clamp(8px, 0.8vw, 10px);
 }
 
 .fileName {
-  margin: var(--space-2) 0 0;
+  margin: 8px 0 0;
   color: var(--charcoal-light);
-  font-size: var(--text-sm);
+  font-size: clamp(10px, 1vw, 12px);
 }
 
-@media (max-width: 640px) {
+/* 4. Fix for High Zoom/Mobile 
+   If the screen gets too small or zoom gets too high, 
+   we force a bit more room. */
+@media (max-height: 600px) {
   .uploadZone {
-    min-height: 220px;
-    padding: var(--space-6);
+    min-height: 160px;
+    gap: 8px;
   }
-
-  .title {
-    font-size: var(--text-base);
+  .iconWrap {
+    width: 40px;
+    height: 40px;
   }
 }

@@ -82,3 +82,85 @@
   .newsletterInner { flex-direction: column; align-items: flex-start; }
   .bottom { flex-direction: column; align-items: flex-start; gap: 10px; }
 }
+
+.footerLinkButton {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: rgba(247, 243, 237, 0.7);
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  transition: color 0.12s;
+  line-height: 1;
+}
+.footerLinkButton:hover {
+  color: var(--gold);
+  text-decoration: underline;
+}
+
+.contactModalInner {
+  display: flex;
+  flex-direction: column;
+}
+
+.modalSubtitle {
+  font-size: 1rem;
+  color: #666;
+  margin-bottom: 1.5rem;
+}
+
+.emailBox {
+  background: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 1.25rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 2rem;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.modalActions {
+  display: flex;
+  gap: 1rem;
+}
+
+.btnCopy {
+  flex: 1;
+  padding: 0.85rem;
+  background: var(--charcoal, #1a1a1a);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btnCopy:hover {
+  background: var(--burgundy, #8b4852);
+  transform: translateY(-2px);
+}
+
+.btnDone {
+  flex: 1;
+  padding: 0.85rem;
+  background: transparent;
+  color: #1a1a1a;
+  border: 1.5px solid #ddd;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btnDone:hover {
+  border-color: #1a1a1a;
+  background: #fcfcfc;
+}
