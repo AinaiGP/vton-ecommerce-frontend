@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Plus, Minus, Loader2 } from 'lucide-react';
 import apiClient from '../../utils/apiClient';
 import { useCart } from '../../context/CartContext';
+import { formatPrice } from '../../utils/formatPrice';
 import styles from '../../styles/CartItem.module.css';
 
 /**
@@ -17,7 +18,7 @@ export default function CartItem({ item, onCartChanged }) {
   const [busy, setBusy] = useState(false);
   const { refreshCartCount } = useCart();
 
-  const price = (item.effectivePrice ?? 0) / 100; // backend stores in piasters
+  const price = item.effectivePrice ?? 0;
   const lineTotal = price * item.quantity;
 
   const updateQuantity = async (newQty) => {
@@ -68,7 +69,7 @@ export default function CartItem({ item, onCartChanged }) {
         {!item.isAvailable && (
           <p className={styles.unavailableNote}>⚠ Item no longer available</p>
         )}
-        <p className={styles.itemPrice}>EGP {price.toFixed(2)}</p>
+        <p className={styles.itemPrice}>{formatPrice(price, item.currency)}</p>
 
         {/* Quantity Controls */}
         <div className={styles.quantityControls}>
@@ -94,7 +95,7 @@ export default function CartItem({ item, onCartChanged }) {
 
       {/* Total & Remove */}
       <div className={styles.itemActions}>
-        <p className={styles.itemTotal}>EGP {lineTotal.toFixed(2)}</p>
+        <p className={styles.itemTotal}>{formatPrice(lineTotal, item.currency)}</p>
         <button
           className={styles.removeButton}
           onClick={handleRemove}

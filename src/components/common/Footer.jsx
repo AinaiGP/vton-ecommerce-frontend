@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { Instagram, Twitter, Facebook, Youtube, ArrowRight, X } from "lucide-react";
+import { Instagram, Twitter, Facebook, Youtube, ArrowRight, X, Loader2 } from "lucide-react";
+import apiClient from "../../utils/apiClient";
 import AinaiLogo from "./AinaiLogo";
 import styles from "../../styles/Footer.module.css";
 import { useLanguage } from "../../context/LanguageContext";
@@ -17,6 +18,27 @@ export default function Footer() {
   const [showCookiesModal, setShowCookiesModal] = useState(false);
 
   const [copied, setCopied] = useState(false);
+
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const handleNewsletterSubmit = async (e) => {
+    e.preventDefault();
+    if (!newsletterEmail) return;
+    setSubmitting(true);
+    try {
+      await apiClient.post("/customers/newsletter/subscribe", { email: newsletterEmail });
+      setMessage("Subscribed!");
+      setNewsletterEmail("");
+      setTimeout(() => setMessage(""), 3000);
+    } catch (err) {
+      setMessage("Error. Try again.");
+      setTimeout(() => setMessage(""), 3000);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleCopyEmail = () => {
     navigator.clipboard.writeText("ainai.egy@outlook.com");
@@ -48,9 +70,20 @@ export default function Footer() {
             <h3 className={styles.newsletterTitle}>{t("footer.newsletter_title")}</h3>
             <p className={styles.newsletterSub}>{t("footer.newsletter_sub")}</p>
           </div>
-          <form className={styles.newsletterForm} onSubmit={e => e.preventDefault()}>
-            <input type="email" placeholder="your@email.com" className={styles.newsletterInput} />
-            <button type="submit" className={styles.newsletterBtn}><ArrowRight size={18} style={{ transform: lang === "ar" ? "rotate(180deg)" : "none" }} /></button>
+          <form className={styles.newsletterForm} onSubmit={handleNewsletterSubmit}>
+            <input 
+              type="email" 
+              placeholder="your@email.com" 
+              className={styles.newsletterInput} 
+              value={newsletterEmail}
+              onChange={e => setNewsletterEmail(e.target.value)}
+              disabled={submitting}
+              required
+            />
+            <button type="submit" className={styles.newsletterBtn} disabled={submitting}>
+              {submitting ? <Loader2 size={18} className="spin" /> : <ArrowRight size={18} style={{ transform: lang === "ar" ? "rotate(180deg)" : "none" }} />}
+            </button>
+            {message && <span className={styles.newsletterStatus}>{message}</span>}
           </form>
         </div>
       </div>

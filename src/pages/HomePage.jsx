@@ -114,8 +114,8 @@ export default function HomePage() {
         <div className={styles.promoBar}>
           <p>
             {lang === "ar"
-              ? "استمتع بخصم 20٪ على طلبك الأول وشحن مجاني للطلبات فوق 500 ج.م"
-              : "Enjoy 20% off on your first purchase & Free Shipping on Orders Over EGP 500"}
+              ? "استمتع بخصم 20٪ على طلبك الأول وشحن مجاني للطلبات فوق 3000 ج.م"
+              : "Enjoy 20% off on your first purchase & Free Shipping on Orders Over EGP 3000.00"}
           </p>
           <button 
             className={styles.promoClose} 

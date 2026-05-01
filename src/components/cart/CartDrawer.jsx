@@ -5,6 +5,7 @@ import CartItem from './CartItem';
 import apiClient from '../../utils/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
+import { formatPrice } from '../../utils/formatPrice';
 import styles from '../../styles/CartDrawer.module.css';
 
 /**
@@ -58,8 +59,8 @@ export default function CartDrawer({ isOpen, onClose }) {
     }
   };
 
-  // Prices come in piasters from the backend — divide by 100 for display
-  const subtotal = cart ? cart.subtotal / 100 : 0;
+  // Prices come in piasters from the backend
+  const subtotal = cart ? cart.subtotal : 0;
   const currency = cart?.currency ?? 'EGP';
 
   return (
@@ -118,7 +119,7 @@ export default function CartDrawer({ isOpen, onClose }) {
             <div className={styles.cartSummary}>
               <div className={styles.summaryRow}>
                 <span>Subtotal ({cart.totalItems} items)</span>
-                <span>{currency} {subtotal.toFixed(2)}</span>
+                <span>{formatPrice(subtotal, currency)}</span>
               </div>
               <div className={styles.summaryRow}>
                 <span>Shipping</span>
@@ -127,7 +128,7 @@ export default function CartDrawer({ isOpen, onClose }) {
               <div className={styles.summaryDivider} />
               <div className={styles.summaryTotal}>
                 <span>Subtotal</span>
-                <span>{currency} {subtotal.toFixed(2)}</span>
+                <span>{formatPrice(subtotal, currency)}</span>
               </div>
             </div>
 

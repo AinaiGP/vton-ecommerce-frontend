@@ -4,10 +4,11 @@ import { ShoppingBag, Trash2, Plus, Minus, Sparkles, Tag, ArrowRight, Loader2 } 
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import LoadingSpinner from "../components/common/LoadingSpinner";
+import apiClient from "../utils/apiClient";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useLanguage } from "../context/LanguageContext";
-import apiClient from "../utils/apiClient";
+import { formatPrice } from "../utils/formatPrice";
 import styles from "../styles/CartPage.module.css";
 
 export default function CartPage() {
@@ -90,10 +91,10 @@ export default function CartPage() {
   }
 
   const items = cart?.items || [];
-  const subtotal = (cart?.subtotal || 0) / 100;
+  const subtotal = cart?.subtotal || 0;
   const currency = cart?.currency || "EGP";
-  // Backend doesn't provide shipping yet, mock 500+ free rule
-  const shipping = subtotal > 0 ? (subtotal >= 500 ? 0 : 25) : 0;
+  // Backend doesn't provide shipping yet, mock 3000+ free rule (300000 piasters)
+  const shipping = subtotal > 0 ? (subtotal >= 300000 ? 0 : 10000) : 0;
   const discountAmount = subtotal * discount;
   const total = subtotal - discountAmount + shipping;
 
@@ -135,7 +136,7 @@ export default function CartPage() {
             {/* Items List */}
             <section className={`${styles.itemsSection} stagger-reveal active`}>
               {items.map((item) => {
-                const itemPrice = (item.effectivePrice || 0) / 100;
+                const itemPrice = item.effectivePrice || 0;
                 const itemTotal = itemPrice * item.quantity;
                 const isBusy = busyItems.has(item.variantId);
 
@@ -162,7 +163,7 @@ export default function CartPage() {
                       <p className={styles.itemMeta}>
                         {t("cart.size")}: {item.variantSize} | {t("cart.color")}: {item.variantColor}
                       </p>
-                      <p className={styles.itemPrice}>{currency} {itemPrice.toFixed(2)}</p>
+                      <p className={styles.itemPrice}>{formatPrice(itemPrice, currency)}</p>
 
                       <div className={styles.itemActions}>
                         <div className={styles.quantityControl}>
@@ -178,7 +179,7 @@ export default function CartPage() {
                           <button 
                             className={`${styles.qtyBtn} click-bounce`} 
                             onClick={() => updateQuantity(item.variantId, item.quantity + 1)} 
-                            disabled={isBusy || item.quantity >= item.availableQuantity}
+                            disabled={isBusy || item.quantity >= Math.min(item.availableQuantity, 5)}
                             aria-label="Increase"
                           >
                             <Plus size={14} />
@@ -196,7 +197,7 @@ export default function CartPage() {
 
                     <div className={styles.itemTotal}>
                       <span className={styles.totalLabel}>{t("cart.total")}</span>
-                      <span className={styles.totalAmount}>{currency} {itemTotal.toFixed(2)}</span>
+                      <span className={styles.totalAmount}>{formatPrice(itemTotal, currency)}</span>
                     </div>
                   </div>
                 );
@@ -226,17 +227,17 @@ export default function CartPage() {
                 <div className={styles.summaryRows}>
                   <div className={styles.summaryRow}>
                     <span>{t("cart.subtotal")}</span>
-                    <span>{currency} {subtotal.toFixed(2)}</span>
+                    <span>{formatPrice(subtotal, currency)}</span>
                   </div>
                   {discount > 0 && (
                     <div className={`${styles.summaryRow} ${styles.discountRow}`}>
                       <span>{t("cart.discount")} (20%)</span>
-                      <span>- {currency} {discountAmount.toFixed(2)}</span>
+                      <span>- {formatPrice(discountAmount, currency)}</span>
                     </div>
                   )}
                   <div className={styles.summaryRow}>
                     <span>{t("cart.shipping")}</span>
-                    <span>{shipping === 0 ? t("cart.free") : `${currency} ${shipping.toFixed(2)}`}</span>
+                    <span>{shipping === 0 ? t("cart.free") : formatPrice(shipping, currency)}</span>
                   </div>
                 </div>
 
@@ -244,12 +245,12 @@ export default function CartPage() {
 
                 <div className={styles.totalRow}>
                   <span>{t("cart.total")}</span>
-                  <span>{currency} {total.toFixed(2)}</span>
+                  <span>{formatPrice(total, currency)}</span>
                 </div>
 
-                {subtotal > 0 && subtotal < 500 && (
+                {subtotal > 0 && subtotal < 300000 && (
                   <div className={styles.shippingNotice}>
-                    Spend {currency} {(500 - subtotal).toFixed(2)} more to unlock Free Shipping
+                    Spend {formatPrice(300000 - subtotal, currency)} more to unlock Free Shipping
                   </div>
                 )}
 

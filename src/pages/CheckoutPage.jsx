@@ -15,7 +15,7 @@ import {
 import { loadStripe } from "@stripe/stripe-js";
 import {
   Elements,
-  CardElement,
+  PaymentElement,
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
@@ -23,9 +23,11 @@ import {
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import LoadingSpinner from "../components/common/LoadingSpinner";
-import { useAuth } from "../context/AuthContext";
-import { useLanguage } from "../context/LanguageContext";
 import apiClient from "../utils/apiClient";
+import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
+import { useLanguage } from "../context/LanguageContext";
+import { formatPrice } from "../utils/formatPrice";
 import styles from "../styles/CheckoutPage.module.css";
 
 // Initialize Stripe
@@ -34,7 +36,7 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 
 /**
  * Stripe Payment Form Component
  */
-function StripePaymentForm({ sessionId, onOrderSuccess, onBack, totalAmount, currency }) {
+function PaymentForm({ onSuccess, onBack, totalAmount, currency }) {
   const stripe = useStripe();
   const elements = useElements();
   const [error, setError] = useState(null);
@@ -49,27 +51,22 @@ function StripePaymentForm({ sessionId, onOrderSuccess, onBack, totalAmount, cur
     setError(null);
 
     try {
-      // 1. Confirm checkout on backend to get clientSecret
-      const res = await apiClient.post(`/checkout/sessions/${sessionId}/confirm`);
-      const { clientSecret } = res.data;
-
-      // 2. Use Stripe.js to confirm payment
-      const result = await stripe.confirmCardPayment(clientSecret, {
-        payment_method: {
-          card: elements.getElement(CardElement),
+      const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/orders`,
         },
+        redirect: 'if_required',
       });
 
-      if (result.error) {
-        setError(result.error.message);
+      if (confirmError) {
+        setError(confirmError.message);
         setProcessing(false);
-      } else {
-        if (result.paymentIntent.status === 'succeeded') {
-          onOrderSuccess();
-        }
+      } else if (paymentIntent.status === 'succeeded') {
+        onSuccess(paymentIntent.id);
       }
     } catch (err) {
-      console.error("Checkout confirmation failed:", err);
+      console.error("Payment confirmation failed:", err);
       setError(err?.response?.data?.message || "Payment initiation failed.");
       setProcessing(false);
     }
@@ -78,18 +75,7 @@ function StripePaymentForm({ sessionId, onOrderSuccess, onBack, totalAmount, cur
   return (
     <form onSubmit={handleSubmit} className={styles.cardForm}>
       <div className={styles.stripeElementContainer}>
-        <CardElement 
-          options={{
-            style: {
-              base: {
-                fontSize: '16px',
-                color: '#1a1210',
-                '::placeholder': { color: '#a89080' },
-              },
-              invalid: { color: '#dc2626' },
-            },
-          }}
-        />
+        <PaymentElement />
       </div>
       
       {error && <div className={styles.errorText} style={{ marginTop: '12px' }}>{error}</div>}
@@ -107,7 +93,7 @@ function StripePaymentForm({ sessionId, onOrderSuccess, onBack, totalAmount, cur
           className={styles.btnPrimary} 
           disabled={!stripe || processing}
         >
-          {processing ? <><Loader2 size={18} className={styles.spin} /> Processing...</> : `Pay ${currency} ${totalAmount.toFixed(2)}`}
+          {processing ? <><Loader2 size={18} className={styles.spin} /> Processing...</> : `Pay ${formatPrice(totalAmount, currency)}`}
         </button>
       </div>
     </form>
@@ -117,6 +103,7 @@ function StripePaymentForm({ sessionId, onOrderSuccess, onBack, totalAmount, cur
 export default function CheckoutPage() {
   const { t, dir } = useLanguage();
   const { isAuthenticated, user } = useAuth();
+  const { refreshCartCount } = useCart();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -134,6 +121,7 @@ export default function CheckoutPage() {
   const [selectedPhoneId, setSelectedPhoneId] = useState("");
 
   const [paymentMethod, setPaymentMethod] = useState("card"); // card or cod
+  const [clientSecret, setClientSecret] = useState(null);
 
   // 1. Initial Load: Fetch Profile and Session
   useEffect(() => {
@@ -197,15 +185,65 @@ export default function CheckoutPage() {
       setStep(1);
     } catch (err) {
       console.error("Failed to set address:", err);
-      alert("Failed to save shipping address. Please try again.");
+      alert(err?.response?.data?.message || "Failed to save shipping address. Please try again.");
     } finally {
       setProcessing(false);
     }
   };
 
-  const handleOrderSuccess = () => {
+  const handleNextToReview = async () => {
+    if (paymentMethod === 'card') {
+      setProcessing(true);
+      try {
+        const res = await apiClient.post(`/checkout/sessions/${session.id}/confirm`);
+        setClientSecret(res.data.clientSecret);
+        setStep(2);
+      } catch (err) {
+        console.error("Payment initiation failed:", err);
+        alert(err?.response?.data?.message || "Payment initiation failed.");
+      } finally {
+        setProcessing(false);
+      }
+    } else {
+      setStep(2);
+    }
+  };
+
+  const handleOrderSuccess = async (paymentIntentId) => {
+    if (paymentIntentId) {
+      setProcessing(true);
+      try {
+        // Fallback: Verify payment on backend to ensure order is created
+        await apiClient.post(`/checkout/sessions/${session.id}/verify`, {
+          paymentIntentId
+        });
+      } catch (err) {
+        console.error("Payment verification failed:", err);
+        // We don't block the user here because the webhook might still work
+        // but we log it.
+      } finally {
+        setProcessing(false);
+      }
+    }
+    
+    // Always refresh cart count after order success (clears cart on backend)
+    refreshCartCount();
+    
     setDone(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleConfirmCashOrder = async () => {
+    setProcessing(true);
+    try {
+      await apiClient.post(`/checkout/sessions/${session.id}/cash`);
+      handleOrderSuccess();
+    } catch (err) {
+      console.error("COD confirmation failed:", err);
+      alert(err?.response?.data?.message || "Failed to confirm cash order.");
+    } finally {
+      setProcessing(false);
+    }
   };
 
   if (loading) {
@@ -258,8 +296,8 @@ export default function CheckoutPage() {
     );
   }
 
-  const subtotal = (session?.subtotal || 0) / 100;
-  const shipping = (session?.shippingCost || 0) / 100;
+  const subtotal = session?.subtotal || 0;
+  const shipping = session?.shippingCost || 0;
   const total = subtotal + shipping;
   const currency = session?.currency || "EGP";
 
@@ -376,18 +414,24 @@ export default function CheckoutPage() {
                     {paymentMethod === "card" ? <div className={styles.radioChecked}><Check size={12} /></div> : <div className={styles.radioUnchecked} />}
                   </label>
 
-                  {/* Backend doesn't support COD confirm yet, so we disable it or warn */}
-                  <label className={`${styles.payOption} ${paymentMethod === "cod" ? styles.payOptionActive : styles.payDisabled}`} style={{ opacity: 0.5, cursor: 'not-allowed' }}>
-                    <input type="radio" disabled checked={paymentMethod === "cod"} className={styles.radioHidden} />
+                  <label className={`${styles.payOption} ${paymentMethod === "cod" ? styles.payOptionActive : ""}`}>
+                    <input type="radio" checked={paymentMethod === "cod"} onChange={() => setPaymentMethod("cod")} className={styles.radioHidden} />
                     <span className={styles.payOptIcon}>💵</span>
-                    <span className={styles.payOptLabel}>Cash on Delivery (Unavailable)</span>
-                    <div className={styles.radioUnchecked} />
+                    <span className={styles.payOptLabel}>Cash on Delivery</span>
+                    {paymentMethod === "cod" ? <div className={styles.radioChecked}><Check size={12} /></div> : <div className={styles.radioUnchecked} />}
                   </label>
                 </div>
 
                 <div className={styles.stepActions}>
                   <button className={styles.btnGhost} onClick={() => setStep(0)}>← {t("checkout.backShipping")}</button>
-                  <button className={styles.btnPrimary} onClick={() => setStep(2)}>{t("checkout.reviewOrder")} <ArrowRight size={16} style={{ transform: dir === 'rtl' ? 'rotate(180deg)' : 'none' }} /></button>
+                  <button 
+                    className={styles.btnPrimary} 
+                    onClick={handleNextToReview}
+                    disabled={processing}
+                  >
+                    {processing ? <Loader2 size={18} className={styles.spin} /> : t("checkout.reviewOrder")} 
+                    {!processing && <ArrowRight size={16} style={{ transform: dir === 'rtl' ? 'rotate(180deg)' : 'none' }} />}
+                  </button>
                 </div>
               </div>
             )}
@@ -423,20 +467,28 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {paymentMethod === "card" ? (
-                  <Elements stripe={stripePromise}>
-                    <StripePaymentForm 
-                      sessionId={session.id} 
-                      onOrderSuccess={handleOrderSuccess} 
+                {paymentMethod === "card" && clientSecret ? (
+                  <Elements stripe={stripePromise} options={{ clientSecret }}>
+                    <PaymentForm 
+                      onSuccess={handleOrderSuccess} 
                       onBack={() => setStep(1)}
                       totalAmount={total}
                       currency={currency}
                     />
                   </Elements>
+                ) : paymentMethod === "card" ? (
+                  <div className={styles.emptyState}>
+                    <Loader2 size={24} className={styles.spin} />
+                    <p>Initializing secure payment...</p>
+                  </div>
                 ) : (
                   <div className={styles.stepActionsStack}>
-                    <button className={`${styles.btnPrimary} ${styles.btnLarge}`} onClick={() => alert("COD not yet supported by backend")}>
-                      Confirm COD Order — {currency} {total.toFixed(2)}
+                    <button 
+                      className={`${styles.btnPrimary} ${styles.btnLarge}`} 
+                      onClick={handleConfirmCashOrder}
+                      disabled={processing}
+                    >
+                      {processing ? <><Loader2 size={18} className={styles.spin} /> Processing...</> : `Confirm COD Order — ${formatPrice(total, currency)}`}
                     </button>
                   </div>
                 )}
@@ -461,16 +513,16 @@ export default function CheckoutPage() {
                     <div className={styles.summaryItemInfo}>
                       <p className={styles.summaryItemName}>{i.productName}</p>
                       <p className={styles.summaryItemMeta}>Qty: {i.quantity} | {i.variantSize}</p>
-                      <span className={styles.summaryItemPrice}>{currency} {(i.unitPrice / 100).toFixed(2)}</span>
+                      <span className={styles.summaryItemPrice}>{formatPrice(i.unitPrice, currency)}</span>
                     </div>
                   </div>
                 ))}
               </div>
               <div className={styles.summaryDivider} />
-              <div className={styles.summaryRow}><span>{t("cart.subtotal")}</span><span>{currency} {subtotal.toFixed(2)}</span></div>
-              <div className={styles.summaryRow}><span>{t("cart.shipping")}</span><span>{shipping === 0 ? t("cart.free") : `${currency} ${shipping.toFixed(2)}`}</span></div>
+              <div className={styles.summaryRow}><span>{t("cart.subtotal")}</span><span>{formatPrice(subtotal, currency)}</span></div>
+              <div className={styles.summaryRow}><span>{t("cart.shipping")}</span><span>{shipping === 0 ? t("cart.free") : formatPrice(shipping, currency)}</span></div>
               <div className={styles.summaryDivider} />
-              <div className={`${styles.summaryRow} ${styles.summaryTotal}`}><span>{t("cart.total")}</span><span>{currency} {total.toFixed(2)}</span></div>
+              <div className={`${styles.summaryRow} ${styles.summaryTotal}`}><span>{t("cart.total")}</span><span>{formatPrice(total, currency)}</span></div>
             </div>
           </aside>
         </div>

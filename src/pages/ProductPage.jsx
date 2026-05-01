@@ -8,6 +8,8 @@ import {
   Truck,
   RotateCcw,
   Shield,
+  Plus,
+  Minus,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
@@ -52,6 +54,7 @@ export default function ProductPage() {
   const [vtonOpen, setVtonOpen] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
   const [cartMessage, setCartMessage] = useState('');
+  const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     if (location.state?.autoTriggerTryOn === true) {
@@ -74,6 +77,7 @@ export default function ProductPage() {
         setSelectedColor(firstColorId);
         setSelectedSize("");
         setSelectedImage(0);
+        setQuantity(1);
       } catch (err) {
         setError(err?.response?.status === 404 ? "not_found" : "error");
       } finally {
@@ -136,6 +140,15 @@ export default function ProductPage() {
   const isOutOfStock = hasSelectedVariant && availableQty <= 0;
   const isAddToCartDisabled = !hasSelectedVariant || isOutOfStock;
 
+  const incrementQty = () => {
+    const max = Math.min(availableQty, 5);
+    if (quantity < max) setQuantity(prev => prev + 1);
+  };
+
+  const decrementQty = () => {
+    if (quantity > 1) setQuantity(prev => prev - 1);
+  };
+
   const handleAddToCart = async () => {
     if (!selectedVariant || isOutOfStock || addingToCart) {
       return;
@@ -148,7 +161,7 @@ export default function ProductPage() {
       await apiClient.post('/cart/items', {
         productId: product.id,
         variantId: selectedVariant.id,
-        quantity: 1,
+        quantity: quantity,
       });
       setCartMessage('Added to cart!');
       await refreshCartCount();
@@ -337,6 +350,31 @@ export default function ProductPage() {
             )}
             {isOutOfStock && (
               <p className={styles.outOfStockNotice}>Out of Stock</p>
+            )}
+
+            {/* Quantity Selector */}
+            {!isOutOfStock && hasSelectedVariant && (
+              <div className={styles.quantitySection}>
+                <h4 className={styles.optionLabel}>Quantity</h4>
+                <div className={styles.quantityControl}>
+                  <button 
+                    className={styles.qtyBtn} 
+                    onClick={decrementQty} 
+                    disabled={quantity <= 1}
+                  >
+                    <Minus size={16} />
+                  </button>
+                  <span className={styles.qtyVal}>{quantity}</span>
+                  <button 
+                    className={styles.qtyBtn} 
+                    onClick={incrementQty} 
+                    disabled={quantity >= Math.min(availableQty, 5)}
+                  >
+                    <Plus size={16} />
+                  </button>
+                </div>
+                {quantity >= 5 && <p className={styles.limitNote}>Limit: 5 per item</p>}
+              </div>
             )}
 
             <div className={styles.actions}>

@@ -1,3 +1,5 @@
+import { formatPrice as baseFormatPrice } from "./formatPrice";
+
 export function getProductImage(product) {
   const primary = product?.images?.find((img) => img?.isPrimary);
   if (primary?.s3Url) return primary.s3Url;
@@ -45,16 +47,7 @@ export function getUniqueSizes(product) {
   return Array.from(unique.values());
 }
 
-export function formatPrice(amount, currency) {
-  if (typeof amount !== "number" || Number.isNaN(amount)) return "";
-
-  if (currency === "EGP") {
-    return `EGP ${amount.toFixed(2)}`;
-  }
-
-  const normalizedCurrency = currency || "EGP";
-  return `${normalizedCurrency} ${amount.toFixed(2)}`;
-}
+export const formatPrice = baseFormatPrice;
 
 export function getSizeRange(product) {
   const sizes = getUniqueSizes(product);

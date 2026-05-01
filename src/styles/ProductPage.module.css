@@ -617,3 +617,59 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Quantity Selector ── */
+.quantitySection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.quantityControl {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: fit-content;
+  background: var(--white);
+  border: 1px solid var(--ivory-dark);
+  border-radius: var(--radius-md);
+  padding: 4px;
+}
+
+.qtyBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--charcoal);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.qtyBtn:hover:not(:disabled) {
+  background: var(--ivory);
+}
+
+.qtyBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.qtyVal {
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  min-width: 24px;
+  text-align: center;
+}
+
+.limitNote {
+  font-size: var(--text-xs);
+  color: var(--burgundy);
+  font-weight: var(--weight-semibold);
+  margin: 0;
+}
