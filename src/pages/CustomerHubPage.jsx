@@ -125,8 +125,11 @@ export default function CustomerHubPage() {
       setRecentOrders(ordersRes.data.data || []);
       setStats({
         orders: ordersRes.data.total || ordersRes.data.data?.length || 0,
-        tickets: ticketsRes.data.data?.filter(t => t.status !== 'CLOSED' && t.status !== 'SOLVED').length || 0,
-        wardrobe: wardrobeRes.data.total || 0
+        tickets:
+          ticketsRes.data.data?.filter(
+            (t) => t.status !== "CLOSED" && t.status !== "SOLVED",
+          ).length || 0,
+        wardrobe: wardrobeRes.data.total || 0,
       });
     } catch (err) {
       console.error("Failed to fetch hub data", err);
@@ -144,7 +147,9 @@ export default function CustomerHubPage() {
           <div className={styles.welcomeText}>
             <p className={styles.welcomePre}>Welcome back,</p>
             <h1 className={styles.welcomeName}>
-              {user?.firstName ? `${user.firstName} ${user.lastName || ""}` : user?.email}
+              {user?.firstName
+                ? `${user.firstName} ${user.lastName || ""}`
+                : user?.email}
             </h1>
             <p className={styles.welcomeSub}>
               Everything you need to manage your Ainai experience.

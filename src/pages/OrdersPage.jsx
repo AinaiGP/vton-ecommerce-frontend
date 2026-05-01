@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Package,
@@ -14,14 +14,112 @@ import {
   Send,
   Eye,
   ChevronDown,
-  Loader2,
-  ExternalLink,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
-import apiClient, { multipartClient } from "../utils/apiClient";
 import styles from "../styles/OrdersPage.module.css";
 import t from "../styles/CustomerTickets.module.css"; // reuse ticket modal styles
+
+/* ─── Seed data ─── */
+const INIT_ORDERS = [
+  {
+    id: "ORD-2841",
+    date: "Apr 18, 2026",
+    status: "Delivered",
+    total: 664,
+    paymentStatus: "Paid",
+    paymentMethod: "Credit Card",
+    address: "123 Tahrir Square, Cairo, Egypt",
+    items: [
+      {
+        name: "Silk Evening Gown",
+        qty: 1,
+        size: "M",
+        color: "Black",
+        price: 389,
+        image:
+          "https://images.unsplash.com/photo-1566479179817-0b6cf9b3888e?w=80&h=100&fit=crop",
+      },
+      {
+        name: "Gold Cuff Bracelet",
+        qty: 1,
+        size: "One Size",
+        color: "Gold",
+        price: 89,
+        image:
+          "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=80&h=100&fit=crop",
+      },
+    ],
+    track: ["Ordered", "Processing", "Shipped", "Delivered"],
+    trackStep: 3,
+  },
+  {
+    id: "ORD-2835",
+    date: "Apr 10, 2026",
+    status: "Shipped",
+    total: 450,
+    paymentStatus: "Paid",
+    paymentMethod: "Cash on Delivery",
+    address: "14 Corniche El Nil, Giza, Egypt",
+    items: [
+      {
+        name: "Embroidered Kaftan",
+        qty: 1,
+        size: "L",
+        color: "Ivory",
+        price: 450,
+        image:
+          "https://images.unsplash.com/photo-1583391733956-6c78276477e2?w=80&h=100&fit=crop",
+      },
+    ],
+    track: ["Ordered", "Processing", "Shipped", "Delivered"],
+    trackStep: 2,
+  },
+  {
+    id: "ORD-2820",
+    date: "Mar 28, 2026",
+    status: "Processing",
+    total: 275,
+    paymentStatus: "Paid",
+    paymentMethod: "Credit Card",
+    address: "55 Sharm El Sheikh Resort, South Sinai, Egypt",
+    items: [
+      {
+        name: "Cashmere Wrap Dress",
+        qty: 1,
+        size: "S",
+        color: "Camel",
+        price: 275,
+        image:
+          "https://images.unsplash.com/photo-1572804013427-4d7ca7268217?w=80&h=100&fit=crop",
+      },
+    ],
+    track: ["Ordered", "Processing", "Shipped", "Delivered"],
+    trackStep: 1,
+  },
+  {
+    id: "ORD-2815",
+    date: "Mar 15, 2026",
+    status: "Cancelled",
+    total: 180,
+    paymentStatus: "Refunded",
+    paymentMethod: "Credit Card",
+    address: "77 Alexandria Corniche, Egypt",
+    items: [
+      {
+        name: "Velvet Abaya",
+        qty: 1,
+        size: "M",
+        color: "Burgundy",
+        price: 180,
+        image:
+          "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=80&h=100&fit=crop",
+      },
+    ],
+    track: ["Ordered", "Processing", "Shipped", "Delivered"],
+    trackStep: 0,
+  },
+];
 
 const RETURN_REASONS = [
   "Wrong size / doesn't fit",
@@ -34,35 +132,22 @@ const RETURN_REASONS = [
 ];
 
 const STATUS_CFG = {
-  DELIVERED: { color: "#16a34a", bg: "#dcfce7", icon: CheckCircle2, label: "Delivered" },
-  SHIPPED: { color: "#0891b2", bg: "#ecfeff", icon: Truck, label: "Shipped" },
-  PROCESSING: { color: "#ca8a04", bg: "#fef9c3", icon: Clock, label: "Processing" },
-  PENDING: { color: "#6b7280", bg: "#f3f4f6", icon: Clock, label: "Pending" },
-  CONFIRMED: { color: "#2563eb", bg: "#dbeafe", icon: Package, label: "Confirmed" },
-  CANCELED: { color: "#dc2626", bg: "#fee2e2", icon: XCircle, label: "Canceled" },
-  CANCELLED: { color: "#dc2626", bg: "#fee2e2", icon: XCircle, label: "Canceled" }, // compatibility
+  Delivered: { color: "#16a34a", bg: "#dcfce7", icon: CheckCircle2 },
+  Shipped: { color: "#0891b2", bg: "#ecfeff", icon: Truck },
+  Processing: { color: "#ca8a04", bg: "#fef9c3", icon: Clock },
+  Pending: { color: "#6b7280", bg: "#f3f4f6", icon: Clock },
+  Ordered: { color: "#6b7280", bg: "#f3f4f6", icon: Package },
+  Cancelled: { color: "#dc2626", bg: "#fee2e2", icon: XCircle },
 };
 
 const PAY_CFG = {
-  PAID: { color: "#16a34a", bg: "#dcfce7", label: "Paid" },
-  REFUNDED: { color: "#0891b2", bg: "#ecfeff", label: "Refunded" },
-  PENDING: { color: "#ca8a04", bg: "#fef9c3", label: "Pending" },
-  FAILED: { color: "#dc2626", bg: "#fee2e2", label: "Failed" },
+  Paid: { color: "#16a34a", bg: "#dcfce7" },
+  Refunded: { color: "#0891b2", bg: "#ecfeff" },
+  Pending: { color: "#ca8a04", bg: "#fef9c3" },
 };
 
 /* ─── Cancel Confirm Modal ─── */
 function CancelModal({ order, onConfirm, onClose }) {
-  const [loading, setLoading] = useState(false);
-
-  const handleConfirm = async () => {
-    setLoading(true);
-    try {
-      await onConfirm(order.id);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className={t.backdrop} onClick={onClose}>
       <div
@@ -103,13 +188,12 @@ function CancelModal({ order, onConfirm, onClose }) {
               marginBottom: 20,
             }}
           >
-            Are you sure you want to cancel order <strong>#{order.orderNumber}</strong>? This
+            Are you sure you want to cancel <strong>{order.id}</strong>? This
             action cannot be undone.
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <button
               onClick={onClose}
-              disabled={loading}
               style={{
                 padding: "10px 20px",
                 borderRadius: 10,
@@ -120,11 +204,10 @@ function CancelModal({ order, onConfirm, onClose }) {
                 cursor: "pointer",
               }}
             >
-              Back
+              Keep Order
             </button>
             <button
-              onClick={handleConfirm}
-              disabled={loading}
+              onClick={onConfirm}
               style={{
                 padding: "10px 20px",
                 borderRadius: 10,
@@ -134,13 +217,9 @@ function CancelModal({ order, onConfirm, onClose }) {
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6
               }}
             >
-              {loading ? <Loader2 size={14} className={styles.spin} /> : <XCircle size={14} />} 
-              Confirm Cancellation
+              <XCircle size={14} style={{ marginRight: 4 }} /> Cancel Order
             </button>
           </div>
         </div>
@@ -151,29 +230,11 @@ function CancelModal({ order, onConfirm, onClose }) {
 
 /* ─── Return Request Modal ─── */
 function ReturnModal({ order, onSubmit, onClose }) {
-  const [selectedItemId, setSelectedItemId] = useState(order.items[0]?.id || "");
+  const [selectedItem, setSelectedItem] = useState(order.items[0]?.name || "");
   const [reason, setReason] = useState(RETURN_REASONS[0]);
   const [desc, setDesc] = useState("");
   const [file, setFile] = useState(null);
-  const [loading, setLoading] = useState(false);
   const fileRef = useRef(null);
-
-  const selectedItem = (order.items || []).find(i => i.id === selectedItemId);
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    try {
-      await onSubmit({ 
-        orderItemId: selectedItemId, 
-        quantity: selectedItem?.quantity || 1, 
-        reason, 
-        description: desc, 
-        file 
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className={t.backdrop} onClick={onClose}>
@@ -185,14 +246,11 @@ function ReturnModal({ order, onSubmit, onClose }) {
           </button>
         </div>
         <div className={t.modalBody}>
-          <p style={{ fontSize: 13, color: 'var(--charcoal-muted)', marginBottom: 16 }}>
-            Returns are only available for items delivered within the last 14 days.
-          </p>
           <div className={t.formGroup}>
-            <label className={t.label}>Order Number</label>
+            <label className={t.label}>Order</label>
             <input
               className={t.input}
-              value={order.orderNumber}
+              value={order.id}
               disabled
               style={{ opacity: 0.7 }}
             />
@@ -201,12 +259,12 @@ function ReturnModal({ order, onSubmit, onClose }) {
             <label className={t.label}>Item to Return *</label>
             <select
               className={t.select}
-              value={selectedItemId}
-              onChange={(e) => setSelectedItemId(e.target.value)}
+              value={selectedItem}
+              onChange={(e) => setSelectedItem(e.target.value)}
             >
-              {(order.items || []).map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.productName} (Qty: {item.quantity})
+              {order.items.map((item) => (
+                <option key={item.name} value={item.name}>
+                  {item.name}
                 </option>
               ))}
             </select>
@@ -224,7 +282,7 @@ function ReturnModal({ order, onSubmit, onClose }) {
             </select>
           </div>
           <div className={t.formGroup}>
-            <label className={t.label}>Additional Details</label>
+            <label className={t.label}>Additional Description</label>
             <textarea
               className={t.textarea}
               rows={3}
@@ -235,7 +293,7 @@ function ReturnModal({ order, onSubmit, onClose }) {
           </div>
           <div className={t.formGroup}>
             <label className={t.label}>
-              Proof Photo{" "}
+              Proof Photo / File{" "}
               <span style={{ fontWeight: 400, color: "var(--charcoal-muted)" }}>
                 (optional)
               </span>
@@ -247,12 +305,12 @@ function ReturnModal({ order, onSubmit, onClose }) {
               <Paperclip size={20} style={{ color: "var(--burgundy)" }} />
               <div>
                 <p className={t.attachTitle}>
-                  {file ? file.name : "Click to upload image"}
+                  {file ? file.name : "Click to upload image or file"}
                 </p>
                 <p className={t.attachSub}>
                   {file
                     ? `${(file.size / 1024).toFixed(1)} KB`
-                    : "PNG, JPG, WEBP — Max 5 MB"}
+                    : "PNG, JPG, PDF — Max 10 MB"}
                 </p>
               </div>
               {file && (
@@ -271,7 +329,7 @@ function ReturnModal({ order, onSubmit, onClose }) {
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept="image/*,.pdf"
               style={{ display: "none" }}
               onChange={(e) => setFile(e.target.files[0] || null)}
             />
@@ -283,11 +341,9 @@ function ReturnModal({ order, onSubmit, onClose }) {
           </button>
           <button
             className={`${t.btn} ${t.btnPrimary}`}
-            onClick={handleSubmit}
-            disabled={loading || !selectedItemId}
+            onClick={() => onSubmit({ item: selectedItem, reason, desc, file })}
           >
-            {loading ? <Loader2 size={14} className={styles.spin} /> : <Send size={14} />} 
-            Submit Return Request
+            <Send size={14} /> Submit Return Request
           </button>
         </div>
       </div>
@@ -298,91 +354,43 @@ function ReturnModal({ order, onSubmit, onClose }) {
 /* ─── Main Page ─── */
 export default function OrdersPage() {
   const navigate = useNavigate();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [orders, setOrders] = useState(INIT_ORDERS);
   const [expanded, setExpanded] = useState(null);
   const [statusFilter, setStatusFilter] = useState("All");
-  const [cancelModal, setCancelModal] = useState(null); 
-  const [returnModal, setReturnModal] = useState(null); 
+  const [cancelModal, setCancelModal] = useState(null); // order id
+  const [returnModal, setReturnModal] = useState(null); // order object
   const [toasts, setToasts] = useState([]);
-
-  useEffect(() => {
-    fetchOrders();
-  }, [statusFilter]);
-
-  const fetchOrders = async () => {
-    setLoading(true);
-    try {
-      const params = {};
-      if (statusFilter !== "All") params.status = statusFilter;
-      const res = await apiClient.get("/customers/orders", { params });
-      // Backend returns { data: Order[], total: ... }
-      setOrders(res.data.data || []);
-    } catch (err) {
-      console.error("Failed to fetch orders", err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const addToast = (text, type = "success") => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, text, type }]);
     setTimeout(
       () => setToasts((prev) => prev.filter((t) => t.id !== id)),
-      4000,
+      3500,
     );
   };
 
-  const handleCancelOrder = async (orderId) => {
-    try {
-      await apiClient.patch(`/customers/orders/${orderId}/cancel`, { reason: "Customer requested cancellation" });
-      addToast(`Order has been cancelled. Refund is being processed.`, "success");
-      setCancelModal(null);
-      fetchOrders();
-    } catch (err) {
-      addToast(err.response?.data?.message || "Failed to cancel order.", "error");
-    }
+  const cancelOrder = (orderId) => {
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId
+          ? { ...o, status: "Cancelled", paymentStatus: "Refunded" }
+          : o,
+      ),
+    );
+    setCancelModal(null);
+    addToast(`Order ${orderId} has been cancelled.`, "success");
   };
 
-  const submitReturn = async (data) => {
-    try {
-      const orderId = returnModal.id;
-      const res = await apiClient.post(`/customers/orders/${orderId}/return`, {
-        orderItemId: data.orderItemId,
-        quantity: data.quantity,
-        reason: data.reason,
-        description: data.description
-      });
-
-      // If there's a file, upload it as an attachment to the created ticket
-      if (data.file && res.data.id) {
-        const formData = new FormData();
-        formData.append("file", data.file);
-        await multipartClient.post(`/customers/support/tickets/${res.data.id}/messages/attachments`, formData);
-      }
-
-      setReturnModal(null);
-      addToast(`Return request submitted successfully! Ticket #${res.data.id}`, "success");
-      fetchOrders();
-    } catch (err) {
-      addToast(err.response?.data?.message || "Failed to submit return request.", "error");
-    }
+  const submitReturn = (data) => {
+    setReturnModal(null);
+    addToast(`Return request for "${data.item}" submitted!`, "success");
   };
 
-  const filtered = orders; // Filtering is handled by API
-
-  const formatPrice = (price, currency = "EGP") => {
-    return `${currency} ${price.toLocaleString()}`;
-  };
-
-  const formatDate = (dateStr) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
+  const filtered =
+    statusFilter === "All"
+      ? orders
+      : orders.filter((o) => o.status === statusFilter);
 
   return (
     <div className={styles.page}>
@@ -404,9 +412,9 @@ export default function OrdersPage() {
           <div
             key={toast.id}
             style={{
-              background: toast.type === "error" ? "#fee2e2" : "#dcfce7",
-              border: `1px solid ${toast.type === "error" ? "#fecaca" : "#86efac"}`,
-              color: toast.type === "error" ? "#991b1b" : "#15803d",
+              background: "#dcfce7",
+              border: "1px solid #86efac",
+              color: "#15803d",
               padding: "12px 18px",
               borderRadius: 10,
               fontSize: 13,
@@ -418,8 +426,7 @@ export default function OrdersPage() {
               animation: "fadeIn 0.2s ease",
             }}
           >
-            {toast.type === "error" ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />} 
-            {toast.text}
+            <CheckCircle2 size={15} /> {toast.text}
           </div>
         ))}
       </div>
@@ -437,172 +444,231 @@ export default function OrdersPage() {
           }}
         >
           <div>
-            <h1 className={styles.pageTitle}>My Orders</h1>
-            <p className={styles.pageSub}>
-              Track your deliveries and manage returns.
-            </p>
+            <h1 className={styles.title}>
+              <Package size={22} style={{ verticalAlign: "middle" }} /> My
+              Orders
+            </h1>
+            <p className={styles.sub}>{orders.length} orders total</p>
           </div>
-          <div className={styles.filterBar}>
-            {["All", "PENDING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELED"].map((f) => (
-              <button
-                key={f}
-                className={`${styles.filterBtn} ${statusFilter === f ? styles.filterActive : ""}`}
-                onClick={() => setStatusFilter(f)}
-              >
-                {f.charAt(0) + f.slice(1).toLowerCase()}
-              </button>
-            ))}
+          {/* Filter tabs */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {["All", "Processing", "Shipped", "Delivered", "Cancelled"].map(
+              (s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: 99,
+                    border: "1.5px solid",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    background:
+                      statusFilter === s ? "var(--burgundy)" : "white",
+                    color:
+                      statusFilter === s ? "white" : "var(--charcoal-muted)",
+                    borderColor:
+                      statusFilter === s
+                        ? "var(--burgundy)"
+                        : "var(--ivory-dark)",
+                  }}
+                >
+                  {s}
+                </button>
+              ),
+            )}
           </div>
         </div>
 
-        {loading ? (
-          <div style={{ padding: '80px 0', textAlign: 'center', color: 'var(--charcoal-muted)' }}>
-            <Loader2 size={32} className={styles.spin} style={{ margin: '0 auto 12px' }} />
-            <p>Loading your orders…</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className={styles.emptyState}>
-            <div className={styles.emptyIcon}>
-              <Package size={48} strokeWidth={1} />
-            </div>
-            <h2 className={styles.emptyTitle}>No orders yet</h2>
-            <p className={styles.emptyText}>
-              Looks like you haven't placed any orders. Start exploring our
-              collection!
-            </p>
-            <Link to="/browse" className={styles.shopBtn}>
-              Explore Shop
+        {filtered.length === 0 ? (
+          <div className={styles.empty}>
+            <Package size={64} strokeWidth={1} />
+            <h2>No orders found</h2>
+            <p>No orders match your current filter.</p>
+            <Link to="/browse" className={styles.browseCta}>
+              Start Shopping
             </Link>
           </div>
         ) : (
-          <div className={styles.orderList}>
+          <div className={styles.list}>
             {filtered.map((order) => {
-              const status = STATUS_CFG[order.status] || STATUS_CFG.PENDING;
-              const pay = PAY_CFG[order.paymentStatus] || PAY_CFG.PENDING;
-              const isExpanded = expanded === order.id;
-              const canCancel = order.status === "PENDING" || order.status === "CONFIRMED";
-              const canReturn = order.status === "DELIVERED";
+              const cfg = STATUS_CFG[order.status] || STATUS_CFG.Ordered;
+              const payCfg = PAY_CFG[order.paymentStatus] || PAY_CFG.Pending;
+              const Icon = cfg.icon;
+              const isOpen = expanded === order.id;
+              const canCancel =
+                order.status === "Processing" ||
+                order.status === "Pending" ||
+                order.status === "Ordered";
+              const canReturn = order.status === "Delivered";
 
               return (
                 <div key={order.id} className={styles.orderCard}>
-                  <div
-                    className={styles.cardHeader}
-                    onClick={() => setExpanded(isExpanded ? null : order.id)}
+                  {/* Order header */}
+                  <button
+                    className={styles.orderHead}
+                    onClick={() => setExpanded(isOpen ? null : order.id)}
                   >
-                    <div className={styles.headerGrid}>
-                      <div className={styles.headerInfo}>
-                        <p className={styles.orderLabel}>Order Number</p>
-                        <p className={styles.orderVal}>#{order.orderNumber}</p>
-                      </div>
-                      <div className={styles.headerInfo}>
-                        <p className={styles.orderLabel}>Date Placed</p>
-                        <p className={styles.orderVal}>{formatDate(order.createdAt)}</p>
-                      </div>
-                      <div className={styles.headerInfo}>
-                        <p className={styles.orderLabel}>Total Amount</p>
-                        <p className={styles.orderVal}>
-                          {formatPrice((order.total || 0) / 100, order.currency)}
-                        </p>
-                      </div>
-                      <div className={styles.headerBadges}>
-                        <span
-                          className={styles.statusBadge}
-                          style={{ background: status.bg, color: status.color }}
-                        >
-                          <status.icon size={12} /> {status.label}
-                        </span>
-                        <span
-                          className={styles.payBadge}
-                          style={{ background: pay.bg, color: pay.color }}
-                        >
-                          {pay.label}
-                        </span>
-                      </div>
-                      <div className={styles.headerAction}>
-                        <ChevronDown
-                          size={20}
-                          style={{
-                            transform: isExpanded ? "rotate(180deg)" : "none",
-                            transition: "transform 0.2s",
-                          }}
-                        />
-                      </div>
+                    <div className={styles.orderMeta}>
+                      <span className={styles.orderId}>{order.id}</span>
+                      <span className={styles.orderDate}>{order.date}</span>
                     </div>
-                  </div>
+                    <div className={styles.orderMeta}>
+                      <span
+                        className={styles.orderBadge}
+                        style={{ color: cfg.color, background: cfg.bg }}
+                      >
+                        <Icon size={12} /> {order.status}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: 99,
+                          background: payCfg.bg,
+                          color: payCfg.color,
+                        }}
+                      >
+                        {order.paymentStatus}
+                      </span>
+                      <span className={styles.orderTotal}>
+                        EGP {order.total.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className={styles.orderMeta}>
+                      <button
+                        className={styles.trackBtn}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/orders/${order.id}`);
+                        }}
+                      >
+                        <Eye size={13} /> Track
+                      </button>
+                      {canCancel && (
+                        <button
+                          style={{
+                            padding: "5px 12px",
+                            borderRadius: 8,
+                            border: "1.5px solid #fca5a5",
+                            background: "#fee2e2",
+                            color: "#dc2626",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCancelModal(order.id);
+                          }}
+                        >
+                          <XCircle
+                            size={13}
+                            style={{ verticalAlign: "middle" }}
+                          />{" "}
+                          Cancel
+                        </button>
+                      )}
+                      {canReturn && (
+                        <button
+                          style={{
+                            padding: "5px 12px",
+                            borderRadius: 8,
+                            border: "1.5px solid #bfdbfe",
+                            background: "#eff6ff",
+                            color: "#1d4ed8",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReturnModal(order);
+                          }}
+                        >
+                          <RotateCcw
+                            size={13}
+                            style={{ verticalAlign: "middle" }}
+                          />{" "}
+                          Return
+                        </button>
+                      )}
+                      <ChevronRight
+                        size={16}
+                        className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ""}`}
+                      />
+                    </div>
+                  </button>
 
-                  {isExpanded && (
-                    <div className={styles.cardBody}>
-                      <div className={styles.itemsSection}>
-                        {(order.items || []).map((item, idx) => (
-                          <div key={idx} className={styles.itemRow}>
-                            <div className={styles.itemImgWrap}>
-                              {item.imageUrl ? (
-                                <img
-                                  src={item.imageUrl}
-                                  alt={item.productName}
-                                  className={styles.itemImg}
-                                />
-                              ) : (
-                                <div className={styles.itemImgPlaceholder}>
-                                  <Package size={20} />
-                                </div>
-                              )}
+                  {/* Expanded detail */}
+                  {isOpen && (
+                    <div className={styles.orderBody}>
+                      {/* Order info strip */}
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 16,
+                          flexWrap: "wrap",
+                          padding: "12px 0 16px",
+                          borderBottom: "1px solid var(--ivory-dark)",
+                          marginBottom: 16,
+                          fontSize: 12.5,
+                          color: "var(--charcoal-muted)",
+                        }}
+                      >
+                        <span>📍 {order.address}</span>
+                        <span>💳 {order.paymentMethod}</span>
+                        <span>
+                          {order.items.length} item
+                          {order.items.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+
+                      {/* Tracker */}
+                      <div className={styles.tracker}>
+                        {order.track.map((step, i) => (
+                          <div key={step} className={styles.trackStep}>
+                            <div
+                              className={`${styles.trackDot} ${i <= order.trackStep ? styles.trackDotActive : ""}`}
+                            >
+                              {i <= order.trackStep ? "✓" : i + 1}
                             </div>
-                            <div className={styles.itemInfo}>
-                              <p className={styles.itemName}>{item.productName}</p>
-                              <p className={styles.itemMeta}>
-                                {item.variantColor && `Color: ${item.variantColor}`}
-                                {item.variantSize && ` · Size: ${item.variantSize}`}
-                                {` · Qty: ${item.quantity}`}
-                              </p>
-                            </div>
-                            <div className={styles.itemPrice}>
-                              {formatPrice((item.lineTotal || 0) / 100, order.currency)}
-                            </div>
+                            <span
+                              className={`${styles.trackLabel} ${i <= order.trackStep ? styles.trackLabelActive : ""}`}
+                            >
+                              {step}
+                            </span>
+                            {i < order.track.length - 1 && (
+                              <div
+                                className={`${styles.trackLine} ${i < order.trackStep ? styles.trackLineActive : ""}`}
+                              />
+                            )}
                           </div>
                         ))}
                       </div>
 
-                      <div className={styles.orderFooter}>
-                        <div className={styles.footerLeft}>
-                          {order.trackingNumber && (
-                            <div className={styles.trackingInfo}>
-                              <p className={styles.trackingLabel}>
-                                Tracking Number
-                              </p>
-                              <p className={styles.trackingVal}>
-                                {order.trackingNumber}
-                                <Link to="#" className={styles.trackLink}>
-                                  Track Package <ExternalLink size={12} />
-                                </Link>
+                      {/* Items */}
+                      <div className={styles.items}>
+                        {order.items.map((item) => (
+                          <div key={item.name} className={styles.item}>
+                            <img
+                              src={item.image}
+                              alt={item.name}
+                              className={styles.itemImg}
+                            />
+                            <div className={styles.itemInfo}>
+                              <p className={styles.itemName}>{item.name}</p>
+                              <p className={styles.itemMeta}>
+                                Qty: {item.qty} · Size: {item.size} · Color:{" "}
+                                {item.color}
                               </p>
                             </div>
-                          )}
-                        </div>
-                        <div className={styles.footerActions}>
-                          {canCancel && (
-                            <button
-                              className={styles.actionBtnOutline}
-                              onClick={() => setCancelModal(order)}
-                            >
-                              Cancel Order
-                            </button>
-                          )}
-                          {canReturn && (
-                            <button
-                              className={styles.actionBtnPrimary}
-                              onClick={() => setReturnModal(order)}
-                            >
-                              <RotateCcw size={14} /> Request Return
-                            </button>
-                          )}
-                          <Link
-                            to={`/tickets`}
-                            className={styles.actionBtnGhost}
-                          >
-                            Need Help?
-                          </Link>
-                        </div>
+                            <p className={styles.itemPrice}>EGP {item.price}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -615,12 +681,11 @@ export default function OrdersPage() {
 
       {cancelModal && (
         <CancelModal
-          order={cancelModal}
-          onConfirm={handleCancelOrder}
+          order={orders.find((o) => o.id === cancelModal)}
+          onConfirm={() => cancelOrder(cancelModal)}
           onClose={() => setCancelModal(null)}
         />
       )}
-
       {returnModal && (
         <ReturnModal
           order={returnModal}
