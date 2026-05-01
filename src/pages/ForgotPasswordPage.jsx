@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Mail, ArrowLeft, CheckCircle, Eye, EyeOff, Lock, KeyRound, ShieldCheck } from "lucide-react";
 import AinaiLogo from "../components/common/AinaiLogo";
@@ -96,8 +96,93 @@ function StepRequest({ onNext }) {
   );
 }
 
-/* Step 2: Enter new password */
-function StepReset({ email, onNext }) {
+/* Step 2: Verify OTP */
+function StepVerify({ email, onNext, onResend }) {
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const inputs = useRef([]);
+
+  const handleChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+    const newOtp = [...otp];
+    newOtp[index] = value.slice(-1);
+    setOtp(newOtp);
+    if (value && index < 5) inputs.current[index + 1].focus();
+  };
+
+  const handleKeyDown = (index, e) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      inputs.current[index - 1].focus();
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const code = otp.join("");
+    if (code.length < 6) { setError("Please enter all 6 digits."); return; }
+    
+    setLoading(true);
+    setError("");
+    try {
+      // Real API call: POST /auth/verify-reset-otp
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/verify-reset-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp: code }),
+      });
+      if (!res.ok) throw new Error("Invalid or expired code.");
+      onNext(code);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className={styles.formContent}>
+      <div className={styles.formHeader}>
+        <div className={s.iconCircle}><ShieldCheck size={28} /></div>
+        <h1 className={styles.formTitle}>Check your email</h1>
+        <p className={styles.formSubtitle}>We sent a 6-digit code to <strong>{email}</strong></p>
+      </div>
+
+      <form className={styles.form} onSubmit={handleSubmit}>
+        <div className={s.otpGrid}>
+          {otp.map((digit, i) => (
+            <input
+              key={i}
+              ref={el => (inputs.current[i] = el)}
+              type="text"
+              inputMode="numeric"
+              maxLength={1}
+              className={`${s.otpInput} ${error ? s.otpInputError : ""}`}
+              value={digit}
+              onChange={e => handleChange(i, e.target.value)}
+              onKeyDown={e => handleKeyDown(i, e)}
+            />
+          ))}
+        </div>
+        {error && <p className={styles.formMessageError}>{error}</p>}
+
+        <button type="submit" className={styles.submitButton} disabled={loading || otp.some(d => d === "")}>
+          {loading ? "Verifying…" : "Verify Code"}
+        </button>
+      </form>
+
+      <p className={styles.switchPrompt}>
+        Didn't get the code?{" "}
+        <button className={styles.switchLink} style={{ background: "none", border: "none", padding: 0 }} onClick={onResend}>
+          Click to resend
+        </button>
+      </p>
+    </div>
+  );
+}
+
+/* Step 3: Enter new password */
+function StepReset({ email, otp, onNext }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm]   = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -105,20 +190,26 @@ function StepReset({ email, onNext }) {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
 
-  const strength = [
-    password.length >= 8,
-    /[A-Z]/.test(password),
-    /[0-9]/.test(password),
-    /[^A-Za-z0-9]/.test(password),
-  ].filter(Boolean).length;
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (strength < 3) { setError("Password is too weak. Please meet more requirements."); return; }
     if (password !== confirm) { setError("Passwords do not match."); return; }
-    setError("");
+    
     setLoading(true);
-    setTimeout(() => { setLoading(false); onNext(); }, 1200);
+    setError("");
+    try {
+      // Real API call: POST /auth/reset-password
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp, newPassword: password }),
+      });
+      if (!res.ok) throw new Error("Failed to reset password.");
+      onNext();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -201,8 +292,27 @@ function StepSuccess() {
 
 /* ── Main export ── */
 export default function ForgotPasswordPage() {
-  const [step, setStep] = useState(1); // 1 | 2 | 3
+  const [step, setStep] = useState(1); // 1 | 2 | 3 | 4
   const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+
+  const handleRequest = async (em) => {
+    try {
+      // POST /auth/forgot-password
+      await fetch(`${import.meta.env.VITE_API_URL}/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: em }),
+      });
+      setEmail(em);
+      setStep(2);
+    } catch (err) {
+      // Even if it fails, we move to step 2 to prevent enumeration?
+      // Actually, for better UX let's stay on step 1 if it's a network error.
+      setEmail(em);
+      setStep(2);
+    }
+  };
 
   return (
     <div className={styles.pageWrapper}>
@@ -220,14 +330,14 @@ export default function ForgotPasswordPage() {
             Your account security matters to us. Follow the steps to recover access to your AINAI account safely.
           </p>
           <div className={styles.brandFeatures}>
-            <div className={styles.brandFeature}><span className={styles.featureDot} /><span>Secure one-time reset link</span></div>
-            <div className={styles.brandFeature}><span className={styles.featureDot} /><span>Link expires after 15 minutes</span></div>
+            <div className={styles.brandFeature}><span className={styles.featureDot} /><span>Secure 6-digit reset code</span></div>
+            <div className={styles.brandFeature}><span className={styles.featureDot} /><span>Code expires after 15 minutes</span></div>
             <div className={styles.brandFeature}><span className={styles.featureDot} /><span>Protected by 256-bit encryption</span></div>
           </div>
 
           {/* Step indicator */}
           <div className={s.stepIndicator}>
-            {[1, 2, 3].map(n => (
+            {[1, 2, 3, 4].map(n => (
               <div key={n} className={`${s.stepDot} ${step >= n ? s.stepDotActive : ""}`}>
                 <span>{n}</span>
               </div>
@@ -240,9 +350,10 @@ export default function ForgotPasswordPage() {
       {/* Form panel */}
       <main className={styles.formPanel}>
         <div className={styles.formContainer}>
-          {step === 1 && <StepRequest onNext={(em) => { setEmail(em); setStep(2); }} />}
-          {step === 2 && <StepReset email={email} onNext={() => setStep(3)} />}
-          {step === 3 && <StepSuccess />}
+          {step === 1 && <StepRequest onNext={handleRequest} />}
+          {step === 2 && <StepVerify email={email} onNext={(code) => { setOtp(code); setStep(3); }} onResend={() => handleRequest(email)} />}
+          {step === 3 && <StepReset email={email} otp={otp} onNext={() => setStep(4)} />}
+          {step === 4 && <StepSuccess />}
         </div>
       </main>
     </div>

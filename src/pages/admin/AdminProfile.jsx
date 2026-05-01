@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import AdminLayout from "../../components/admin/AdminLayout";
 import t from "../../styles/AdminTable.module.css";
+import OTPVerificationModal from "../../components/common/OTPVerificationModal";
+import apiClient from "../../utils/apiClient";
+import { useAuth } from "../../context/AuthContext";
 
 function StrengthMeter({ password }) {
   const checks = [
@@ -60,13 +63,26 @@ export default function AdminProfilePage() {
   const [showOld, setShowOld] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConf, setShowConf] = useState(false);
-  const [notifEmail, setNotifEmail] = useState(true);
-  const [notifSystem, setNotifSystem] = useState(true);
-  const [lang2FA, setLang2FA] = useState(false);
+  const { user, updateUser } = useAuth();
+  const [showOTP, setShowOTP] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // TODO: wire admin profile to real API endpoint
+    fetchProfile();
   }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const res = await apiClient.get("/admin/profile");
+      const d = res.data;
+      setName(d.firstName + " " + (d.lastName || ""));
+      setEmail(d.user?.email || "");
+      setTitle(d.jobTitle || "");
+    } catch (err) {
+      console.error("Failed to fetch admin profile", err);
+    }
+  };
 
   const showAlertMsg = (type, text) => {
     setAlert({ type, text });
@@ -81,9 +97,43 @@ export default function AdminProfilePage() {
     }
   };
 
-  const saveProfile = () =>
-    showAlertMsg("success", "Profile updated successfully!");
-  const savePassword = () => {
+  const saveProfile = async () => {
+    setLoading(true);
+    try {
+      const names = name.split(" ");
+      const firstName = names[0];
+      const lastName = names.slice(1).join(" ");
+      
+      const payload = { firstName, lastName, jobTitle: title };
+      if (email !== user?.email) {
+        payload.email = email;
+      }
+      
+      const res = await apiClient.patch("/admin/profile", payload);
+      
+      if (email !== user?.email) {
+        setPendingEmail(email);
+        setShowOTP(true);
+        showAlertMsg("info", res.data.message);
+      } else {
+        showAlertMsg("success", "Profile updated!");
+        updateUser({ firstName, lastName });
+      }
+    } catch (err) {
+      showAlertMsg("error", err.response?.data?.message || "Update failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async (code) => {
+    await apiClient.post("/admin/profile/verify-email", { otp: code });
+    setShowOTP(false);
+    showAlertMsg("success", "Email verified! Please log in again.");
+    setTimeout(() => window.location.reload(), 2000);
+  };
+
+  const savePassword = async () => {
     if (!oldPass) {
       showAlertMsg("error", "Enter current password.");
       return;
@@ -96,10 +146,21 @@ export default function AdminProfilePage() {
       showAlertMsg("error", "Passwords don't match.");
       return;
     }
-    setOldPass("");
-    setNewPass("");
-    setConfPass("");
-    showAlertMsg("success", "Password changed successfully!");
+    
+    setLoading(true);
+    try {
+      await apiClient.patch("/admin/profile", {
+        changePassword: { currentPassword: oldPass, newPassword: newPass }
+      });
+      setOldPass("");
+      setNewPass("");
+      setConfPass("");
+      showAlertMsg("success", "Password changed successfully!");
+    } catch (err) {
+      showAlertMsg("error", err.response?.data?.message || "Change failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const inp = {
@@ -647,6 +708,14 @@ export default function AdminProfilePage() {
             ))}
           </div>
         </div>
+      )}
+      {showOTP && (
+        <OTPVerificationModal
+          email={pendingEmail}
+          onVerify={handleVerifyOTP}
+          onClose={() => setShowOTP(false)}
+          title="Verify Email Change"
+        />
       )}
     </AdminLayout>
   );

@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import VendorLayout from "../components/vendor/VendorLayout";
 import p from "../styles/VendorPage.module.css";
+import OTPVerificationModal from "../components/common/OTPVerificationModal";
+import apiClient from "../utils/apiClient";
+import { useAuth } from "../context/AuthContext";
 
 const TABS = [
   { id: "profile", label: "Profile", icon: User },
@@ -46,14 +49,109 @@ export default function VendorSettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
 
+  const { user, updateUser } = useAuth();
+  const [showOTP, setShowOTP] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
-    // TODO: wire vendor settings/profile to real API endpoint
+    fetchProfile();
   }, []);
 
-  const handleSave = (e) => {
+  const fetchProfile = async () => {
+    try {
+      const res = await apiClient.get("/vendors/profile");
+      const v = res.data;
+      setProfile({
+        name: v.firstName + " " + (v.lastName || ""),
+        email: v.user?.email || "",
+        phone: v.phoneNumbers?.[0]?.phoneNumber || "",
+        bio: v.bio || "",
+      });
+      setStore({
+        storeName: v.storeName || "",
+        slug: v.slug || "",
+        category: v.category || "Fashion & Apparel",
+        description: v.description || "",
+        email: v.contactEmail || "",
+        country: v.country || "UAE",
+      });
+    } catch (err) {
+      console.error("Failed to fetch vendor profile", err);
+    }
+  };
+
+  const handleSave = async (e) => {
     e?.preventDefault();
+    setLoading(true);
+    try {
+      const names = profile.name.split(" ");
+      const firstName = names[0];
+      const lastName = names.slice(1).join(" ");
+      
+      const payload = { firstName, lastName, bio: profile.bio };
+      if (profile.email !== user?.email) {
+        payload.email = profile.email;
+      }
+      
+      const res = await apiClient.patch("/vendors/profile", payload);
+      
+      if (profile.email !== user?.email) {
+        setPendingEmail(profile.email);
+        setShowOTP(true);
+      } else {
+        setSaved(true);
+        updateUser({ firstName, lastName });
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } catch (err) {
+      console.error("Save failed", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async (code) => {
+    await apiClient.post("/vendors/profile/verify-email", { otp: code });
+    setShowOTP(false);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    setTimeout(() => window.location.reload(), 2000);
+  };
+
+  const handleSaveStore = async (e) => {
+    e?.preventDefault();
+    setLoading(true);
+    try {
+      await apiClient.patch("/vendors/profile", {
+        storeName: store.storeName,
+        description: store.description,
+        contactEmail: store.email,
+        country: store.country,
+        category: store.category,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSavePassword = async (e) => {
+    e?.preventDefault();
+    setLoading(true);
+    try {
+      await apiClient.patch("/vendors/profile", {
+        changePassword: { 
+          currentPassword: passwords.current, 
+          newPassword: passwords.newPass 
+        }
+      });
+      setSaved(true);
+      setPasswords({ current: "", newPass: "", confirm: "" });
+      setTimeout(() => setSaved(false), 2500);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -220,7 +318,7 @@ export default function VendorSettingsPage() {
 
       {/* ── Store ── */}
       {tab === "store" && (
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSaveStore}>
           <div className={p.settingsPanel}>
             <h3 className={p.settingsSectionTitle}>Store Details</h3>
             {/* Logo */}
@@ -370,7 +468,7 @@ export default function VendorSettingsPage() {
 
       {/* ── Password ── */}
       {tab === "password" && (
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSavePassword}>
           <div className={p.settingsPanel} style={{ maxWidth: 480 }}>
             <h3 className={p.settingsSectionTitle}>Change Password</h3>
             <div className={p.formGroup}>
@@ -487,6 +585,14 @@ export default function VendorSettingsPage() {
             </button>
           </div>
         </form>
+      )}
+      {showOTP && (
+        <OTPVerificationModal
+          email={pendingEmail}
+          onVerify={handleVerifyOTP}
+          onClose={() => setShowOTP(false)}
+          title="Verify Email Change"
+        />
       )}
     </VendorLayout>
   );

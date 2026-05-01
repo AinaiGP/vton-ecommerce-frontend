@@ -23,6 +23,7 @@ import Footer from "../components/common/Footer";
 import { useAuth } from "../context/AuthContext";
 import apiClient, { multipartClient } from "../utils/apiClient";
 import styles from "../styles/CustomerProfile.module.css";
+import OTPVerificationModal from "../components/common/OTPVerificationModal";
 
 /* ─── Password strength ─── */
 function StrengthMeter({ password }) {
@@ -49,88 +50,6 @@ function StrengthMeter({ password }) {
   );
 }
 
-/* ─── Verification Modal ─── */
-function VerificationModal({ email, onVerify, onClose }) {
-  const [token, setToken] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    try {
-      await onVerify(token);
-    } catch (err) {
-      setError(err.response?.data?.message || "Invalid or expired token.");
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className={styles.backdrop} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.modalHead}>
-          <h2 className={styles.modalTitle}>Verify Email Change</h2>
-          <button className={styles.modalClose} onClick={onClose}>
-            <X size={17} />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className={styles.modalBody}>
-            <p
-              style={{
-                fontSize: 14,
-                color: "var(--charcoal-muted)",
-                marginBottom: 16,
-              }}
-            >
-              We've sent a verification link to <strong>{email}</strong>. Please
-              click the link in your email, or paste the verification token
-              here.
-            </p>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Verification Token</label>
-              <input
-                className={styles.input}
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="Paste token from email link…"
-                required
-              />
-              {error && (
-                <p style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
-                  {error}
-                </p>
-              )}
-            </div>
-          </div>
-          <div className={styles.modalFoot}>
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnOutline}`}
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={loading || !token.trim()}
-            >
-              {loading ? (
-                <Loader2 size={14} className={styles.spin} />
-              ) : (
-                <Check size={14} />
-              )}
-              Verify & Update
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 /* ─── Phone Modal ─── */
 function PhoneModal({ initial, onSave, onClose }) {
@@ -454,10 +373,10 @@ export default function CustomerProfilePage() {
     }
   };
 
-  const handleVerifyEmail = async (token) => {
-    await apiClient.get(
-      `/customers/profile/verify-email-change?userId=${user.id}&token=${token}`,
-    );
+  const handleVerifyEmail = async (otpCode) => {
+    await apiClient.post("/customers/profile/verify-email-change", {
+      otp: otpCode,
+    });
     setShowVerify(false);
     showAlert("success", "Email updated! Please log in again.");
     // In a real app, we might force logout or update context
@@ -1038,10 +957,12 @@ export default function CustomerProfilePage() {
         />
       )}
       {showVerify && (
-        <VerificationModal
+        <OTPVerificationModal
           email={pendingEmail}
           onVerify={handleVerifyEmail}
           onClose={() => setShowVerify(false)}
+          title="Verify Email Change"
+          subtitle="We've sent a 6-digit code to"
         />
       )}
 

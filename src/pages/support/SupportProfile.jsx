@@ -12,6 +12,9 @@ import {
   Headphones,
 } from "lucide-react";
 import SupportLayout from "../../components/support/SupportLayout";
+import OTPVerificationModal from "../../components/common/OTPVerificationModal";
+import apiClient from "../../utils/apiClient";
+import { useAuth } from "../../context/AuthContext";
 
 function StrengthMeter({ password }) {
   const checks = [
@@ -114,9 +117,26 @@ export default function SupportProfilePage() {
   const [notifSLA, setNotifSLA] = useState(true);
   const [sound, setSound] = useState(false);
 
+  const { user, updateUser } = useAuth();
+  const [showOTP, setShowOTP] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
-    // TODO: wire support profile to real API endpoint
+    fetchProfile();
   }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const res = await apiClient.get("/technical-support/profile");
+      const d = res.data;
+      setName(d.firstName + " " + (d.lastName || ""));
+      setEmail(d.user?.email || "");
+      setLevel(d.department || "Support Agent");
+    } catch (err) {
+      console.error("Failed to fetch support profile", err);
+    }
+  };
 
   const showAlertMsg = (type, text) => {
     setAlert({ type, text });
@@ -129,9 +149,43 @@ export default function SupportProfilePage() {
       showAlertMsg("success", "Profile photo updated!");
     }
   };
-  const saveProfile = () =>
-    showAlertMsg("success", "Profile saved successfully!");
-  const savePassword = () => {
+  const saveProfile = async () => {
+    setLoading(true);
+    try {
+      const names = name.split(" ");
+      const firstName = names[0];
+      const lastName = names.slice(1).join(" ");
+      
+      const payload = { firstName, lastName };
+      if (email !== user?.email) {
+        payload.email = email;
+      }
+      
+      const res = await apiClient.patch("/technical-support/profile", payload);
+      
+      if (email !== user?.email) {
+        setPendingEmail(email);
+        setShowOTP(true);
+        showAlertMsg("info", res.data.message);
+      } else {
+        showAlertMsg("success", "Profile updated!");
+        updateUser({ firstName, lastName });
+      }
+    } catch (err) {
+      showAlertMsg("error", err.response?.data?.message || "Update failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async (code) => {
+    await apiClient.post("/technical-support/profile/verify-email", { otp: code });
+    setShowOTP(false);
+    showAlertMsg("success", "Email verified! Please log in again.");
+    setTimeout(() => window.location.reload(), 2000);
+  };
+
+  const savePassword = async () => {
     if (!oldPass) {
       showAlertMsg("error", "Enter current password.");
       return;
@@ -144,10 +198,21 @@ export default function SupportProfilePage() {
       showAlertMsg("error", "Passwords don't match.");
       return;
     }
-    setOldPass("");
-    setNewPass("");
-    setConfPass("");
-    showAlertMsg("success", "Password changed successfully!");
+    
+    setLoading(true);
+    try {
+      await apiClient.patch("/technical-support/profile", {
+        changePassword: { currentPassword: oldPass, newPassword: newPass }
+      });
+      setOldPass("");
+      setNewPass("");
+      setConfPass("");
+      showAlertMsg("success", "Password changed successfully!");
+    } catch (err) {
+      showAlertMsg("error", err.response?.data?.message || "Change failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -629,6 +694,14 @@ export default function SupportProfilePage() {
             ))}
           </div>
         </div>
+      )}
+      {showOTP && (
+        <OTPVerificationModal
+          email={pendingEmail}
+          onVerify={handleVerifyOTP}
+          onClose={() => setShowOTP(false)}
+          title="Verify Email Change"
+        />
       )}
     </SupportLayout>
   );
