@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Package,
@@ -13,141 +13,109 @@ import {
   X,
   Send,
   Eye,
-  ChevronDown,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import styles from "../styles/OrdersPage.module.css";
 import t from "../styles/CustomerTickets.module.css"; // reuse ticket modal styles
+import apiClient from "../utils/apiClient";
+import { formatPrice } from "../utils/formatPrice";
 
-/* ─── Seed data ─── */
-const INIT_ORDERS = [
-  {
-    id: "ORD-2841",
-    date: "Apr 18, 2026",
-    status: "Delivered",
-    total: 664,
-    paymentStatus: "Paid",
-    paymentMethod: "Credit Card",
-    address: "123 Tahrir Square, Cairo, Egypt",
-    items: [
-      {
-        name: "Silk Evening Gown",
-        qty: 1,
-        size: "M",
-        color: "Black",
-        price: 389,
-        image:
-          "https://images.unsplash.com/photo-1566479179817-0b6cf9b3888e?w=80&h=100&fit=crop",
-      },
-      {
-        name: "Gold Cuff Bracelet",
-        qty: 1,
-        size: "One Size",
-        color: "Gold",
-        price: 89,
-        image:
-          "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=80&h=100&fit=crop",
-      },
-    ],
-    track: ["Ordered", "Processing", "Shipped", "Delivered"],
-    trackStep: 3,
-  },
-  {
-    id: "ORD-2835",
-    date: "Apr 10, 2026",
-    status: "Shipped",
-    total: 450,
-    paymentStatus: "Paid",
-    paymentMethod: "Cash on Delivery",
-    address: "14 Corniche El Nil, Giza, Egypt",
-    items: [
-      {
-        name: "Embroidered Kaftan",
-        qty: 1,
-        size: "L",
-        color: "Ivory",
-        price: 450,
-        image:
-          "https://images.unsplash.com/photo-1583391733956-6c78276477e2?w=80&h=100&fit=crop",
-      },
-    ],
-    track: ["Ordered", "Processing", "Shipped", "Delivered"],
-    trackStep: 2,
-  },
-  {
-    id: "ORD-2820",
-    date: "Mar 28, 2026",
-    status: "Processing",
-    total: 275,
-    paymentStatus: "Paid",
-    paymentMethod: "Credit Card",
-    address: "55 Sharm El Sheikh Resort, South Sinai, Egypt",
-    items: [
-      {
-        name: "Cashmere Wrap Dress",
-        qty: 1,
-        size: "S",
-        color: "Camel",
-        price: 275,
-        image:
-          "https://images.unsplash.com/photo-1572804013427-4d7ca7268217?w=80&h=100&fit=crop",
-      },
-    ],
-    track: ["Ordered", "Processing", "Shipped", "Delivered"],
-    trackStep: 1,
-  },
-  {
-    id: "ORD-2815",
-    date: "Mar 15, 2026",
-    status: "Cancelled",
-    total: 180,
-    paymentStatus: "Refunded",
-    paymentMethod: "Credit Card",
-    address: "77 Alexandria Corniche, Egypt",
-    items: [
-      {
-        name: "Velvet Abaya",
-        qty: 1,
-        size: "M",
-        color: "Burgundy",
-        price: 180,
-        image:
-          "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=80&h=100&fit=crop",
-      },
-    ],
-    track: ["Ordered", "Processing", "Shipped", "Delivered"],
-    trackStep: 0,
-  },
+/* ─── Order status progression for tracker ─── */
+// Using exact enum values from order-status.enum.ts
+const TRACK_STEPS = [
+  { key: "pending_payment", label: "Ordered" },
+  { key: "confirmed",       label: "Confirmed" },
+  { key: "processing",      label: "Processing" },
+  { key: "shipped",         label: "Shipped" },
+  { key: "completed",       label: "Delivered" },
 ];
 
-const RETURN_REASONS = [
-  "Wrong size / doesn't fit",
-  "Received wrong item",
-  "Item damaged or defective",
-  "Not as described / different from photos",
-  "Changed my mind",
-  "Late delivery",
-  "Other",
-];
+function getTrackStep(status) {
+  const idx = TRACK_STEPS.findIndex((s) => s.key === status);
+  // canceled / refunded / return_requested / returned — show at step 0
+  return idx >= 0 ? idx : 0;
+}
+
+/* ─── Map backend status → display label ─── */
+const STATUS_LABEL = {
+  pending_payment: "Pending",
+  confirmed:       "Ordered",
+  processing:      "Processing",
+  shipped:         "Shipped",
+  completed:       "Delivered",
+  canceled:        "Cancelled",
+  refunded:        "Refunded",
+  return_requested:"Return Requested",
+  returned:        "Returned",
+};
 
 const STATUS_CFG = {
-  Delivered: { color: "#16a34a", bg: "#dcfce7", icon: CheckCircle2 },
-  Shipped: { color: "#0891b2", bg: "#ecfeff", icon: Truck },
-  Processing: { color: "#ca8a04", bg: "#fef9c3", icon: Clock },
-  Pending: { color: "#6b7280", bg: "#f3f4f6", icon: Clock },
-  Ordered: { color: "#6b7280", bg: "#f3f4f6", icon: Package },
-  Cancelled: { color: "#dc2626", bg: "#fee2e2", icon: XCircle },
+  Delivered:          { color: "#16a34a", bg: "#dcfce7", icon: CheckCircle2 },
+  Shipped:            { color: "#0891b2", bg: "#ecfeff", icon: Truck },
+  Processing:         { color: "#ca8a04", bg: "#fef9c3", icon: Clock },
+  Pending:            { color: "#6b7280", bg: "#f3f4f6", icon: Clock },
+  Ordered:            { color: "#6b7280", bg: "#f3f4f6", icon: Package },
+  Cancelled:          { color: "#dc2626", bg: "#fee2e2", icon: XCircle },
+  Refunded:           { color: "#0891b2", bg: "#ecfeff", icon: RotateCcw },
+  "Return Requested": { color: "#f59e0b", bg: "#fef3c7", icon: RotateCcw },
+  Returned:           { color: "#16a34a", bg: "#dcfce7", icon: RotateCcw },
 };
 
 const PAY_CFG = {
-  Paid: { color: "#16a34a", bg: "#dcfce7" },
+  Paid:     { color: "#16a34a", bg: "#dcfce7" },
   Refunded: { color: "#0891b2", bg: "#ecfeff" },
-  Pending: { color: "#ca8a04", bg: "#fef9c3" },
+  Pending:  { color: "#ca8a04", bg: "#fef9c3" },
 };
 
+/* ─── Map backend order to UI shape ─── */
+function mapOrder(o) {
+  const statusLabel = STATUS_LABEL[o.status] || o.status;
+
+  // Derive payment method: if stripe intent exists → Credit Card, else → Cash on Delivery
+  const paymentMethod = o.stripePaymentIntentId ? "Credit Card" : "Cash on Delivery";
+
+  // Payment status: canceled/refunded → Refunded, else → Paid
+  const paymentStatus =
+    o.status === "canceled" || o.status === "refunded" ? "Refunded" : "Paid";
+
+  const address = [o.shippingName, o.shippingStreet, o.shippingCity]
+    .filter(Boolean)
+    .join(", ");
+
+  const items = (o.items || []).map((item) => ({
+    id:    item.id,
+    name:  item.productName,
+    qty:   item.quantity,
+    size:  item.variantSize || "—",
+    color: item.variantColor || "—",
+    price: item.unitPrice,   // piasters
+    image: item.imageUrl || "",
+  }));
+
+  const trackStep = getTrackStep(o.status);
+  const track = TRACK_STEPS.map((s) => s.label);
+
+  return {
+    id:            o.id,
+    orderNumber:   o.orderNumber,
+    date:          new Date(o.createdAt).toLocaleDateString("en-US", {
+      month: "short", day: "numeric", year: "numeric",
+    }),
+    status:        statusLabel,
+    rawStatus:     o.status,
+    total:         o.total,     // piasters
+    paymentStatus,
+    paymentMethod,
+    address,
+    items,
+    track,
+    trackStep,
+  };
+}
+
 /* ─── Cancel Confirm Modal ─── */
-function CancelModal({ order, onConfirm, onClose }) {
+function CancelModal({ order, onConfirm, onClose, loading, error }) {
   return (
     <div className={t.backdrop} onClick={onClose}>
       <div
@@ -188,12 +156,16 @@ function CancelModal({ order, onConfirm, onClose }) {
               marginBottom: 20,
             }}
           >
-            Are you sure you want to cancel <strong>{order.id}</strong>? This
+            Are you sure you want to cancel <strong>{order.orderNumber || order.id}</strong>? This
             action cannot be undone.
           </p>
+          {error && (
+            <p style={{ color: "#dc2626", fontSize: 12, marginBottom: 12 }}>{error}</p>
+          )}
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <button
               onClick={onClose}
+              disabled={loading}
               style={{
                 padding: "10px 20px",
                 borderRadius: 10,
@@ -208,6 +180,7 @@ function CancelModal({ order, onConfirm, onClose }) {
             </button>
             <button
               onClick={onConfirm}
+              disabled={loading}
               style={{
                 padding: "10px 20px",
                 borderRadius: 10,
@@ -217,9 +190,11 @@ function CancelModal({ order, onConfirm, onClose }) {
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
+                opacity: loading ? 0.7 : 1,
               }}
             >
-              <XCircle size={14} style={{ marginRight: 4 }} /> Cancel Order
+              <XCircle size={14} style={{ marginRight: 4 }} />
+              {loading ? "Cancelling…" : "Cancel Order"}
             </button>
           </div>
         </div>
@@ -229,9 +204,10 @@ function CancelModal({ order, onConfirm, onClose }) {
 }
 
 /* ─── Return Request Modal ─── */
-function ReturnModal({ order, onSubmit, onClose }) {
-  const [selectedItem, setSelectedItem] = useState(order.items[0]?.name || "");
-  const [reason, setReason] = useState(RETURN_REASONS[0]);
+function ReturnModal({ order, onSubmit, onClose, loading, error }) {
+  // Store the full item object (not just name) so we have item.id for DTO
+  const [selectedItem, setSelectedItem] = useState(order.items[0] || null);
+  const [reason, setReason] = useState("");
   const [desc, setDesc] = useState("");
   const [file, setFile] = useState(null);
   const fileRef = useRef(null);
@@ -250,7 +226,7 @@ function ReturnModal({ order, onSubmit, onClose }) {
             <label className={t.label}>Order</label>
             <input
               className={t.input}
-              value={order.id}
+              value={order.orderNumber || order.id}
               disabled
               style={{ opacity: 0.7 }}
             />
@@ -259,11 +235,14 @@ function ReturnModal({ order, onSubmit, onClose }) {
             <label className={t.label}>Item to Return *</label>
             <select
               className={t.select}
-              value={selectedItem}
-              onChange={(e) => setSelectedItem(e.target.value)}
+              value={selectedItem?.id || ""}
+              onChange={(e) => {
+                const found = order.items.find((i) => i.id === e.target.value);
+                setSelectedItem(found || null);
+              }}
             >
               {order.items.map((item) => (
-                <option key={item.name} value={item.name}>
+                <option key={item.id} value={item.id}>
                   {item.name}
                 </option>
               ))}
@@ -271,15 +250,14 @@ function ReturnModal({ order, onSubmit, onClose }) {
           </div>
           <div className={t.formGroup}>
             <label className={t.label}>Reason for Return *</label>
-            <select
-              className={t.select}
+            <textarea
+              className={t.textarea}
+              rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-            >
-              {RETURN_REASONS.map((r) => (
-                <option key={r}>{r}</option>
-              ))}
-            </select>
+              placeholder="Describe the reason for your return…"
+              required
+            />
           </div>
           <div className={t.formGroup}>
             <label className={t.label}>Additional Description</label>
@@ -334,16 +312,28 @@ function ReturnModal({ order, onSubmit, onClose }) {
               onChange={(e) => setFile(e.target.files[0] || null)}
             />
           </div>
+          {error && (
+            <p style={{ color: "#dc2626", fontSize: 12, marginTop: 8 }}>{error}</p>
+          )}
         </div>
         <div className={t.modalFoot}>
-          <button className={`${t.btn} ${t.btnOutline}`} onClick={onClose}>
+          <button className={`${t.btn} ${t.btnOutline}`} onClick={onClose} disabled={loading}>
             Cancel
           </button>
           <button
             className={`${t.btn} ${t.btnPrimary}`}
-            onClick={() => onSubmit({ item: selectedItem, reason, desc, file })}
+            disabled={loading || !reason.trim() || !selectedItem}
+            onClick={() =>
+              onSubmit({
+                orderItemId: selectedItem?.id,
+                quantity: selectedItem?.qty || 1,
+                reason,
+                note: desc || undefined,
+                file,
+              })
+            }
           >
-            <Send size={14} /> Submit Return Request
+            <Send size={14} /> {loading ? "Submitting…" : "Submit Return Request"}
           </button>
         </div>
       </div>
@@ -351,15 +341,62 @@ function ReturnModal({ order, onSubmit, onClose }) {
   );
 }
 
+/* ─── Loading Spinner ─── */
+function LoadingSpinner() {
+  return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "80px 0" }}>
+      <div
+        style={{
+          width: 40,
+          height: 40,
+          border: "3px solid var(--ivory-dark)",
+          borderTop: "3px solid var(--burgundy)",
+          borderRadius: "50%",
+          animation: "spin 0.8s linear infinite",
+        }}
+      />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
 /* ─── Main Page ─── */
 export default function OrdersPage() {
   const navigate = useNavigate();
-  const [orders, setOrders] = useState(INIT_ORDERS);
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [statusFilter, setStatusFilter] = useState("All");
   const [cancelModal, setCancelModal] = useState(null); // order id
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
   const [returnModal, setReturnModal] = useState(null); // order object
+  const [returnLoading, setReturnLoading] = useState(false);
+  const [returnError, setReturnError] = useState(null);
   const [toasts, setToasts] = useState([]);
+
+  /* ── Fetch orders on mount ── */
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchOrders() {
+      setOrdersLoading(true);
+      try {
+        const res = await apiClient.get("/customers/orders", {
+          params: { limit: 50, page: 1 },
+        });
+        if (!cancelled) {
+          const raw = res.data?.data || res.data || [];
+          setOrders(Array.isArray(raw) ? raw.map(mapOrder) : []);
+        }
+      } catch (err) {
+        if (!cancelled) setOrders([]);
+      } finally {
+        if (!cancelled) setOrdersLoading(false);
+      }
+    }
+    fetchOrders();
+    return () => { cancelled = true; };
+  }, []);
 
   const addToast = (text, type = "success") => {
     const id = Date.now();
@@ -370,22 +407,56 @@ export default function OrdersPage() {
     );
   };
 
-  const cancelOrder = (orderId) => {
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId
-          ? { ...o, status: "Cancelled", paymentStatus: "Refunded" }
-          : o,
-      ),
-    );
-    setCancelModal(null);
-    addToast(`Order ${orderId} has been cancelled.`, "success");
+  /* ── Cancel order ── */
+  const handleCancelConfirm = async () => {
+    if (!cancelModal) return;
+    setCancelLoading(true);
+    setCancelError(null);
+    try {
+      await apiClient.patch(`/customers/orders/${cancelModal}/cancel`, {
+        reason: "Cancelled by customer",
+      });
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === cancelModal
+            ? { ...o, status: "Cancelled", paymentStatus: "Refunded", rawStatus: "canceled" }
+            : o,
+        ),
+      );
+      setCancelModal(null);
+      addToast("Order has been cancelled.", "success");
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Failed to cancel order. Please try again.";
+      setCancelError(Array.isArray(msg) ? msg.join(", ") : msg);
+    } finally {
+      setCancelLoading(false);
+    }
   };
 
-  const submitReturn = (data) => {
-    setReturnModal(null);
-    addToast(`Return request for "${data.item}" submitted!`, "success");
+  /* ── Submit return ── */
+  const handleReturnSubmit = async (data) => {
+    if (!returnModal) return;
+    setReturnLoading(true);
+    setReturnError(null);
+    try {
+      await apiClient.post(`/customers/orders/${returnModal.id}/return`, {
+        orderItemId: data.orderItemId,
+        quantity: data.quantity,
+        reason: data.reason,
+        ...(data.note ? { note: data.note } : {}),
+      });
+      setReturnModal(null);
+      addToast("Return request submitted!", "success");
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Failed to submit return request.";
+      setReturnError(Array.isArray(msg) ? msg.join(", ") : msg);
+    } finally {
+      setReturnLoading(false);
+    }
   };
+
+  // Status filter tabs use display labels
+  const STATUS_FILTER_OPTIONS = ["All", "Processing", "Shipped", "Delivered", "Cancelled"];
 
   const filtered =
     statusFilter === "All"
@@ -452,7 +523,7 @@ export default function OrdersPage() {
           </div>
           {/* Filter tabs */}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {["All", "Processing", "Shipped", "Delivered", "Cancelled"].map(
+            {STATUS_FILTER_OPTIONS.map(
               (s) => (
                 <button
                   key={s}
@@ -482,7 +553,9 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {filtered.length === 0 ? (
+        {ordersLoading ? (
+          <LoadingSpinner />
+        ) : filtered.length === 0 ? (
           <div className={styles.empty}>
             <Package size={64} strokeWidth={1} />
             <h2>No orders found</h2>
@@ -499,10 +572,10 @@ export default function OrdersPage() {
               const Icon = cfg.icon;
               const isOpen = expanded === order.id;
               const canCancel =
-                order.status === "Processing" ||
-                order.status === "Pending" ||
-                order.status === "Ordered";
-              const canReturn = order.status === "Delivered";
+                order.rawStatus === "confirmed" ||
+                order.rawStatus === "processing" ||
+                order.rawStatus === "pending_payment";
+              const canReturn = order.rawStatus === "completed";
 
               return (
                 <div key={order.id} className={styles.orderCard}>
@@ -512,7 +585,7 @@ export default function OrdersPage() {
                     onClick={() => setExpanded(isOpen ? null : order.id)}
                   >
                     <div className={styles.orderMeta}>
-                      <span className={styles.orderId}>{order.id}</span>
+                      <span className={styles.orderId}>{order.orderNumber || order.id}</span>
                       <span className={styles.orderDate}>{order.date}</span>
                     </div>
                     <div className={styles.orderMeta}>
@@ -535,7 +608,7 @@ export default function OrdersPage() {
                         {order.paymentStatus}
                       </span>
                       <span className={styles.orderTotal}>
-                        EGP {order.total.toFixed(2)}
+                        {formatPrice(order.total)}
                       </span>
                     </div>
                     <div className={styles.orderMeta}>
@@ -562,6 +635,7 @@ export default function OrdersPage() {
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
+                            setCancelError(null);
                             setCancelModal(order.id);
                           }}
                         >
@@ -586,6 +660,7 @@ export default function OrdersPage() {
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
+                            setReturnError(null);
                             setReturnModal(order);
                           }}
                         >
@@ -653,7 +728,7 @@ export default function OrdersPage() {
                       {/* Items */}
                       <div className={styles.items}>
                         {order.items.map((item) => (
-                          <div key={item.name} className={styles.item}>
+                          <div key={item.id} className={styles.item}>
                             <img
                               src={item.image}
                               alt={item.name}
@@ -666,7 +741,7 @@ export default function OrdersPage() {
                                 {item.color}
                               </p>
                             </div>
-                            <p className={styles.itemPrice}>EGP {item.price}</p>
+                            <p className={styles.itemPrice}>{formatPrice(item.price)}</p>
                           </div>
                         ))}
                       </div>
@@ -682,15 +757,19 @@ export default function OrdersPage() {
       {cancelModal && (
         <CancelModal
           order={orders.find((o) => o.id === cancelModal)}
-          onConfirm={() => cancelOrder(cancelModal)}
-          onClose={() => setCancelModal(null)}
+          onConfirm={handleCancelConfirm}
+          onClose={() => { setCancelModal(null); setCancelError(null); }}
+          loading={cancelLoading}
+          error={cancelError}
         />
       )}
       {returnModal && (
         <ReturnModal
           order={returnModal}
-          onSubmit={submitReturn}
-          onClose={() => setReturnModal(null)}
+          onSubmit={handleReturnSubmit}
+          onClose={() => { setReturnModal(null); setReturnError(null); }}
+          loading={returnLoading}
+          error={returnError}
         />
       )}
 

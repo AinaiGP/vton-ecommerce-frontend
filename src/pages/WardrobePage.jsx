@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Upload,
@@ -8,7 +8,6 @@ import {
   Edit3,
   Check,
   Sparkles,
-  ShoppingBag,
   ChevronRight,
   Grid,
   Heart,
@@ -25,6 +24,7 @@ import {
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import styles from "../styles/WardrobePage.module.css";
+import apiClient, { multipartClient } from "../utils/apiClient";
 
 /* ─── Data ─────────────────────────────────────────── */
 const CATEGORIES = [
@@ -36,77 +36,18 @@ const CATEGORIES = [
   { id: "accessories", label: "Accessories", icon: <Watch size={16} /> },
 ];
 
-const SEED_ITEMS = [
-  {
-    id: 1,
-    name: "White Linen Shirt",
-    category: "tops",
-    color: "#F5F0E8",
-    url: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=300&h=400&fit=crop&q=80",
-  },
-  {
-    id: 2,
-    name: "Navy Trousers",
-    category: "bottoms",
-    color: "#1E3A5F",
-    url: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=300&h=400&fit=crop&q=80",
-  },
-  {
-    id: 3,
-    name: "Silk Wrap Dress",
-    category: "dresses",
-    color: "#8B4852",
-    url: "https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=300&h=400&fit=crop&q=80",
-  },
-  {
-    id: 4,
-    name: "Beige Heels",
-    category: "shoes",
-    color: "#D4AF7A",
-    url: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=300&h=400&fit=crop&q=80",
-  },
-  {
-    id: 5,
-    name: "Gold Chain Necklace",
-    category: "accessories",
-    color: "#D4AF7A",
-    url: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&h=400&fit=crop&q=80",
-  },
-  {
-    id: 6,
-    name: "Denim Jacket",
-    category: "tops",
-    color: "#3B5998",
-    url: "https://images.unsplash.com/photo-1601333144130-8cbb312386b6?w=300&h=400&fit=crop&q=80",
-  },
-  {
-    id: 7,
-    name: "Floral Midi Dress",
-    category: "dresses",
-    color: "#E8C5C8",
-    url: "https://images.unsplash.com/photo-1572804013427-4d7ca7268217?w=300&h=400&fit=crop&q=80",
-  },
-  {
-    id: 8,
-    name: "White Sneakers",
-    category: "shoes",
-    color: "#FFFFFF",
-    url: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&h=400&fit=crop&q=80",
-  },
-];
-
 const SEED_OUTFITS = [
   {
     id: 1,
     name: "Office Chic",
-    items: [1, 2, 5],
+    items: [], // will be empty since real items have UUIDs, but we'll leave it as a placeholder
     cover:
       "https://images.unsplash.com/photo-1487222477894-8943e31ef7b2?w=300&h=400&fit=crop&q=80",
   },
   {
     id: 2,
     name: "Weekend Casual",
-    items: [6, 2, 8],
+    items: [],
     cover:
       "https://images.unsplash.com/photo-1529139574466-a303027614b7?w=300&h=400&fit=crop&q=80",
   },
@@ -143,14 +84,42 @@ const AI_RECS = [
   },
 ];
 
-let nextId = 100;
+/* ─── Loading Spinner ─── */
+function LoadingSpinner() {
+  return (
+    <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          border: "3px solid var(--ivory-dark)",
+          borderTop: "3px solid var(--burgundy)",
+          borderRadius: "50%",
+          animation: "spin 0.8s linear infinite",
+        }}
+      />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
 
 /* ─── Component ─────────────────────────────────────── */
 export default function WardrobePage() {
   const [tab, setTab] = useState("wardrobe"); // wardrobe | builder | outfits | ai
   const [activeCategory, setActiveCategory] = useState("all");
-  const [items, setItems] = useState(SEED_ITEMS);
-  const [outfits, setOutfits] = useState(SEED_OUTFITS);
+  const [items, setItems] = useState([]);
+  const [loadingItems, setLoadingItems] = useState(true);
+  
+  // Try to load outfits from local storage
+  const [outfits, setOutfits] = useState(() => {
+    try {
+      const saved = localStorage.getItem("ainai_outfits");
+      return saved ? JSON.parse(saved) : SEED_OUTFITS;
+    } catch {
+      return SEED_OUTFITS;
+    }
+  });
+
   const [selectedForOutfit, setSelectedForOutfit] = useState([]);
   const [outfitName, setOutfitName] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -160,12 +129,48 @@ export default function WardrobePage() {
   const [dragOver, setDragOver] = useState(false);
   const [toast, setToast] = useState(null);
   const [wishlistedRecs, setWishlistedRecs] = useState({});
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
+
+  /* ── Sync outfits to local storage ── */
+  useEffect(() => {
+    localStorage.setItem("ainai_outfits", JSON.stringify(outfits));
+  }, [outfits]);
+
+  /* ── Fetch Wardrobe Items ── */
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchWardrobe() {
+      setLoadingItems(true);
+      try {
+        const res = await apiClient.get("/customers/wardrobe", { params: { limit: 100, page: 1 } });
+        if (!cancelled) {
+          const raw = res.data?.data || res.data || [];
+          setItems(
+            raw.map((item) => ({
+              id: item.id,
+              name: item.label || "Unnamed Item",
+              category: "all", // backend doesn't support categories yet
+              color: "#e2e8f0",
+              url: item.imageUrl,
+              _raw: item,
+            }))
+          );
+        }
+      } catch (err) {
+        if (!cancelled) setItems([]);
+      } finally {
+        if (!cancelled) setLoadingItems(false);
+      }
+    }
+    fetchWardrobe();
+    return () => { cancelled = true; };
+  }, []);
 
   /* helpers */
   const showToast = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 2800);
+    setToast({ msg, type, id: Date.now() });
+    setTimeout(() => setToast((prev) => (prev?.id === toast?.id ? null : prev)), 2800);
   };
 
   const filteredItems =
@@ -174,28 +179,42 @@ export default function WardrobePage() {
       : items.filter((i) => i.category === activeCategory);
 
   /* ── Upload ── */
-  const handleFiles = useCallback((files) => {
-    Array.from(files).forEach((file) => {
-      if (!file.type.startsWith("image/")) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        nextId++;
-        const cat = CATEGORIES.find((c) => c.id !== "all")?.id || "tops";
-        setItems((prev) => [
-          ...prev,
-          {
-            id: nextId,
-            name: file.name.replace(/\.[^.]+$/, ""),
-            category: cat,
-            color: "#a8b5a0",
-            url: e.target.result,
-            isCustom: true,
-          },
-        ]);
-        showToast("Item added to wardrobe!");
-      };
-      reader.readAsDataURL(file);
-    });
+  const handleFiles = useCallback(async (files) => {
+    if (files.length === 0) return;
+    setUploading(true);
+    
+    // We upload files sequentially to avoid overwhelming the server
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith("image/")) continue;
+      
+      try {
+        const formData = new FormData();
+        formData.append("photo", file);
+        formData.append("label", file.name.replace(/\.[^.]+$/, ""));
+        
+        const res = await multipartClient.post("/customers/wardrobe", formData);
+        
+        const newItem = res.data;
+        if (newItem) {
+          setItems((prev) => [
+            ...prev,
+            {
+              id: newItem.id,
+              name: newItem.label || "Unnamed Item",
+              category: "all",
+              color: "#a8b5a0",
+              url: newItem.imageUrl,
+              isCustom: true,
+            },
+          ]);
+        }
+      } catch (err) {
+        showToast("Failed to upload " + file.name, "error");
+      }
+    }
+    setUploading(false);
+    if (files.length > 0) showToast(`Added ${files.length} item(s) to wardrobe!`);
   }, []);
 
   const onDrop = (e) => {
@@ -204,7 +223,7 @@ export default function WardrobePage() {
     handleFiles(e.dataTransfer.files);
   };
 
-  /* ── Edit item ── */
+  /* ── Edit item (Local only) ── */
   const startEdit = (item) => {
     setEditingId(item.id);
     setEditingName(item.name);
@@ -214,14 +233,19 @@ export default function WardrobePage() {
       prev.map((i) => (i.id === id ? { ...i, name: editingName } : i)),
     );
     setEditingId(null);
-    showToast("Item name updated.");
+    showToast("Item name updated locally.");
   };
 
   /* ── Delete item ── */
-  const deleteItem = (id) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
-    setSelectedForOutfit((prev) => prev.filter((sid) => sid !== id));
-    showToast("Item removed.", "info");
+  const deleteItem = async (id) => {
+    try {
+      await apiClient.delete(`/customers/wardrobe/${id}`);
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      setSelectedForOutfit((prev) => prev.filter((sid) => sid !== id));
+      showToast("Item removed.", "info");
+    } catch (err) {
+      showToast("Failed to delete item.", "error");
+    }
   };
 
   /* ── Outfit builder ── */
@@ -238,11 +262,11 @@ export default function WardrobePage() {
     }
     const name = outfitName.trim() || `Outfit ${outfits.length + 1}`;
     const coverItem = items.find((i) => i.id === selectedForOutfit[0]);
-    nextId++;
+    
     setOutfits((prev) => [
       ...prev,
       {
-        id: nextId,
+        id: Date.now().toString(),
         name,
         items: [...selectedForOutfit],
         cover: coverItem?.url || "",
@@ -312,8 +336,11 @@ export default function WardrobePage() {
           <button
             className={styles.uploadCta}
             onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            style={uploading ? { opacity: 0.7, cursor: "not-allowed" } : {}}
           >
-            <Upload size={16} /> Upload Clothes
+            {uploading ? <div className={styles.spinner} style={{width: 14, height: 14, border: '2px solid white', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite'}}></div> : <Upload size={16} />} 
+            {uploading ? "Uploading..." : "Upload Clothes"}
           </button>
           <input
             ref={fileInputRef}
@@ -365,7 +392,8 @@ export default function WardrobePage() {
               }}
               onDragLeave={() => setDragOver(false)}
               onDrop={onDrop}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => !uploading && fileInputRef.current?.click()}
+              style={uploading ? { opacity: 0.6, pointerEvents: "none" } : {}}
             >
               <Upload size={32} className={styles.dropIcon} />
               <p className={styles.dropText}>
@@ -397,7 +425,9 @@ export default function WardrobePage() {
             </div>
 
             {/* Wardrobe Grid */}
-            {filteredItems.length === 0 ? (
+            {loadingItems ? (
+              <LoadingSpinner />
+            ) : filteredItems.length === 0 ? (
               <div className={styles.empty}>
                 <Shirt size={56} strokeWidth={1} className={styles.emptyIcon} />
                 <h3>
@@ -436,13 +466,13 @@ export default function WardrobePage() {
                         >
                           <Trash2 size={14} />
                         </button>
-                        <button
+                        <Link
                           className={`${styles.overlayBtn} ${styles.overlayBtnTryOn}`}
                           title="Try on"
-                          onClick={() => {}}
+                          to="/ai-try-on"
                         >
                           <Eye size={14} />
-                        </button>
+                        </Link>
                       </div>
                     </div>
                     <div className={styles.cardInfo}>
@@ -479,7 +509,8 @@ export default function WardrobePage() {
                 {/* Add item card */}
                 <div
                   className={styles.addCard}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => !uploading && fileInputRef.current?.click()}
+                  style={uploading ? { opacity: 0.6, cursor: "not-allowed" } : {}}
                 >
                   <Plus size={32} />
                   <span>Add Item</span>
@@ -651,7 +682,7 @@ export default function WardrobePage() {
                     <div key={outfit.id} className={styles.outfitCard}>
                       <div className={styles.outfitCover}>
                         <img
-                          src={outfit.cover}
+                          src={outfit.cover || "https://images.unsplash.com/photo-1529139574466-a303027614b7?w=300&h=400&fit=crop&q=80"}
                           alt={outfit.name}
                           className={styles.outfitCoverImg}
                         />
@@ -793,6 +824,7 @@ export default function WardrobePage() {
             </div>
 
             {/* Combo suggestions */}
+            {items.length > 2 && (
             <div className={styles.comboSection}>
               <h3 className={styles.comboTitle}>
                 <Shuffle size={18} /> Outfit Combinations from Your Wardrobe
@@ -801,23 +833,19 @@ export default function WardrobePage() {
                 {[
                   {
                     label: "Day at Work",
-                    pieces: [1, 2, 5],
+                    pieces: items.slice(0, 3).map(i => i.id),
                     desc: "Crisp, professional & polished",
                   },
                   {
                     label: "Evening Out",
-                    pieces: [3, 4, 5],
+                    pieces: items.slice(Math.max(0, items.length - 3)).map(i => i.id),
                     desc: "Elegant & effortlessly chic",
-                  },
-                  {
-                    label: "Weekend Vibes",
-                    pieces: [6, 2, 8],
-                    desc: "Laid-back cool & comfortable",
                   },
                 ].map((combo, idx) => {
                   const comboItems = combo.pieces
                     .map((id) => items.find((i) => i.id === id))
                     .filter(Boolean);
+                  if (comboItems.length === 0) return null;
                   return (
                     <div key={idx} className={styles.comboCard}>
                       <div className={styles.comboThumbs}>
@@ -849,6 +877,7 @@ export default function WardrobePage() {
                 })}
               </div>
             </div>
+            )}
           </div>
         )}
       </main>
