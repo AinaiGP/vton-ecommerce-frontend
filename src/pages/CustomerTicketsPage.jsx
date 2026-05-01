@@ -29,12 +29,10 @@ import Footer from "../components/common/Footer";
 import apiClient, { multipartClient } from "../utils/apiClient";
 import styles from "../styles/CustomerTickets.module.css";
 
-const CATEGORIES = [
-  "General Support",
-  "Technical Support",
-  "Return / Refund",
-  "Order Issue",
-  "Product Issue",
+const TICKET_TYPES = [
+  { value: "GENERAL_SUPPORT", label: "General Support" },
+  { value: "ORDER_DISPUTE", label: "Order Issue" },
+  { value: "SYSTEM_BUG", label: "Technical Support / Bug" },
 ];
 
 const STATUS_CFG = {
@@ -93,7 +91,7 @@ function FileAttachment({ url }) {
 /* ─── Create Ticket Modal ── */
 function CreateTicketModal({ onSave, onClose }) {
   const [subject, setSubject] = useState("");
-  const [category, setCategory] = useState(CATEGORIES[0]);
+  const [type, setType] = useState(TICKET_TYPES[0].value);
   const [priority, setPriority] = useState("Medium");
   const [msg, setMsg] = useState("");
   const [file, setFile] = useState(null);
@@ -104,7 +102,7 @@ function CreateTicketModal({ onSave, onClose }) {
     e.preventDefault();
     setLoading(true);
     try {
-      await onSave({ subject, category, priority, initialMessage: msg, file });
+      await onSave({ subject, type, priority, description: msg, file });
     } finally {
       setLoading(false);
     }
@@ -133,14 +131,14 @@ function CreateTicketModal({ onSave, onClose }) {
             </div>
             <div className={styles.formRow}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Category</label>
+                <label className={styles.label}>Ticket Type</label>
                 <select
                   className={styles.select}
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
                 >
-                  {CATEGORIES.map((c) => (
-                    <option key={c}>{c}</option>
+                  {TICKET_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
                 </select>
               </div>
@@ -317,7 +315,7 @@ function TicketDetail({ ticketId, onBack }) {
         <div className={styles.detailBadges}>
           <span className={styles.catTag}>
             <Tag size={11} />
-            {ticket.category}
+            {ticket.type}
           </span>
           <PriorityBadge priority={ticket.priority} />
           <StatusBadge status={ticket.status} />
@@ -488,7 +486,7 @@ export default function CustomerTicketsPage() {
     setLoading(true);
     try {
       const res = await apiClient.get("/customers/support/tickets");
-      setTickets(res.data.items || []);
+      setTickets(res.data.data || []);
     } catch (err) {
       console.error("Failed to fetch tickets", err);
     } finally {
@@ -500,9 +498,9 @@ export default function CustomerTicketsPage() {
     try {
       const res = await apiClient.post("/customers/support/tickets", {
         subject: data.subject,
-        category: data.category,
+        type: data.type,
         priority: data.priority,
-        initialMessage: data.initialMessage
+        description: data.description
       });
       
       if (data.file && res.data.id) {
@@ -535,9 +533,16 @@ export default function CustomerTicketsPage() {
 
   if (selectedId) {
     return (
-      <div className={styles.page}>
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "var(--ivory)",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         <Header />
-        <main className={styles.main}>
+        <main className={styles.pageContent} style={{ flex: 1 }}>
           <TicketDetail
             ticketId={selectedId}
             onBack={() => {
@@ -552,9 +557,16 @@ export default function CustomerTicketsPage() {
   }
 
   return (
-    <div className={styles.page}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "var(--ivory)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <Header />
-      <main className={styles.main}>
+      <main className={styles.pageContent} style={{ flex: 1 }}>
         <div className={styles.pageHead}>
           <div>
             <h1 className={styles.pageTitle}>Support Center</h1>
@@ -634,7 +646,7 @@ export default function CustomerTicketsPage() {
                   <tr>
                     <th>Ticket ID</th>
                     <th>Subject</th>
-                    <th>Category</th>
+                    <th>Type</th>
                     <th>Priority</th>
                     <th>Status</th>
                     <th>Last Updated</th>
@@ -651,7 +663,7 @@ export default function CustomerTicketsPage() {
                       <td className={styles.idCell}>#{t.id.slice(0, 8)}</td>
                       <td className={styles.subjCell}>{t.subject}</td>
                       <td>
-                        <span className={styles.catTag}>{t.category}</span>
+                        <span className={styles.catTag}>{t.type}</span>
                       </td>
                       <td>
                         <PriorityBadge priority={t.priority} />

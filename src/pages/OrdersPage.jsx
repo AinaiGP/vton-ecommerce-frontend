@@ -158,7 +158,7 @@ function ReturnModal({ order, onSubmit, onClose }) {
   const [loading, setLoading] = useState(false);
   const fileRef = useRef(null);
 
-  const selectedItem = order.items.find(i => i.id === selectedItemId);
+  const selectedItem = (order.items || []).find(i => i.id === selectedItemId);
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -204,7 +204,7 @@ function ReturnModal({ order, onSubmit, onClose }) {
               value={selectedItemId}
               onChange={(e) => setSelectedItemId(e.target.value)}
             >
-              {order.items.map((item) => (
+              {(order.items || []).map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.productName} (Qty: {item.quantity})
                 </option>
@@ -316,8 +316,8 @@ export default function OrdersPage() {
       const params = {};
       if (statusFilter !== "All") params.status = statusFilter;
       const res = await apiClient.get("/customers/orders", { params });
-      // Backend returns { items: Order[], meta: {...} }
-      setOrders(res.data.items || []);
+      // Backend returns { data: Order[], total: ... }
+      setOrders(res.data.data || []);
     } catch (err) {
       console.error("Failed to fetch orders", err);
     } finally {
@@ -501,7 +501,7 @@ export default function OrdersPage() {
                       <div className={styles.headerInfo}>
                         <p className={styles.orderLabel}>Total Amount</p>
                         <p className={styles.orderVal}>
-                          {formatPrice(order.totalAmount, order.currency)}
+                          {formatPrice((order.total || 0) / 100, order.currency)}
                         </p>
                       </div>
                       <div className={styles.headerBadges}>
@@ -533,7 +533,7 @@ export default function OrdersPage() {
                   {isExpanded && (
                     <div className={styles.cardBody}>
                       <div className={styles.itemsSection}>
-                        {order.items.map((item, idx) => (
+                        {(order.items || []).map((item, idx) => (
                           <div key={idx} className={styles.itemRow}>
                             <div className={styles.itemImgWrap}>
                               {item.imageUrl ? (
@@ -557,7 +557,7 @@ export default function OrdersPage() {
                               </p>
                             </div>
                             <div className={styles.itemPrice}>
-                              {formatPrice(item.lineTotal, order.currency)}
+                              {formatPrice((item.lineTotal || 0) / 100, order.currency)}
                             </div>
                           </div>
                         ))}
@@ -597,7 +597,7 @@ export default function OrdersPage() {
                             </button>
                           )}
                           <Link
-                            to={`/customers/support`}
+                            to={`/tickets`}
                             className={styles.actionBtnGhost}
                           >
                             Need Help?

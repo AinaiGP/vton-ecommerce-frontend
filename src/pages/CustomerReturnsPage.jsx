@@ -55,8 +55,8 @@ export default function CustomerReturnsPage() {
     setLoading(true);
     try {
       const res = await apiClient.get("/customers/support/tickets");
-      // Filter for Return/Refund category
-      const filtered = res.data.items?.filter(t => t.category === "Return / Refund") || [];
+      // Filter for RETURN_REQUEST type
+      const filtered = res.data.data?.filter(t => t.type === "RETURN_REQUEST") || [];
       setReturns(filtered);
     } catch (err) {
       console.error("Failed to fetch returns", err);
@@ -89,7 +89,7 @@ export default function CustomerReturnsPage() {
             </p>
           </div>
           <Link
-            to="/customers/orders"
+            to="/orders"
             className={`${styles.btn} ${styles.btnPrimary}`}
           >
             <Plus size={15} /> New Return Request
@@ -119,7 +119,7 @@ export default function CustomerReturnsPage() {
             <h3>No return requests</h3>
             <p>You haven't submitted any return requests yet.</p>
             <Link
-              to="/customers/orders"
+              to="/orders"
               className={`${styles.btn} ${styles.btnPrimary}`}
               style={{ marginTop: 16 }}
             >
@@ -132,14 +132,14 @@ export default function CustomerReturnsPage() {
               <article
                 key={ret.id}
                 className={styles.ticketCard}
-                onClick={() => navigate(`/customers/support`, { state: { selectedId: ret.id } })}
+                onClick={() => navigate(`/tickets`, { state: { selectedId: ret.id } })}
                 style={{ cursor: 'pointer' }}
               >
                 <div className={styles.cardMain}>
                   <div className={styles.cardLeft}>
                     <div className={styles.cardTopRow}>
                       <span className={styles.ticketId}>#{ret.id.slice(0, 8)}</span>
-                      <span className={styles.catTag}>{ret.category}</span>
+                      <span className={styles.catTag}>Return Request</span>
                     </div>
                     <h3 className={styles.ticketSubject}>{ret.subject}</h3>
                     <div className={styles.ticketMeta}>

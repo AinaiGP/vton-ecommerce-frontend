@@ -32,13 +32,13 @@ const CUSTOMER_PAGES = [
     bg: "#fdf2f3",
     items: [
       {
-        to: "/customers/profile",
+        to: "/profile",
         icon: User,
         label: "My Profile",
         desc: "Personal info, addresses & security",
       },
       {
-        to: "/customers/orders",
+        to: "/orders",
         icon: Package,
         label: "My Orders",
         desc: "Track and manage your orders",
@@ -50,7 +50,7 @@ const CUSTOMER_PAGES = [
         desc: "Your saved favourite items",
       },
       {
-        to: "/customers/wardrobe",
+        to: "/wardrobe",
         icon: Shirt,
         label: "My Wardrobe",
         desc: "AI-powered digital wardrobe",
@@ -63,13 +63,13 @@ const CUSTOMER_PAGES = [
     bg: "#eff6ff",
     items: [
       {
-        to: "/customers/support",
+        to: "/tickets",
         icon: MessageSquare,
         label: "Support Tickets",
         desc: "Get help from our support team",
       },
       {
-        to: "/customers/returns",
+        to: "/returns",
         icon: RotateCcw,
         label: "Returns & Refunds",
         desc: "Request returns and track refunds",
@@ -122,10 +122,10 @@ export default function CustomerHubPage() {
         apiClient.get("/customers/wardrobe", { params: { limit: 1 } }),
       ]);
 
-      setRecentOrders(ordersRes.data.items || []);
+      setRecentOrders(ordersRes.data.data || []);
       setStats({
-        orders: ordersRes.data.meta?.totalItems || ordersRes.data.items?.length || 0,
-        tickets: ticketsRes.data.items?.filter(t => t.status !== 'CLOSED' && t.status !== 'SOLVED').length || 0,
+        orders: ordersRes.data.total || ordersRes.data.data?.length || 0,
+        tickets: ticketsRes.data.data?.filter(t => t.status !== 'CLOSED' && t.status !== 'SOLVED').length || 0,
         wardrobe: wardrobeRes.data.total || 0
       });
     } catch (err) {
@@ -203,7 +203,7 @@ export default function CustomerHubPage() {
             <div className={styles.sidePanel}>
               <div className={styles.panelHead}>
                 <h3 className={styles.panelTitle}>Recent Orders</h3>
-                <Link to="/customers/orders" className={styles.panelLink}>
+                <Link to="/orders" className={styles.panelLink}>
                   View all
                 </Link>
               </div>
@@ -232,7 +232,7 @@ export default function CustomerHubPage() {
                         {new Date(order.createdAt).toLocaleDateString()}
                       </p>
                       <div className={styles.miniOrderPrice}>
-                        {formatPrice(order.totalAmount, order.currency)}
+                        {formatPrice((order.total || 0) / 100, order.currency)}
                       </div>
                     </div>
                   ))
@@ -248,7 +248,7 @@ export default function CustomerHubPage() {
               <p className={styles.teaserText}>
                 Use AI to organize your clothes and see how they look on you.
               </p>
-              <Link to="/customers/wardrobe" className={styles.teaserBtn}>
+              <Link to="/wardrobe" className={styles.teaserBtn}>
                 Explore Wardrobe
               </Link>
             </div>
