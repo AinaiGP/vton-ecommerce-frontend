@@ -174,3 +174,32 @@
   border: 1px dashed var(--ivory-dark);
   grid-column: 1 / -1;
 }
+
+/* Address & Phone Selection */
+.selectionList { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+.selectionItem { 
+  display: flex; align-items: flex-start; gap: 12px; padding: 16px; 
+  border: 1px solid var(--ivory-dark); border-radius: 12px; cursor: pointer; 
+  transition: all 0.2s; background: var(--white);
+}
+.selectionItemActive { border-color: var(--burgundy); background: rgba(139,72,82,0.02); box-shadow: 0 2px 8px rgba(139,72,82,0.08); }
+.selectionInfo { flex: 1; }
+.selectionLabel { font-size: 11px; font-weight: 700; color: var(--burgundy); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px; }
+.selectionText { font-size: 14px; font-weight: 500; color: var(--charcoal); margin: 0; }
+
+/* Stripe Element */
+.stripeElementContainer { 
+  padding: 16px; border: 1px solid var(--ivory-dark); border-radius: 10px; 
+  background: var(--ivory); transition: all 0.2s;
+  margin-bottom: 24px;
+}
+.cardForm { margin-top: 24px; }
+
+.fullHeightCenter {
+  flex: 1;
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+

@@ -58,6 +58,7 @@ import CustomerTicketsPage from "./pages/CustomerTicketsPage";
 import CustomerReturnsPage from "./pages/CustomerReturnsPage";
 import CustomerHubPage from "./pages/CustomerHubPage";
 import { useAuth } from "./context/AuthContext";
+import { useCart } from "./context/CartContext";
 import { useEffect, useLayoutEffect } from "react";
 
 function ScrollToTop() {
@@ -70,7 +71,14 @@ function ScrollToTop() {
 
 function App() {
   const { isAuthenticated, needsOnboarding, userRole } = useAuth();
+  const { refreshCartCount } = useCart();
   const location = useLocation();
+
+  // Hydrate cart count on app load
+  useEffect(() => {
+    refreshCartCount();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const observerOptions = {

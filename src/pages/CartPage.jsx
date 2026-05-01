@@ -1,40 +1,74 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { ShoppingBag, Trash2, Plus, Minus, Sparkles, Tag, ArrowRight } from "lucide-react";
+import { ShoppingBag, Trash2, Plus, Minus, Sparkles, Tag, ArrowRight, Loader2 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
+import LoadingSpinner from "../components/common/LoadingSpinner";
 import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
 import { useLanguage } from "../context/LanguageContext";
+import apiClient from "../utils/apiClient";
 import styles from "../styles/CartPage.module.css";
 
-// Rich mock data simulating VTON history
 export default function CartPage() {
   const { t, dir } = useLanguage();
-  const [cartItems, setCartItems] = useState([]);
-  const [promoCode, setPromoCode] = useState("");
-  const [discount, setDiscount]   = useState(0);
   const { isAuthenticated } = useAuth();
+  const { refreshCartCount } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
 
-  useEffect(() => {
-    // TODO: wire to real API endpoint — Phase X
+  const [cart, setCart] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [busyItems, setBusyItems] = useState(new Set());
+
+  const [promoCode, setPromoCode] = useState("");
+  const [discount, setDiscount] = useState(0);
+
+  const fetchCart = useCallback(async () => {
+    try {
+      const res = await apiClient.get("/cart");
+      setCart(res.data);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to fetch cart:", err);
+      setError("Failed to load cart. Please try again.");
+      setLoading(false);
+    }
   }, []);
 
-  const updateQuantity = (id, delta) => {
-    setCartItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
-      )
-    );
+  useEffect(() => {
+    fetchCart();
+  }, [fetchCart]);
+
+  const updateQuantity = async (variantId, newQty) => {
+    if (busyItems.has(variantId)) return;
+    
+    setBusyItems(prev => new Set(prev).add(variantId));
+    try {
+      if (newQty <= 0) {
+        await apiClient.delete(`/cart/items/${variantId}`);
+      } else {
+        await apiClient.patch(`/cart/items/${variantId}`, { quantity: newQty });
+      }
+      await fetchCart();
+      await refreshCartCount();
+    } catch (err) {
+      console.error("Update quantity failed:", err);
+    } finally {
+      setBusyItems(prev => {
+        const next = new Set(prev);
+        next.delete(variantId);
+        return next;
+      });
+    }
   };
 
-  const removeItem = (id) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== id));
-  };
+  const removeItem = (variantId) => updateQuantity(variantId, 0);
 
   const applyPromo = (e) => {
     e.preventDefault();
+    // Backend doesn't support promo codes yet, keeping frontend-only mock for UI
     if (promoCode.toUpperCase() === "AINAI20") {
       setDiscount(0.20);
     } else {
@@ -43,7 +77,22 @@ export default function CartPage() {
     }
   };
 
-  const subtotal = cartItems.reduce((s, i) => s + (i.price * i.quantity), 0);
+  if (loading) {
+    return (
+      <div className={styles.pageWrapper}>
+        <Header />
+        <main className={styles.fullHeightCenter}>
+          <LoadingSpinner message="Loading your cart..." />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  const items = cart?.items || [];
+  const subtotal = (cart?.subtotal || 0) / 100;
+  const currency = cart?.currency || "EGP";
+  // Backend doesn't provide shipping yet, mock 500+ free rule
   const shipping = subtotal > 0 ? (subtotal >= 500 ? 0 : 25) : 0;
   const discountAmount = subtotal * discount;
   const total = subtotal - discountAmount + shipping;
@@ -61,14 +110,14 @@ export default function CartPage() {
 
         <h1 className={styles.pageTitle}>
           {t("cart.title")}
-          {cartItems.length > 0 && (
+          {items.length > 0 && (
             <span className={styles.itemCount}>
-              ({cartItems.reduce((s, i) => s + i.quantity, 0)} items)
+              ({cart.totalItems} {cart.totalItems === 1 ? 'item' : 'items'})
             </span>
           )}
         </h1>
 
-        {cartItems.length === 0 ? (
+        {items.length === 0 ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>
               <ShoppingBag size={80} strokeWidth={1} />
@@ -85,49 +134,73 @@ export default function CartPage() {
           <div className={styles.cartLayout}>
             {/* Items List */}
             <section className={`${styles.itemsSection} stagger-reveal active`}>
-              {cartItems.map((item) => (
-                <div key={item.id} className={styles.cartItem}>
-                  <Link to={`/product/${item.id}`} className={styles.itemImageLink}>
-                    <img src={item.image} alt={item.name} className={styles.itemImage} />
-                  </Link>
+              {items.map((item) => {
+                const itemPrice = (item.effectivePrice || 0) / 100;
+                const itemTotal = itemPrice * item.quantity;
+                const isBusy = busyItems.has(item.variantId);
 
-                  <div className={styles.itemDetails}>
-                    <div className={styles.itemHeader}>
-                      <Link to={`/product/${item.id}`} className={styles.itemName}>
-                        {item.name}
-                      </Link>
-                      {item.vtonTried && (
-                        <div className={styles.vtonBadge} title="You tried this on virtually">
-                          <Sparkles size={12} /> {t("cart.triedBefore")}
+                return (
+                  <div key={item.variantId} className={`${styles.cartItem} ${isBusy ? styles.itemBusy : ''}`}>
+                    <Link to={`/products/${item.productId}`} className={styles.itemImageLink}>
+                      {item.primaryImageUrl ? (
+                        <img src={item.primaryImageUrl} alt={item.productName} className={styles.itemImage} />
+                      ) : (
+                        <div className={styles.itemPlaceholder}>
+                          {item.productName.slice(0, 2).toUpperCase()}
                         </div>
                       )}
-                    </div>
+                    </Link>
 
-                    <p className={styles.itemMeta}>{t("cart.size")}: {item.size} | {t("cart.color")}: {item.color}</p>
-                    <p className={styles.itemPrice}>EGP {item.price.toFixed(2)}</p>
+                    <div className={styles.itemDetails}>
+                      <div className={styles.itemHeader}>
+                        <Link to={`/products/${item.productId}`} className={styles.itemName}>
+                          {item.productName}
+                        </Link>
+                        {/* Backend doesn't provide vtonTried in CartItem yet, omitting or keeping placeholder if desired */}
+                      </div>
 
-                    <div className={styles.itemActions}>
-                      <div className={styles.quantityControl}>
-                        <button className={`${styles.qtyBtn} click-bounce`} onClick={() => updateQuantity(item.id, -1)} aria-label="Decrease">
-                          <Minus size={14} />
-                        </button>
-                        <span className={styles.qtyVal}>{item.quantity}</span>
-                        <button className={`${styles.qtyBtn} click-bounce`} onClick={() => updateQuantity(item.id, 1)} aria-label="Increase">
-                          <Plus size={14} />
+                      <p className={styles.itemMeta}>
+                        {t("cart.size")}: {item.variantSize} | {t("cart.color")}: {item.variantColor}
+                      </p>
+                      <p className={styles.itemPrice}>{currency} {itemPrice.toFixed(2)}</p>
+
+                      <div className={styles.itemActions}>
+                        <div className={styles.quantityControl}>
+                          <button 
+                            className={`${styles.qtyBtn} click-bounce`} 
+                            onClick={() => updateQuantity(item.variantId, item.quantity - 1)} 
+                            disabled={isBusy}
+                            aria-label="Decrease"
+                          >
+                            {isBusy ? <Loader2 size={12} className="animate-spin" /> : <Minus size={14} />}
+                          </button>
+                          <span className={styles.qtyVal}>{item.quantity}</span>
+                          <button 
+                            className={`${styles.qtyBtn} click-bounce`} 
+                            onClick={() => updateQuantity(item.variantId, item.quantity + 1)} 
+                            disabled={isBusy || item.quantity >= item.availableQuantity}
+                            aria-label="Increase"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                        <button 
+                          className={`${styles.removeBtn} click-bounce`} 
+                          onClick={() => removeItem(item.variantId)}
+                          disabled={isBusy}
+                        >
+                          <Trash2 size={15} /> {t("cart.remove")}
                         </button>
                       </div>
-                      <button className={`${styles.removeBtn} click-bounce`} onClick={() => removeItem(item.id)}>
-                        <Trash2 size={15} /> {t("cart.remove")}
-                      </button>
+                    </div>
+
+                    <div className={styles.itemTotal}>
+                      <span className={styles.totalLabel}>{t("cart.total")}</span>
+                      <span className={styles.totalAmount}>{currency} {itemTotal.toFixed(2)}</span>
                     </div>
                   </div>
-
-                  <div className={styles.itemTotal}>
-                    <span className={styles.totalLabel}>{t("cart.total")}</span>
-                    <span className={styles.totalAmount}>EGP {(item.price * item.quantity).toFixed(2)}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </section>
 
             {/* Order Summary & Promo */}
@@ -153,17 +226,17 @@ export default function CartPage() {
                 <div className={styles.summaryRows}>
                   <div className={styles.summaryRow}>
                     <span>{t("cart.subtotal")}</span>
-                    <span>EGP {subtotal.toFixed(2)}</span>
+                    <span>{currency} {subtotal.toFixed(2)}</span>
                   </div>
                   {discount > 0 && (
                     <div className={`${styles.summaryRow} ${styles.discountRow}`}>
                       <span>{t("cart.discount")} (20%)</span>
-                      <span>- EGP {discountAmount.toFixed(2)}</span>
+                      <span>- {currency} {discountAmount.toFixed(2)}</span>
                     </div>
                   )}
                   <div className={styles.summaryRow}>
                     <span>{t("cart.shipping")}</span>
-                    <span>{shipping === 0 ? t("cart.free") : `EGP ${shipping.toFixed(2)}`}</span>
+                    <span>{shipping === 0 ? t("cart.free") : `${currency} ${shipping.toFixed(2)}`}</span>
                   </div>
                 </div>
 
@@ -171,12 +244,12 @@ export default function CartPage() {
 
                 <div className={styles.totalRow}>
                   <span>{t("cart.total")}</span>
-                  <span>EGP {total.toFixed(2)}</span>
+                  <span>{currency} {total.toFixed(2)}</span>
                 </div>
 
                 {subtotal > 0 && subtotal < 500 && (
                   <div className={styles.shippingNotice}>
-                    Spend EGP {(500 - subtotal).toFixed(2)} more to unlock Free Shipping
+                    Spend {currency} {(500 - subtotal).toFixed(2)} more to unlock Free Shipping
                   </div>
                 )}
 
@@ -184,7 +257,7 @@ export default function CartPage() {
                   className={`${styles.checkoutBtn} click-bounce`} 
                   onClick={() => {
                     if (!isAuthenticated) {
-                      navigate("/auth", { state: { from: location } });
+                      navigate("/auth", { state: { from: { pathname: "/checkout" } } });
                       return;
                     }
                     navigate("/checkout");

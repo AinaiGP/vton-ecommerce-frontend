@@ -8,6 +8,7 @@ import {
   setUserData,
 } from "../utils/localStorage";
 import { logoutUser } from "../utils/authFunctions";
+import apiClient from "../utils/apiClient";
 
 const AuthContext = createContext();
 
@@ -45,6 +46,9 @@ export const AuthProvider = ({ children }) => {
     
     const isGoogleUser = userData?.authProvider === 'google';
     setNeedsOnboarding(isGoogleUser && userData?.isOnboardingComplete === false);
+
+    // Refresh cart after login to catch merged items
+    // We use a custom event or let the App component handle it via isAuthenticated change
   };
 
   const completeOnboarding = (updatedUser) => {

@@ -11,6 +11,8 @@
     "format": "prettier --write \"src/**/*.{js,jsx,css,html}\""
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^6.3.0",
+    "@stripe/stripe-js": "^9.4.0",
     "axios": "^1.13.6",
     "browser-image-compression": "^2.0.2",
     "chart.js": "^4.5.1",

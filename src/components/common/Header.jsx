@@ -27,11 +27,13 @@ import {
 } from "lucide-react";
 import AinaiLogo from "./AinaiLogo";
 import { useAuth } from "../../context/AuthContext";
+import { useCart } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
 import styles from "../../styles/Header.module.css";
 
 export default function Header() {
   const { isAuthenticated, user, userRole, logout } = useAuth();
+  const { cartCount } = useCart();
   const { t, lang, toggleLanguage } = useLanguage();
   const navigate = useNavigate();
 
@@ -414,8 +416,11 @@ export default function Header() {
 
             {/* Cart */}
             {(isGuest || isCustomer) && (
-              <Link to="/cart" className={styles.iconBtn} aria-label="Cart">
+              <Link to="/cart" className={styles.iconBtn} aria-label="Cart" style={{ position: 'relative' }}>
                 <ShoppingBag size={20} />
+                {cartCount > 0 && (
+                  <span className={styles.cartBadge}>{cartCount > 99 ? '99+' : cartCount}</span>
+                )}
               </Link>
             )}
 

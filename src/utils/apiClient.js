@@ -19,6 +19,7 @@ function createApiClient(contentType = "application/json") {
   return axios.create({
     baseURL,
     headers,
+    withCredentials: true, // required for cart_id cookie (httpOnly, set by backend)
   });
 }
 

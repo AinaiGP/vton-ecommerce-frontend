@@ -593,3 +593,27 @@
     height: 74px;
   }
 }
+
+.cartMessage {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  background: rgba(168, 181, 160, 0.15);
+  color: var(--charcoal);
+  border: 1px solid rgba(168, 181, 160, 0.3);
+  animation: fadeIn 0.3s ease;
+}
+
+.cartMessageError {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.2);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+

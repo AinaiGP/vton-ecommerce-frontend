@@ -14,6 +14,7 @@ import Footer from "../components/common/Footer";
 import VtonModal from "../components/vton/VtonModal";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
 import apiClient from "../utils/apiClient";
 import {
   formatPrice,
@@ -38,6 +39,7 @@ export default function ProductPage() {
   const navigate = useNavigate();
 
   const { isAuthenticated } = useAuth();
+  const { refreshCartCount } = useCart();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -48,7 +50,8 @@ export default function ProductPage() {
   const [selectedColor, setSelectedColor] = useState("");
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [vtonOpen, setVtonOpen] = useState(false);
-  const [addedToCart, setAddedToCart] = useState(false);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [cartMessage, setCartMessage] = useState('');
 
   useEffect(() => {
     if (location.state?.autoTriggerTryOn === true) {
@@ -133,14 +136,30 @@ export default function ProductPage() {
   const isOutOfStock = hasSelectedVariant && availableQty <= 0;
   const isAddToCartDisabled = !hasSelectedVariant || isOutOfStock;
 
-  const handleAddToCart = () => {
-    if (!selectedVariant || isOutOfStock) {
+  const handleAddToCart = async () => {
+    if (!selectedVariant || isOutOfStock || addingToCart) {
       return;
     }
 
-    console.log("Cart Phase 4", selectedVariant.id);
-    setAddedToCart(true);
-    window.setTimeout(() => setAddedToCart(false), 2000);
+    setAddingToCart(true);
+    setCartMessage('');
+    try {
+      // POST /cart/items — body from AddToCartDto: { productId, variantId, quantity }
+      await apiClient.post('/cart/items', {
+        productId: product.id,
+        variantId: selectedVariant.id,
+        quantity: 1,
+      });
+      setCartMessage('Added to cart!');
+      await refreshCartCount();
+      window.setTimeout(() => setCartMessage(''), 2000);
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Failed to add to cart.';
+      setCartMessage(Array.isArray(msg) ? msg[0] : msg);
+      window.setTimeout(() => setCartMessage(''), 3000);
+    } finally {
+      setAddingToCart(false);
+    }
   };
 
   if (loading) {
@@ -324,10 +343,10 @@ export default function ProductPage() {
               <button
                 className={styles.addToCartButton}
                 onClick={handleAddToCart}
-                disabled={isAddToCartDisabled}
+                disabled={isAddToCartDisabled || addingToCart}
               >
                 <ShoppingBag size={20} />
-                <span>{addedToCart ? "Added!" : "Add to Cart"}</span>
+                <span>{addingToCart ? 'Adding...' : 'Add to Cart'}</span>
               </button>
 
               <button
@@ -348,6 +367,15 @@ export default function ProductPage() {
                 />
               </button>
             </div>
+
+            {cartMessage && (
+              <p className={styles.cartMessage
+                ? `${styles.cartMessage} ${cartMessage.includes('Failed') || cartMessage.includes('Error') ? styles.cartMessageError : ''}`
+                : styles.cartMessageError
+              }>
+                {cartMessage}
+              </p>
+            )}
 
             <button
               className={styles.tryOnButton}
