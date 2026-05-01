@@ -5,10 +5,8 @@ import {
   X,
   Plus,
   Trash2,
-  Edit3,
   Check,
   Sparkles,
-  ShoppingBag,
   ChevronRight,
   Grid,
   Heart,
@@ -21,9 +19,11 @@ import {
   Eye,
   Shuffle,
   Star,
+  Loader2,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
+import apiClient, { multipartClient } from "../utils/apiClient";
 import styles from "../styles/WardrobePage.module.css";
 
 /* ─── Data ─────────────────────────────────────────── */
@@ -36,67 +36,68 @@ const CATEGORIES = [
   { id: "accessories", label: "Accessories", icon: <Watch size={16} /> },
 ];
 
-let nextId = 100;
-
 /* ─── Component ─────────────────────────────────────── */
 export default function WardrobePage() {
   const [tab, setTab] = useState("wardrobe"); // wardrobe | builder | outfits | ai
   const [activeCategory, setActiveCategory] = useState("all");
   const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [outfits, setOutfits] = useState([]);
   const [aiRecs, setAiRecs] = useState([]);
   const [selectedForOutfit, setSelectedForOutfit] = useState([]);
   const [outfitName, setOutfitName] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editingName, setEditingName] = useState("");
-  const [editingOutfitId, setEditingOutfitId] = useState(null);
-  const [editingOutfitName, setEditingOutfitName] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [toast, setToast] = useState(null);
   const [wishlistedRecs, setWishlistedRecs] = useState({});
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    // TODO: wire to real API endpoint — Phase X
-    setItems([]);
-    setOutfits([]);
-    setAiRecs([]);
+    fetchWardrobe();
   }, []);
+
+  const fetchWardrobe = async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.get("/customers/wardrobe");
+      // res.data is { data: WardrobeItem[], total: number, ... }
+      setItems(res.data.data || []);
+    } catch (err) {
+      console.error("Failed to fetch wardrobe", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /* helpers */
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 2800);
+    setTimeout(() => setToast(null), 3000);
   };
 
-  const filteredItems =
-    activeCategory === "all"
-      ? items
-      : items.filter((i) => i.category === activeCategory);
+  const filteredItems = items; // Backend doesn't support category filtering yet, and we don't have categories in the DB for wardrobe
 
   /* ── Upload ── */
-  const handleFiles = useCallback((files) => {
-    Array.from(files).forEach((file) => {
-      if (!file.type.startsWith("image/")) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        nextId++;
-        const cat = CATEGORIES.find((c) => c.id !== "all")?.id || "tops";
-        setItems((prev) => [
-          ...prev,
-          {
-            id: nextId,
-            name: file.name.replace(/\.[^.]+$/, ""),
-            category: cat,
-            color: "#a8b5a0",
-            url: e.target.result,
-            isCustom: true,
-          },
-        ]);
-        showToast("Item added to wardrobe!");
-      };
-      reader.readAsDataURL(file);
-    });
+  const handleFiles = useCallback(async (files) => {
+    if (files.length === 0) return;
+    setUploading(true);
+    
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/")) continue;
+        const formData = new FormData();
+        formData.append("photo", file);
+        formData.append("label", file.name.replace(/\.[^.]+$/, ""));
+        
+        await multipartClient.post("/customers/wardrobe", formData);
+      }
+      showToast(`${files.length} item(s) added to wardrobe!`);
+      fetchWardrobe();
+    } catch (err) {
+      showToast("Failed to upload some items.", "error");
+    } finally {
+      setUploading(false);
+    }
   }, []);
 
   const onDrop = (e) => {
@@ -105,24 +106,17 @@ export default function WardrobePage() {
     handleFiles(e.dataTransfer.files);
   };
 
-  /* ── Edit item ── */
-  const startEdit = (item) => {
-    setEditingId(item.id);
-    setEditingName(item.name);
-  };
-  const saveEdit = (id) => {
-    setItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, name: editingName } : i)),
-    );
-    setEditingId(null);
-    showToast("Item name updated.");
-  };
-
   /* ── Delete item ── */
-  const deleteItem = (id) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
-    setSelectedForOutfit((prev) => prev.filter((sid) => sid !== id));
-    showToast("Item removed.", "info");
+  const deleteItem = async (id) => {
+    if (!window.confirm("Remove this item from your wardrobe?")) return;
+    try {
+      await apiClient.delete(`/customers/wardrobe/${id}`);
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      setSelectedForOutfit((prev) => prev.filter((sid) => sid !== id));
+      showToast("Item removed.", "info");
+    } catch (err) {
+      showToast("Failed to remove item.", "error");
+    }
   };
 
   /* ── Outfit builder ── */
@@ -139,39 +133,27 @@ export default function WardrobePage() {
     }
     const name = outfitName.trim() || `Outfit ${outfits.length + 1}`;
     const coverItem = items.find((i) => i.id === selectedForOutfit[0]);
-    nextId++;
+    
+    // Outfits are client-side only in this version (no backend support mentioned)
     setOutfits((prev) => [
       ...prev,
       {
-        id: nextId,
+        id: Date.now(),
         name,
         items: [...selectedForOutfit],
-        cover: coverItem?.url || "",
+        cover: coverItem?.imageUrl || "",
       },
     ]);
     setSelectedForOutfit([]);
     setOutfitName("");
-    showToast(`"${name}" saved!`);
+    showToast(`"${name}" saved to your session!`);
     setTab("outfits");
   };
 
   /* ── Delete outfit ── */
   const deleteOutfit = (id) => {
     setOutfits((prev) => prev.filter((o) => o.id !== id));
-    showToast("Outfit deleted.", "info");
-  };
-
-  /* ── Rename outfit ── */
-  const startRenameOutfit = (outfit) => {
-    setEditingOutfitId(outfit.id);
-    setEditingOutfitName(outfit.name);
-  };
-  const saveRenameOutfit = (id) => {
-    setOutfits((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, name: editingOutfitName } : o)),
-    );
-    setEditingOutfitId(null);
-    showToast("Outfit renamed.");
+    showToast("Outfit removed.", "info");
   };
 
   /* ── Wishlist rec ── */
@@ -213,8 +195,10 @@ export default function WardrobePage() {
           <button
             className={styles.uploadCta}
             onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
           >
-            <Upload size={16} /> Upload Clothes
+            {uploading ? <Loader2 size={16} className={styles.spin} /> : <Upload size={16} />} 
+            {uploading ? "Uploading…" : "Upload Clothes"}
           </button>
           <input
             ref={fileInputRef}
@@ -240,7 +224,7 @@ export default function WardrobePage() {
               label: `Saved Outfits (${outfits.length})`,
               icon: <Save size={16} />,
             },
-            { id: "ai", label: "AI Picks", icon: <Sparkles size={16} /> },
+            { id: "ai", label: "AI Style Picks", icon: <Sparkles size={16} /> },
           ].map((t) => (
             <button
               key={t.id}
@@ -268,45 +252,31 @@ export default function WardrobePage() {
               onDrop={onDrop}
               onClick={() => fileInputRef.current?.click()}
             >
-              <Upload size={32} className={styles.dropIcon} />
+              {uploading ? (
+                <Loader2 size={32} className={`${styles.dropIcon} ${styles.spin}`} />
+              ) : (
+                <Upload size={32} className={styles.dropIcon} />
+              )}
               <p className={styles.dropText}>
-                Drag & drop your clothes here, or{" "}
-                <strong>click to browse</strong>
+                {uploading ? "Processing your clothes…" : "Drag & drop your clothes here, or click to browse"}
               </p>
               <p className={styles.dropHint}>
                 PNG, JPG, WEBP • Multiple files supported
               </p>
             </div>
 
-            {/* Category Filter */}
-            <div className={styles.categoryBar}>
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  className={`${styles.catBtn} ${activeCategory === cat.id ? styles.catBtnActive : ""}`}
-                  onClick={() => setActiveCategory(cat.id)}
-                >
-                  {cat.icon}
-                  {cat.label}
-                  <span className={styles.catCount}>
-                    {cat.id === "all"
-                      ? items.length
-                      : items.filter((i) => i.category === cat.id).length}
-                  </span>
-                </button>
-              ))}
-            </div>
-
             {/* Wardrobe Grid */}
-            {filteredItems.length === 0 ? (
+            {loading ? (
+              <div className={styles.empty}>
+                <Loader2 size={48} className={styles.spin} style={{ color: 'var(--charcoal-muted)' }} />
+                <p>Loading wardrobe…</p>
+              </div>
+            ) : filteredItems.length === 0 ? (
               <div className={styles.empty}>
                 <Shirt size={56} strokeWidth={1} className={styles.emptyIcon} />
-                <h3>
-                  No items in{" "}
-                  {CATEGORIES.find((c) => c.id === activeCategory)?.label}
-                </h3>
+                <h3>Your wardrobe is empty</h3>
                 <p>
-                  Upload photos of your clothes to start building your wardrobe.
+                  Upload photos of your clothes to start building your virtual wardrobe.
                 </p>
               </div>
             ) : (
@@ -315,21 +285,11 @@ export default function WardrobePage() {
                   <div key={item.id} className={styles.wardrobeCard}>
                     <div className={styles.cardImageWrap}>
                       <img
-                        src={item.url}
-                        alt={item.name}
+                        src={item.imageUrl}
+                        alt={item.label}
                         className={styles.cardImage}
                       />
-                      <span className={styles.cardCatBadge}>
-                        {CATEGORIES.find((c) => c.id === item.category)?.label}
-                      </span>
                       <div className={styles.cardOverlay}>
-                        <button
-                          className={styles.overlayBtn}
-                          title="Edit name"
-                          onClick={() => startEdit(item)}
-                        >
-                          <Edit3 size={14} />
-                        </button>
                         <button
                           className={`${styles.overlayBtn} ${styles.overlayBtnDanger}`}
                           title="Delete"
@@ -337,42 +297,17 @@ export default function WardrobePage() {
                         >
                           <Trash2 size={14} />
                         </button>
-                        <button
+                        <Link
+                          to="/ai-try-on"
                           className={`${styles.overlayBtn} ${styles.overlayBtnTryOn}`}
                           title="Try on"
-                          onClick={() => {}}
                         >
                           <Eye size={14} />
-                        </button>
+                        </Link>
                       </div>
                     </div>
                     <div className={styles.cardInfo}>
-                      {editingId === item.id ? (
-                        <div className={styles.editRow}>
-                          <input
-                            className={styles.editInput}
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            onKeyDown={(e) =>
-                              e.key === "Enter" && saveEdit(item.id)
-                            }
-                            autoFocus
-                          />
-                          <button
-                            className={styles.editSaveBtn}
-                            onClick={() => saveEdit(item.id)}
-                          >
-                            <Check size={14} />
-                          </button>
-                        </div>
-                      ) : (
-                        <p className={styles.cardName}>{item.name}</p>
-                      )}
-                      <div
-                        className={styles.colorDot}
-                        style={{ background: item.color }}
-                        title="Color swatch"
-                      />
+                      <p className={styles.cardName}>{item.label || "Untitled Item"}</p>
                     </div>
                   </div>
                 ))}
@@ -380,10 +315,10 @@ export default function WardrobePage() {
                 {/* Add item card */}
                 <div
                   className={styles.addCard}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => !uploading && fileInputRef.current?.click()}
                 >
-                  <Plus size={32} />
-                  <span>Add Item</span>
+                  {uploading ? <Loader2 size={32} className={styles.spin} /> : <Plus size={32} />}
+                  <span>{uploading ? "Uploading…" : "Add Item"}</span>
                 </div>
               </div>
             )}
@@ -406,21 +341,8 @@ export default function WardrobePage() {
                   the canvas.
                 </p>
 
-                {/* Category filter inside builder */}
-                <div className={styles.categoryBarCompact}>
-                  {CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.id}
-                      className={`${styles.catBtnSm} ${activeCategory === cat.id ? styles.catBtnSmActive : ""}`}
-                      onClick={() => setActiveCategory(cat.id)}
-                    >
-                      {cat.label}
-                    </button>
-                  ))}
-                </div>
-
                 <div className={styles.builderGrid}>
-                  {filteredItems.map((item) => {
+                  {items.map((item) => {
                     const selected = selectedForOutfit.includes(item.id);
                     return (
                       <div
@@ -429,8 +351,8 @@ export default function WardrobePage() {
                         onClick={() => toggleOutfitItem(item.id)}
                       >
                         <img
-                          src={item.url}
-                          alt={item.name}
+                          src={item.imageUrl}
+                          alt={item.label}
                           className={styles.builderItemImg}
                         />
                         {selected && (
@@ -438,10 +360,15 @@ export default function WardrobePage() {
                             <Check size={16} />
                           </div>
                         )}
-                        <p className={styles.builderItemName}>{item.name}</p>
+                        <p className={styles.builderItemName}>{item.label || "Untitled"}</p>
                       </div>
                     );
                   })}
+                  {items.length === 0 && (
+                    <p style={{ gridColumn: '1/-1', textAlign: 'center', padding: '40px 0', color: 'var(--charcoal-muted)', fontSize: 14 }}>
+                      Your wardrobe is empty.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -472,11 +399,11 @@ export default function WardrobePage() {
                             <X size={12} />
                           </button>
                           <img
-                            src={item.url}
-                            alt={item.name}
+                            src={item.imageUrl}
+                            alt={item.label}
                             className={styles.canvasItemImg}
                           />
-                          <p className={styles.canvasItemName}>{item.name}</p>
+                          <p className={styles.canvasItemName}>{item.label}</p>
                         </div>
                       );
                     })}
@@ -560,8 +487,8 @@ export default function WardrobePage() {
                           {outfitItems.slice(0, 3).map((item) => (
                             <img
                               key={item.id}
-                              src={item.url}
-                              alt={item.name}
+                              src={item.imageUrl}
+                              alt={item.label}
                               className={styles.outfitPreviewThumb}
                             />
                           ))}
@@ -573,41 +500,12 @@ export default function WardrobePage() {
                         </div>
                       </div>
                       <div className={styles.outfitInfo}>
-                        {editingOutfitId === outfit.id ? (
-                          <div className={styles.editRow}>
-                            <input
-                              className={styles.editInput}
-                              value={editingOutfitName}
-                              onChange={(e) =>
-                                setEditingOutfitName(e.target.value)
-                              }
-                              onKeyDown={(e) =>
-                                e.key === "Enter" && saveRenameOutfit(outfit.id)
-                              }
-                              autoFocus
-                            />
-                            <button
-                              className={styles.editSaveBtn}
-                              onClick={() => saveRenameOutfit(outfit.id)}
-                            >
-                              <Check size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <h3 className={styles.outfitName}>{outfit.name}</h3>
-                        )}
+                        <h3 className={styles.outfitName}>{outfit.name}</h3>
                         <p className={styles.outfitMeta}>
                           {outfitItems.length} piece
                           {outfitItems.length !== 1 ? "s" : ""}
                         </p>
                         <div className={styles.outfitActions}>
-                          <button
-                            className={styles.outfitActionBtn}
-                            onClick={() => startRenameOutfit(outfit)}
-                            title="Rename"
-                          >
-                            <Edit3 size={14} /> Rename
-                          </button>
                           <Link
                             to="/ai-try-on"
                             className={styles.outfitTryOnBtn}
@@ -620,7 +518,7 @@ export default function WardrobePage() {
                             onClick={() => deleteOutfit(outfit.id)}
                             title="Delete"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={14} /> Remove
                           </button>
                         </div>
                       </div>
@@ -643,8 +541,7 @@ export default function WardrobePage() {
                   <Sparkles size={20} /> AI Style Picks
                 </h2>
                 <p className={styles.aiSubtitle}>
-                  Based on your {items.length}-item wardrobe, our AI recommends
-                  these store pieces to elevate your style.
+                  Based on your {items.length} items, we've found these store pieces to elevate your style.
                 </p>
               </div>
               <div className={styles.aiMatchBadge}>
@@ -653,73 +550,11 @@ export default function WardrobePage() {
             </div>
 
             <div className={styles.aiGrid}>
-              {aiRecs.length === 0 ? (
-                <div className={styles.empty}>
-                  <h3>No data yet.</h3>
-                  <p>
-                    AI recommendations will appear once your wardrobe is
-                    connected.
-                  </p>
-                </div>
-              ) : (
-                aiRecs.map((rec) => (
-                  <div key={rec.id} className={styles.aiCard}>
-                    <div className={styles.aiImgWrap}>
-                      <img
-                        src={rec.img}
-                        alt={rec.name}
-                        className={styles.aiImg}
-                      />
-                      <div className={styles.aiMatchLabel}>
-                        <Sparkles size={12} /> {rec.match}% match
-                      </div>
-                      <button
-                        className={`${styles.wishlistBtn} ${wishlistedRecs[rec.id] ? styles.wishlistBtnActive : ""}`}
-                        onClick={() => toggleWishlistRec(rec.id)}
-                      >
-                        <Heart
-                          size={16}
-                          fill={
-                            wishlistedRecs[rec.id] ? "currentColor" : "none"
-                          }
-                        />
-                      </button>
-                    </div>
-                    <div className={styles.aiInfo}>
-                      <h3 className={styles.aiName}>{rec.name}</h3>
-                      <p className={styles.aiPrice}>
-                        EGP {rec.price.toFixed(0)}
-                      </p>
-                      <div className={styles.aiCardActions}>
-                        <Link
-                          to={`/product/${rec.id}`}
-                          className={styles.aiViewBtn}
-                        >
-                          View Product
-                        </Link>
-                        <Link to="/ai-try-on" className={styles.aiTryBtn}>
-                          <Eye size={14} /> Try On
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Combo suggestions */}
-            <div className={styles.comboSection}>
-              <h3 className={styles.comboTitle}>
-                <Shuffle size={18} /> Outfit Combinations from Your Wardrobe
-              </h3>
-              <div className={styles.comboGrid}>
-                <div className={styles.empty}>
-                  <h3>No data yet.</h3>
-                  <p>
-                    Outfit combinations will appear once your wardrobe is
-                    connected.
-                  </p>
-                </div>
+              <div className={styles.empty} style={{ gridColumn: '1/-1' }}>
+                <h3>AI Picks coming soon.</h3>
+                <p>
+                  We're still analyzing your wardrobe. Check back soon for personalized recommendations!
+                </p>
               </div>
             </div>
           </div>

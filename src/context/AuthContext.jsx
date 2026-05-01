@@ -58,6 +58,13 @@ export const AuthProvider = ({ children }) => {
     setNeedsOnboarding(false);
   };
 
+  const updateUser = (updatedFields) => {
+    const newUser = { ...user, ...updatedFields };
+    const rememberMe = getTokenStorageType() === "local";
+    setUserData(newUser, rememberMe);
+    setUser(newUser);
+  };
+
   const logout = async () => {
     await logoutUser();
     clearAll();
@@ -79,6 +86,7 @@ export const AuthProvider = ({ children }) => {
         login,
         logout,
         completeOnboarding,
+        updateUser,
       }}
     >
       {children}

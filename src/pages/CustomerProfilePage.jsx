@@ -16,10 +16,12 @@ import {
   X,
   CheckCircle,
   AlertCircle,
+  Loader2,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import { useAuth } from "../context/AuthContext";
+import apiClient, { multipartClient } from "../utils/apiClient";
 import styles from "../styles/CustomerProfile.module.css";
 
 /* ─── Password strength ─── */
@@ -47,10 +49,104 @@ function StrengthMeter({ password }) {
   );
 }
 
+/* ─── Verification Modal ─── */
+function VerificationModal({ email, onVerify, onClose }) {
+  const [token, setToken] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      await onVerify(token);
+    } catch (err) {
+      setError(err.response?.data?.message || "Invalid or expired token.");
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className={styles.backdrop} onClick={onClose}>
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.modalHead}>
+          <h2 className={styles.modalTitle}>Verify Email Change</h2>
+          <button className={styles.modalClose} onClick={onClose}>
+            <X size={17} />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className={styles.modalBody}>
+            <p
+              style={{
+                fontSize: 14,
+                color: "var(--charcoal-muted)",
+                marginBottom: 16,
+              }}
+            >
+              We've sent a verification link to <strong>{email}</strong>. Please
+              click the link in your email, or paste the verification token
+              here.
+            </p>
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Verification Token</label>
+              <input
+                className={styles.input}
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="Paste token from email link…"
+                required
+              />
+              {error && (
+                <p style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
+                  {error}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className={styles.modalFoot}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnOutline}`}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              disabled={loading || !token.trim()}
+            >
+              {loading ? (
+                <Loader2 size={14} className={styles.spin} />
+              ) : (
+                <Check size={14} />
+              )}
+              Verify & Update
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Phone Modal ─── */
 function PhoneModal({ initial, onSave, onClose }) {
-  const [number, setNumber] = useState(initial?.number || "");
-  const [label, setLabel] = useState(initial?.label || "Mobile");
+  const [number, setNumber] = useState(initial?.phoneNumber || "");
+  const [isPrimary, setIsPrimary] = useState(initial?.isPrimary || false);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      await onSave({ phoneNumber: number, isPrimary });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className={styles.backdrop} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -64,19 +160,6 @@ function PhoneModal({ initial, onSave, onClose }) {
         </div>
         <div className={styles.modalBody}>
           <div className={styles.formGroup}>
-            <label className={styles.label}>Label</label>
-            <select
-              className={styles.select}
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-            >
-              <option>Mobile</option>
-              <option>Home</option>
-              <option>Work</option>
-              <option>Other</option>
-            </select>
-          </div>
-          <div className={styles.formGroup}>
             <label className={styles.label}>Phone Number</label>
             <input
               className={styles.input}
@@ -84,6 +167,28 @@ function PhoneModal({ initial, onSave, onClose }) {
               onChange={(e) => setNumber(e.target.value)}
               placeholder="+20 100 000 0000"
             />
+          </div>
+          <div
+            className={styles.checkRow}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginTop: 8,
+            }}
+          >
+            <input
+              type="checkbox"
+              id="primaryPhone"
+              checked={isPrimary}
+              onChange={(e) => setIsPrimary(e.target.checked)}
+            />
+            <label
+              htmlFor="primaryPhone"
+              style={{ fontSize: 14, cursor: "pointer" }}
+            >
+              Set as primary number
+            </label>
           </div>
         </div>
         <div className={styles.modalFoot}>
@@ -95,10 +200,15 @@ function PhoneModal({ initial, onSave, onClose }) {
           </button>
           <button
             className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => onSave({ number, label })}
-            disabled={!number.trim()}
+            onClick={handleSubmit}
+            disabled={!number.trim() || loading}
           >
-            <Check size={14} /> Save
+            {loading ? (
+              <Loader2 size={14} className={styles.spin} />
+            ) : (
+              <Check size={14} />
+            )}{" "}
+            Save
           </button>
         </div>
       </div>
@@ -109,12 +219,24 @@ function PhoneModal({ initial, onSave, onClose }) {
 /* ─── Address Modal ─── */
 function AddressModal({ initial, onSave, onClose }) {
   const [form, setForm] = useState(
-    initial || { name: "", line1: "", city: "", country: "Egypt", zip: "" },
+    initial || { label: "", street: "", city: "", isPrimary: false },
   );
+  const [loading, setLoading] = useState(false);
+
   const f = (k) => ({
     value: form[k],
     onChange: (e) => setForm({ ...form, [k]: e.target.value }),
   });
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      await onSave(form);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className={styles.backdrop} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -127,51 +249,53 @@ function AddressModal({ initial, onSave, onClose }) {
           </button>
         </div>
         <div className={styles.modalBody}>
-          <div className={styles.formRow}>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Label (e.g. Home)</label>
-              <input
-                className={styles.input}
-                {...f("name")}
-                placeholder="Home / Work…"
-              />
-            </div>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Country</label>
-              <select className={styles.select} {...f("country")}>
-                <option>Egypt</option>
-                <option>UAE</option>
-                <option>Saudi Arabia</option>
-                <option>Kuwait</option>
-                <option>Jordan</option>
-              </select>
-            </div>
+          <div className={styles.formGroup}>
+            <label className={styles.label}>Label (e.g. Home)</label>
+            <input
+              className={styles.input}
+              {...f("label")}
+              placeholder="Home / Work…"
+            />
           </div>
           <div className={styles.formGroup}>
             <label className={styles.label}>Street Address</label>
             <input
               className={styles.input}
-              {...f("line1")}
+              {...f("street")}
               placeholder="123 Street Name, Apt 4B"
             />
           </div>
-          <div className={styles.formRow}>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>City</label>
-              <input
-                className={styles.input}
-                {...f("city")}
-                placeholder="Cairo"
-              />
-            </div>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>ZIP / Postal Code</label>
-              <input
-                className={styles.input}
-                {...f("zip")}
-                placeholder="12345"
-              />
-            </div>
+          <div className={styles.formGroup}>
+            <label className={styles.label}>City</label>
+            <input
+              className={styles.input}
+              {...f("city")}
+              placeholder="Cairo"
+            />
+          </div>
+          <div
+            className={styles.checkRow}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginTop: 8,
+            }}
+          >
+            <input
+              type="checkbox"
+              id="primaryAddr"
+              checked={form.isPrimary}
+              onChange={(e) =>
+                setForm({ ...form, isPrimary: e.target.checked })
+              }
+            />
+            <label
+              htmlFor="primaryAddr"
+              style={{ fontSize: 14, cursor: "pointer" }}
+            >
+              Set as primary address
+            </label>
           </div>
         </div>
         <div className={styles.modalFoot}>
@@ -183,10 +307,15 @@ function AddressModal({ initial, onSave, onClose }) {
           </button>
           <button
             className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => onSave(form)}
-            disabled={!form.line1.trim() || !form.city.trim()}
+            onClick={handleSubmit}
+            disabled={!form.street.trim() || !form.city.trim() || loading}
           >
-            <Check size={14} /> Save Address
+            {loading ? (
+              <Loader2 size={14} className={styles.spin} />
+            ) : (
+              <Check size={14} />
+            )}{" "}
+            Save Address
           </button>
         </div>
       </div>
@@ -209,12 +338,16 @@ export default function CustomerProfilePage() {
 
   const [activeTab, setActiveTab] = useState("profile");
   const [photoURL, setPhotoURL] = useState(null);
-  const [alert, setAlert] = useState(null); // { type: 'success'|'error', text }
+  const [alert, setAlert] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   /* Profile */
-  const [firstName, setFirstName] = useState(user?.firstName || "");
-  const [lastName, setLastName] = useState(user?.lastName || "");
-  const [email, setEmail] = useState(user?.email || "");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [gender, setGender] = useState("");
+  const [showVerify, setShowVerify] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
 
   /* Security */
   const [oldPass, setOldPass] = useState("");
@@ -226,17 +359,34 @@ export default function CustomerProfilePage() {
 
   /* Phones */
   const [phones, setPhones] = useState([]);
-  const [phoneModal, setPhoneModal] = useState(null); // null | 'add' | { id }
+  const [phoneModal, setPhoneModal] = useState(null);
 
   /* Addresses */
   const [addresses, setAddresses] = useState([]);
-  const [addrModal, setAddrModal] = useState(null); // null | 'add' | { id }
+  const [addrModal, setAddrModal] = useState(null);
 
   useEffect(() => {
-    // TODO: wire to real API endpoint — Phase X
-    setPhones([]);
-    setAddresses([]);
+    fetchProfile();
   }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const res = await apiClient.get("/customers/profile");
+      const c = res.data;
+      setFirstName(c.firstName || "");
+      setLastName(c.lastName || "");
+      setEmail(user?.email || ""); // Email is on User, not Customer directly in the profile response usually
+      setGender(c.gender || "");
+      setPhones(c.phoneNumbers || []);
+      setAddresses(c.shippingAddresses || []);
+
+      if (c.profilePhotos?.length > 0) {
+        setPhotoURL(c.profilePhotos[0].s3Url);
+      }
+    } catch (err) {
+      console.error("Failed to fetch profile", err);
+    }
+  };
 
   const showAlert = (type, text) => {
     setAlert({ type, text });
@@ -244,19 +394,28 @@ export default function CustomerProfilePage() {
   };
 
   /* Photo upload */
-  const handlePhotoChange = (e) => {
+  const handlePhotoChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result;
-      setPhotoURL(base64);
-      // Store in localStorage so Header can read it persistently
-      localStorage.setItem("ainai_profile_photo", base64);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      setLoading(true);
+      const res = await multipartClient.post(
+        "/customers/profile/photos",
+        formData,
+      );
+      const newUrl = res.data.s3Url;
+      setPhotoURL(newUrl);
       showAlert("success", "Profile photo updated!");
-    };
-    reader.readAsDataURL(file);
+      fetchProfile(); // Refresh to get the photo ID if needed
+    } catch (err) {
+      showAlert("error", "Failed to upload photo.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getInitials = () => {
@@ -267,13 +426,48 @@ export default function CustomerProfilePage() {
   };
 
   /* Save profile */
-  const saveProfile = () => {
-    // In a real app: API call
-    showAlert("success", "Profile updated successfully!");
+  const saveProfile = async () => {
+    setLoading(true);
+    try {
+      const payload = { firstName, lastName, gender };
+      if (email !== user?.email) {
+        payload.newEmail = email;
+      }
+      const res = await apiClient.patch("/customers/profile", payload);
+
+      updateUser({ firstName, lastName, gender });
+
+      if (email !== user?.email) {
+        setPendingEmail(email);
+        setShowVerify(true);
+        showAlert("info", res.data.message);
+      } else {
+        showAlert("success", "Profile updated successfully!");
+      }
+    } catch (err) {
+      showAlert(
+        "error",
+        err.response?.data?.message || "Failed to update profile.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyEmail = async (token) => {
+    await apiClient.get(
+      `/customers/profile/verify-email-change?userId=${user.id}&token=${token}`,
+    );
+    setShowVerify(false);
+    showAlert("success", "Email updated! Please log in again.");
+    // In a real app, we might force logout or update context
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
   };
 
   /* Save password */
-  const savePassword = () => {
+  const savePassword = async () => {
     if (!oldPass) {
       showAlert("error", "Please enter your current password.");
       return;
@@ -286,53 +480,107 @@ export default function CustomerProfilePage() {
       showAlert("error", "Passwords do not match.");
       return;
     }
-    setOldPass("");
-    setNewPass("");
-    setConfPass("");
-    showAlert("success", "Password changed successfully!");
+
+    setLoading(true);
+    try {
+      await apiClient.patch("/customers/profile", {
+        changePassword: { currentPassword: oldPass, newPassword: newPass },
+      });
+      setOldPass("");
+      setNewPass("");
+      setConfPass("");
+      showAlert("success", "Password changed successfully!");
+    } catch (err) {
+      showAlert(
+        "error",
+        err.response?.data?.message || "Failed to change password.",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* Phones */
-  const nextPhoneId = useRef(phones.length + 1);
-  const handlePhoneSave = (data) => {
-    if (phoneModal === "add") {
-      setPhones((prev) => [
-        ...prev,
-        { id: ++nextPhoneId.current, ...data, isDefault: prev.length === 0 },
-      ]);
-    } else {
-      setPhones((prev) =>
-        prev.map((p) => (p.id === phoneModal.id ? { ...p, ...data } : p)),
-      );
+  const handlePhoneSave = async (data) => {
+    try {
+      if (phoneModal === "add") {
+        await apiClient.post("/customers/profile/phone-numbers", data);
+      } else {
+        await apiClient.patch(
+          `/customers/profile/phone-numbers/${phoneModal.id}`,
+          data,
+        );
+      }
+      setPhoneModal(null);
+      fetchProfile();
+      showAlert("success", "Phone number saved!");
+    } catch (err) {
+      showAlert("error", "Failed to save phone number.");
     }
-    setPhoneModal(null);
-    showAlert("success", "Phone number saved!");
   };
-  const deletePhone = (id) =>
-    setPhones((prev) => prev.filter((p) => p.id !== id));
-  const setDefaultPhone = (id) =>
-    setPhones((prev) => prev.map((p) => ({ ...p, isDefault: p.id === id })));
+
+  const deletePhone = async (id) => {
+    if (!window.confirm("Remove this phone number?")) return;
+    try {
+      await apiClient.delete(`/customers/profile/phone-numbers/${id}`);
+      fetchProfile();
+      showAlert("success", "Phone number removed.");
+    } catch (err) {
+      showAlert("error", "Failed to remove phone number.");
+    }
+  };
+
+  const setDefaultPhone = async (id) => {
+    try {
+      await apiClient.patch(`/customers/profile/phone-numbers/${id}`, {
+        isPrimary: true,
+      });
+      fetchProfile();
+    } catch (err) {
+      showAlert("error", "Failed to set primary phone.");
+    }
+  };
 
   /* Addresses */
-  const nextAddrId = useRef(addresses.length + 1);
-  const handleAddrSave = (data) => {
-    if (addrModal === "add") {
-      setAddresses((prev) => [
-        ...prev,
-        { id: ++nextAddrId.current, ...data, isDefault: prev.length === 0 },
-      ]);
-    } else {
-      setAddresses((prev) =>
-        prev.map((a) => (a.id === addrModal.id ? { ...a, ...data } : a)),
-      );
+  const handleAddrSave = async (data) => {
+    try {
+      if (addrModal === "add") {
+        await apiClient.post("/customers/profile/shipping-addresses", data);
+      } else {
+        await apiClient.patch(
+          `/customers/profile/shipping-addresses/${addrModal.id}`,
+          data,
+        );
+      }
+      setAddrModal(null);
+      fetchProfile();
+      showAlert("success", "Address saved!");
+    } catch (err) {
+      showAlert("error", "Failed to save address.");
     }
-    setAddrModal(null);
-    showAlert("success", "Address saved!");
   };
-  const deleteAddress = (id) =>
-    setAddresses((prev) => prev.filter((a) => a.id !== id));
-  const setDefaultAddr = (id) =>
-    setAddresses((prev) => prev.map((a) => ({ ...a, isDefault: a.id === id })));
+
+  const deleteAddress = async (id) => {
+    if (!window.confirm("Remove this address?")) return;
+    try {
+      await apiClient.delete(`/customers/profile/shipping-addresses/${id}`);
+      fetchProfile();
+      showAlert("success", "Address removed.");
+    } catch (err) {
+      showAlert("error", "Failed to remove address.");
+    }
+  };
+
+  const setDefaultAddr = async (id) => {
+    try {
+      await apiClient.patch(`/customers/profile/shipping-addresses/${id}`, {
+        isPrimary: true,
+      });
+      fetchProfile();
+    } catch (err) {
+      showAlert("error", "Failed to set primary address.");
+    }
+  };
 
   return (
     <div className={styles.page}>
@@ -355,9 +603,13 @@ export default function CustomerProfilePage() {
             )}
             <div
               className={styles.avatarOverlay}
-              onClick={() => fileRef.current?.click()}
+              onClick={() => !loading && fileRef.current?.click()}
             >
-              <Camera size={18} />
+              {loading ? (
+                <Loader2 size={18} className={styles.spin} />
+              ) : (
+                <Camera size={18} />
+              )}
               <br />
               Change Photo
             </div>
@@ -367,6 +619,7 @@ export default function CustomerProfilePage() {
               accept="image/*"
               style={{ display: "none" }}
               onChange={handlePhotoChange}
+              disabled={loading}
             />
           </div>
           <div className={styles.photoInfo}>
@@ -378,8 +631,14 @@ export default function CustomerProfilePage() {
             <button
               className={styles.photoUploadBtn}
               onClick={() => fileRef.current?.click()}
+              disabled={loading}
             >
-              <Camera size={14} /> Upload Photo
+              {loading ? (
+                <Loader2 size={14} className={styles.spin} />
+              ) : (
+                <Camera size={14} />
+              )}{" "}
+              Upload Photo
             </button>
           </div>
         </div>
@@ -387,7 +646,7 @@ export default function CustomerProfilePage() {
         {/* Alert */}
         {alert && (
           <div
-            className={`${styles.alert} ${alert.type === "success" ? styles.alertSuccess : styles.alertError}`}
+            className={`${styles.alert} ${alert.type === "success" ? styles.alertSuccess : alert.type === "error" ? styles.alertError : styles.alertInfo}`}
             style={{ marginBottom: 16 }}
           >
             {alert.type === "success" ? (
@@ -445,25 +704,42 @@ export default function CustomerProfilePage() {
                   />
                 </div>
               </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Email Address</label>
-                <input
-                  className={styles.input}
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                />
-                <span className={styles.inputNote}>
-                  Changing your email may require re-verification.
-                </span>
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Gender</label>
+                  <select
+                    className={styles.select}
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                  >
+                    <option value="">Select gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Email Address</label>
+                  <input
+                    className={styles.input}
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
+                </div>
               </div>
               <div className={styles.saveRow}>
                 <button
                   className={`${styles.btn} ${styles.btnPrimary}`}
                   onClick={saveProfile}
+                  disabled={loading}
                 >
-                  <Check size={14} /> Save Changes
+                  {loading ? (
+                    <Loader2 size={14} className={styles.spin} />
+                  ) : (
+                    <Check size={14} />
+                  )}{" "}
+                  Save Changes
                 </button>
               </div>
             </div>
@@ -585,8 +861,14 @@ export default function CustomerProfilePage() {
                 <button
                   className={`${styles.btn} ${styles.btnPrimary}`}
                   onClick={savePassword}
+                  disabled={loading}
                 >
-                  <Lock size={14} /> Change Password
+                  {loading ? (
+                    <Loader2 size={14} className={styles.spin} />
+                  ) : (
+                    <Lock size={14} />
+                  )}{" "}
+                  Change Password
                 </button>
               </div>
             </div>
@@ -611,32 +893,32 @@ export default function CustomerProfilePage() {
                 {phones.map((ph) => (
                   <div
                     key={ph.id}
-                    className={`${styles.entryCard} ${ph.isDefault ? styles.entryDefault : ""}`}
+                    className={`${styles.entryCard} ${ph.isPrimary ? styles.entryDefault : ""}`}
                   >
                     <div className={styles.entryIcon}>
                       <Phone size={16} />
                     </div>
                     <div className={styles.entryBody}>
-                      <p className={styles.entryMain}>{ph.number}</p>
-                      <p className={styles.entrySub}>{ph.label}</p>
-                      {ph.isDefault && (
+                      <p className={styles.entryMain}>{ph.phoneNumber}</p>
+                      <p className={styles.entrySub}>Verified Phone Number</p>
+                      {ph.isPrimary && (
                         <span className={styles.defaultBadge}>
-                          <Star size={9} /> Default
+                          <Star size={9} /> Primary
                         </span>
                       )}
                     </div>
                     <div className={styles.entryActions}>
-                      {!ph.isDefault && (
+                      {!ph.isPrimary && (
                         <button
                           className={`${styles.btn} ${styles.btnOutline} ${styles.btnSm}`}
                           onClick={() => setDefaultPhone(ph.id)}
                         >
-                          Set Default
+                          Set Primary
                         </button>
                       )}
                       <button
                         className={styles.btnGhost}
-                        onClick={() => setPhoneModal({ id: ph.id })}
+                        onClick={() => setPhoneModal({ id: ph.id, ...ph })}
                       >
                         <Pencil size={15} />
                       </button>
@@ -678,29 +960,31 @@ export default function CustomerProfilePage() {
                 {addresses.map((addr) => (
                   <div
                     key={addr.id}
-                    className={`${styles.entryCard} ${addr.isDefault ? styles.entryDefault : ""}`}
+                    className={`${styles.entryCard} ${addr.isPrimary ? styles.entryDefault : ""}`}
                   >
                     <div className={styles.entryIcon}>
                       <MapPin size={16} />
                     </div>
                     <div className={styles.entryBody}>
-                      <p className={styles.entryMain}>{addr.name}</p>
-                      <p className={styles.entrySub}>
-                        {addr.line1}, {addr.city}, {addr.country}
+                      <p className={styles.entryMain}>
+                        {addr.label || "Address"}
                       </p>
-                      {addr.isDefault && (
+                      <p className={styles.entrySub}>
+                        {addr.street}, {addr.city}
+                      </p>
+                      {addr.isPrimary && (
                         <span className={styles.defaultBadge}>
-                          <Star size={9} /> Default
+                          <Star size={9} /> Primary
                         </span>
                       )}
                     </div>
                     <div className={styles.entryActions}>
-                      {!addr.isDefault && (
+                      {!addr.isPrimary && (
                         <button
                           className={`${styles.btn} ${styles.btnOutline} ${styles.btnSm}`}
                           onClick={() => setDefaultAddr(addr.id)}
                         >
-                          Set Default
+                          Set Primary
                         </button>
                       )}
                       <button
@@ -751,6 +1035,13 @@ export default function CustomerProfilePage() {
           }
           onSave={handleAddrSave}
           onClose={() => setAddrModal(null)}
+        />
+      )}
+      {showVerify && (
+        <VerificationModal
+          email={pendingEmail}
+          onVerify={handleVerifyEmail}
+          onClose={() => setShowVerify(false)}
         />
       )}
 
