@@ -13,6 +13,7 @@ import {
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import styles from "../styles/VendorStorefrontPage.module.css";
+import apiClient from "../utils/apiClient";
 
 function StarRow({ value, size = 14 }) {
   return (
@@ -38,19 +39,33 @@ export default function VendorStorefrontPage() {
   const [reviews, setReviews] = useState([]);
 
   useEffect(() => {
-    // TODO: wire to real API endpoint — Phase X
-    setStore(null);
-    setProducts([]);
-    setReviews([]);
+    fetchStoreData();
   }, [id]);
 
-  const categories = ["All", ...(store?.categories || [])];
+  const fetchStoreData = async () => {
+    try {
+      // Get vendor profile/store details
+      const storeRes = await apiClient.get(`/vendors/${id}/store`);
+      setStore(storeRes.data);
+
+      // Get vendor products
+      const productsRes = await apiClient.get(`/products?vendorId=${id}`);
+      setProducts(productsRes.data.data || []);
+      
+      // Reviews might not be implemented yet in backend, keeping as empty for now
+      setReviews([]);
+    } catch (err) {
+      console.error("Failed to fetch store data", err);
+    }
+  };
+
+  const categories = ["All", ...new Set(products.map(p => p.category))];
   const filtered =
     activeCategory === "All"
       ? products
       : products.filter((p) => p.category === activeCategory);
-  const bannerSrc = store?.banner;
-  const storeName = store?.name || "Store";
+  const bannerSrc = store?.bannerUrl; // Backend might provide a banner or we use fallback
+  const storeName = store?.brandName || store?.storeName || "Store";
 
   const addToCart = (productId) => {
     setCartAdded((prev) => ({ ...prev, [productId]: true }));
@@ -97,43 +112,49 @@ export default function VendorStorefrontPage() {
           <>
             {/* Store Header Card */}
             <div className={styles.storeCard}>
-              <img
-                src={store.logo}
-                alt={store.name}
-                className={styles.storeLogo}
-              />
+              <div className={styles.storeLogoWrap}>
+                {store.logoUrl ? (
+                  <img
+                    src={store.logoUrl}
+                    alt={storeName}
+                    className={styles.storeLogo}
+                  />
+                ) : (
+                  <div className={styles.storeLogoFallback}>{storeName?.[0] || "V"}</div>
+                )}
+              </div>
               <div className={styles.storeInfo}>
-                <h1 className={styles.storeName}>{store.name}</h1>
+                <h1 className={styles.storeName}>{storeName}</h1>
                 <div className={styles.storeMeta}>
                   <div className={styles.ratingRow}>
-                    <StarRow value={Math.round(store.rating)} size={16} />
-                    <span className={styles.ratingVal}>{store.rating}</span>
+                    <StarRow value={Math.round(store.rating || 5)} size={16} />
+                    <span className={styles.ratingVal}>{store.rating || "5.0"}</span>
                     <span className={styles.ratingCount}>
-                      ({store.reviewCount} reviews)
+                      ({store.reviewCount || 0} reviews)
                     </span>
                   </div>
                   <span className={styles.metaDivider}>·</span>
                   <span className={styles.metaItem}>
-                    <MapPin size={13} /> {store.location}
+                    <MapPin size={13} /> {store.country || "UAE"}
                   </span>
                   <span className={styles.metaDivider}>·</span>
                   <span className={styles.metaItem}>
-                    Since {store.memberSince}
+                    Since {new Date(store.createdAt || Date.now()).getFullYear()}
                   </span>
                 </div>
-                <p className={styles.storeDesc}>{store.description}</p>
+                <p className={styles.storeDesc}>{store.description || "Welcome to our store!"}</p>
               </div>
               <div className={styles.storeStats}>
                 <div className={styles.statItem}>
                   <span className={styles.statVal}>
-                    {store.totalSold.toLocaleString()}
+                    {(store.totalSold || 0).toLocaleString()}
                   </span>
                   <span className={styles.statLbl}>
                     <Package size={12} /> Total Sold
                   </span>
                 </div>
                 <div className={styles.statItem}>
-                  <span className={styles.statVal}>{store.rating}</span>
+                  <span className={styles.statVal}>{store.rating || "5.0"}</span>
                   <span className={styles.statLbl}>
                     <Star size={12} /> Rating
                   </span>
@@ -183,13 +204,13 @@ export default function VendorStorefrontPage() {
                         className={styles.productImgWrap}
                       >
                         <img
-                          src={product.image}
+                          src={product.mainImage || "/placeholder-product.png"}
                           alt={product.name}
                           className={styles.productImg}
                         />
-                        {product.badge && (
+                        {product.discountPrice && (
                           <span className={styles.productBadge}>
-                            {product.badge}
+                            SALE
                           </span>
                         )}
                         <div className={styles.productOverlay}>

@@ -54,7 +54,9 @@ export default function Header() {
   const fileInputRef = useRef(null); // unused here but kept for consistency
 
   // Read profile photo reactively from context
-  const profilePhoto = user?.primaryPhotoUrl || user?.photoUrl || null;
+  const profilePhoto = userRole === "vendor" 
+    ? user?.logoUrl 
+    : (user?.primaryPhotoUrl || user?.photoUrl || null);
 
   // Dark mode
   useEffect(() => {
@@ -125,6 +127,7 @@ export default function Header() {
 
   const getInitials = () => {
     if (!user) return "?";
+    if (userRole === "vendor" && user.brandName) return user.brandName[0].toUpperCase();
     if (user.firstName?.trim()) return user.firstName[0].toUpperCase();
     if (user.email?.trim()) return user.email[0].toUpperCase();
     return "?";
@@ -425,7 +428,7 @@ export default function Header() {
                       onError={handleImgError}
                     />
                   ) : (
-                    <User size={20} className={styles.avatarIconFallback} />
+                    <div className={styles.avatarInitialFallback}>{getInitials()}</div>
                   )}
                   {/* Online indicator dot */}
                   <span className={styles.avatarOnline} />
@@ -445,10 +448,7 @@ export default function Header() {
                             onError={handleImgError}
                           />
                         ) : (
-                          <User
-                            size={22}
-                            className={styles.avatarDropIconFallback}
-                          />
+                          <div className={styles.avatarDropInitialFallback}>{getInitials()}</div>
                         )}
                       </div>
                       <div className={styles.avatarDropInfo}>

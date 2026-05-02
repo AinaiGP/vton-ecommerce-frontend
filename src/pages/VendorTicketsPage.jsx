@@ -1,825 +1,572 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Plus,
-  Search,
   MessageSquare,
-  Clock,
   ChevronRight,
   ChevronLeft,
-  AlertCircle,
   CheckCircle2,
-  Loader2,
-  XCircle,
-  ArrowUpDown,
   Paperclip,
   Send,
   X,
-  Check,
-  RefreshCw,
-  Filter,
   AlertTriangle,
   FileText,
   ImageIcon,
-  Headphones,
   Tag,
+  Store,
+  Clock,
+  User,
+  Search,
 } from "lucide-react";
 import VendorLayout from "../components/vendor/VendorLayout";
 import p from "../styles/VendorPage.module.css";
-import s from "../styles/VendorTickets.module.css";
+import apiClient, { multipartClient } from "../utils/apiClient";
 
-const STATUS_ORDER = ["Open", "In Progress", "Resolved", "Closed"];
-const STATUS_NEXT = {
-  Open: "In Progress",
-  "In Progress": "Resolved",
-  Resolved: "Closed",
+/* ─── Mapping ─── */
+const TICKET_TYPES = [
+  { value: "GENERAL_SUPPORT", label: "General Support" },
+  { value: "SYSTEM_BUG", label: "System Bug" },
+  { value: "ORDER_DISPUTE", label: "Order Dispute" },
+];
+
+const STATUS_CFG = {
+  OPEN: { color: "#dc2626", bg: "#fee2e2", label: "Open" },
+  IN_PROGRESS: { color: "#f59e0b", bg: "#fef3c7", label: "In Progress" },
+  AWAITING_RESPONSE: {
+    color: "#8b5cf6",
+    bg: "#f5f3ff",
+    label: "Waiting for Support",
+  },
+  ESCALATED: { color: "#dc2626", bg: "#fff1f2", label: "Escalated" },
+  RESOLVED: { color: "#16a34a", bg: "#dcfce7", label: "Resolved" },
+  CLOSED: { color: "#94a3b8", bg: "#f1f5f9", label: "Closed" },
+  CANCELED: { color: "#94a3b8", bg: "#f1f5f9", label: "Canceled" },
 };
-const CATEGORIES = ["Technical Issue", "Payment", "Orders", "Other"];
 
-/* ─── Badge helpers ──────────────────────────────── */
-function StatusBadge({ status }) {
-  const cfg = {
-    Open: { cls: s.sOpen, dot: "#ef4444" },
-    "In Progress": { cls: s.sProgress, dot: "#f59e0b" },
-    Resolved: { cls: s.sResolved, dot: "#16a34a" },
-    Closed: { cls: s.sClosed, dot: "#94a3b8" },
-  };
-  const { cls, dot } = cfg[status] || {};
-  return (
-    <span className={`${s.badge} ${cls}`}>
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: "50%",
-          background: dot,
-          display: "inline-block",
-        }}
-      />{" "}
-      {status}
-    </span>
-  );
+function getStatusLabel(status) {
+  return STATUS_CFG[status]?.label || status;
 }
 
-function PriorityBadge({ priority }) {
-  const cfg = { High: s.pHigh, Medium: s.pMedium, Low: s.pLow };
-  return <span className={`${s.priority} ${cfg[priority]}`}>{priority}</span>;
+function getCategoryLabel(type) {
+  return TICKET_TYPES.find((t) => t.value === type)?.label || type;
 }
 
-function FileAttachment({ att }) {
-  if (!att) return null;
-  const isImg = att.type === "image";
-  return (
-    <div className={s.attachment}>
-      {isImg ? <ImageIcon size={14} /> : <FileText size={14} />}
-      <span>{att.name}</span>
-    </div>
-  );
-}
-
-/* ─── Skeleton ───────────────────────────────────── */
-function TicketSkeleton() {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {[1, 2, 3].map((i) => (
-        <div
-          key={i}
-          style={{
-            background: "var(--vdr-surface)",
-            border: "1px solid var(--vdr-border)",
-            borderRadius: 12,
-            padding: "18px 20px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-          }}
-        >
-          <div style={{ display: "flex", gap: 10 }}>
-            <span
-              className={p.skeleton}
-              style={{ width: 80, height: 18, borderRadius: 6 }}
-            />
-            <span
-              className={p.skeleton}
-              style={{ width: 60, height: 18, borderRadius: 6 }}
-            />
-          </div>
-          <span
-            className={p.skeleton}
-            style={{ width: "70%", height: 20, borderRadius: 6 }}
-          />
-          <span
-            className={p.skeleton}
-            style={{ width: "40%", height: 14, borderRadius: 6 }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ─── Create Ticket Modal ────────────────────────── */
-function CreateTicketModal({ onClose, onSubmit }) {
-  const [form, setForm] = useState({
-    subject: "",
-    category: "Technical Issue",
-    priority: "Medium",
-    description: "",
-  });
-  const [file, setFile] = useState(null);
-  const fileRef = useRef(null);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSubmit({ ...form, file });
-  };
-
-  return (
-    <div className={p.modalBackdrop} onClick={onClose}>
-      <div
-        className={`${p.modal} ${p.modalLg}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className={p.modalHead}>
-          <h2 className={p.modalTitle}>Create New Support Ticket</h2>
-          <button className={p.modalClose} onClick={onClose}>
-            <X size={17} />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className={p.modalBody}>
-            <div className={p.formGroup}>
-              <label className={p.label}>Subject *</label>
-              <input
-                className={p.input}
-                value={form.subject}
-                onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                required
-                placeholder="Briefly describe your issue..."
-              />
-            </div>
-            <div className={p.formRow}>
-              <div className={p.formGroup}>
-                <label className={p.label}>Category</label>
-                <select
-                  className={p.select}
-                  value={form.category}
-                  onChange={(e) =>
-                    setForm({ ...form, category: e.target.value })
-                  }
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-              <div className={p.formGroup}>
-                <label className={p.label}>Priority</label>
-                <select
-                  className={p.select}
-                  value={form.priority}
-                  onChange={(e) =>
-                    setForm({ ...form, priority: e.target.value })
-                  }
-                >
-                  <option>Low</option>
-                  <option>Medium</option>
-                  <option>High</option>
-                </select>
-              </div>
-            </div>
-            <div className={p.formGroup}>
-              <label className={p.label}>Description *</label>
-              <textarea
-                className={p.textarea}
-                rows={5}
-                value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
-                required
-                placeholder="Please describe your issue in detail. Include any relevant order IDs, product names, or error messages..."
-              />
-            </div>
-            {/* Attachment */}
-            <div className={p.formGroup}>
-              <label className={p.label}>Attachment (optional)</label>
-              <div
-                className={s.attachZone}
-                onClick={() => fileRef.current?.click()}
-              >
-                <Paperclip size={20} style={{ color: "var(--vdr-accent)" }} />
-                <div>
-                  <p className={s.attachTitle}>
-                    {file ? file.name : "Click to attach a file or image"}
-                  </p>
-                  <p className={s.attachSub}>
-                    {file
-                      ? `${(file.size / 1024).toFixed(1)} KB`
-                      : "PNG, JPG, PDF, CSV — Max 10 MB"}
-                  </p>
-                </div>
-                {file && (
-                  <button
-                    type="button"
-                    className={s.attachRemove}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFile(null);
-                    }}
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-              <input
-                ref={fileRef}
-                type="file"
-                style={{ display: "none" }}
-                onChange={(e) => setFile(e.target.files[0] || null)}
-              />
-            </div>
-
-            {/* High priority callout */}
-            {form.priority === "High" && (
-              <div className={s.highCallout}>
-                <AlertTriangle size={16} />
-                <span>
-                  High priority tickets are reviewed within 2 business hours.
-                </span>
-              </div>
-            )}
-          </div>
-          <div className={p.modalFoot}>
-            <button
-              type="button"
-              className={`${p.btn} ${p.btnOutline}`}
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <button type="submit" className={`${p.btn} ${p.btnPrimary}`}>
-              <Send size={14} /> Submit Ticket
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Ticket Detail (Chat View) ──────────────────── */
-function TicketDetail({ ticket, onBack, onReply, onAdvance, onResolve }) {
-  const [text, setText] = useState("");
-  const [file, setFile] = useState(null);
-  const fileRef = useRef(null);
-  const bottomRef = useRef(null);
-  const [confirmClose, setConfirmClose] = useState(false);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [ticket.messages]);
-
-  const handleSend = (e) => {
-    e.preventDefault();
-    if (!text.trim() && !file) return;
-    onReply(
-      ticket.id,
-      text,
-      file
-        ? {
-            name: file.name,
-            type: file.type.startsWith("image") ? "image" : "file",
-          }
+function mapTicket(ticket) {
+  const messages = (ticket.messages || [])
+    .map((m) => ({
+      from: m.senderRole === "VENDOR" ? "me" : "support",
+      text: m.content,
+      time: new Date(m.createdAt).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      attachment: m.attachments?.length
+        ? { name: m.attachments[0].split("/").pop(), url: m.attachments[0] }
         : null,
-    );
-    setText("");
-    setFile(null);
+    }));
+
+  return {
+    id: ticket.id,
+    subject: ticket.subject,
+    category: getCategoryLabel(ticket.type),
+    type: ticket.type,
+    status: ticket.status,
+    created: new Date(ticket.createdAt).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+    updated: new Date(ticket.updatedAt).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    messages,
+    _raw: ticket,
   };
-
-  const nextStatus = STATUS_NEXT[ticket.status];
-  const isClosed = ticket.status === "Closed";
-  const isResolved = ticket.status === "Resolved";
-
-  return (
-    <div className={s.detailShell}>
-      {/* Detail header */}
-      <div className={s.detailHeader}>
-        <button className={s.backBtn} onClick={onBack}>
-          <ChevronLeft size={16} /> All Tickets
-        </button>
-        <div className={s.detailTitleGroup}>
-          <span className={s.detailTicketId}>{ticket.id}</span>
-          <h2 className={s.detailTitle}>{ticket.subject}</h2>
-        </div>
-        <div className={s.detailBadges}>
-          <span className={`${s.catTag}`}>
-            <Tag size={11} />
-            {ticket.category}
-          </span>
-          <PriorityBadge priority={ticket.priority} />
-          <StatusBadge status={ticket.status} />
-        </div>
-        {/* Actions */}
-        <div className={s.detailActions}>
-          {nextStatus && !isClosed && (
-            <button
-              className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
-              onClick={() => onAdvance(ticket.id)}
-            >
-              <RefreshCw size={13} /> Mark as {nextStatus}
-            </button>
-          )}
-          {!isClosed && (
-            <button
-              className={`${p.btn} ${p.btnDanger} ${p.btnSm}`}
-              onClick={() => setConfirmClose(true)}
-            >
-              <XCircle size={13} /> Close Ticket
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className={s.chatArea}>
-        {/* System event */}
-        <div className={s.sysEvent}>
-          <span>Ticket created · {ticket.created}</span>
-        </div>
-
-        {ticket.messages.map((msg, i) => {
-          const isVendor = msg.from === "vendor";
-          return (
-            <div
-              key={i}
-              className={`${s.msgRow} ${isVendor ? s.msgRight : s.msgLeft}`}
-            >
-              {!isVendor && (
-                <div
-                  className={s.msgAvatar}
-                  style={{ background: "#4f46e5", color: "white" }}
-                >
-                  <Headphones size={14} />
-                </div>
-              )}
-              <div
-                className={`${s.bubble} ${isVendor ? s.bubbleVendor : s.bubbleSupport}`}
-              >
-                <p className={s.bubbleText}>{msg.text}</p>
-                {msg.attachment && <FileAttachment att={msg.attachment} />}
-                <span className={s.bubbleTime}>{msg.time}</span>
-              </div>
-              {isVendor && (
-                <div
-                  className={s.msgAvatar}
-                  style={{
-                    background: "linear-gradient(135deg,#7c3aed,#a855f7)",
-                    color: "white",
-                    fontWeight: 800,
-                    fontSize: 12,
-                  }}
-                >
-                  V
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Status change events */}
-        {ticket.status !== "Open" && (
-          <div className={s.sysEvent}>
-            <span>
-              Status changed to <strong>{ticket.status}</strong> ·{" "}
-              {ticket.updated}
-            </span>
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Reply box */}
-      {!isClosed ? (
-        <form className={s.replyBox} onSubmit={handleSend}>
-          {file && (
-            <div className={s.replyFileChip}>
-              <Paperclip size={12} />
-              <span>{file.name}</span>
-              <button type="button" onClick={() => setFile(null)}>
-                <X size={11} />
-              </button>
-            </div>
-          )}
-          <div className={s.replyInputRow}>
-            <button
-              type="button"
-              className={s.replyAttachBtn}
-              onClick={() => fileRef.current?.click()}
-              title="Attach file"
-            >
-              <Paperclip size={17} />
-            </button>
-            <input
-              type="file"
-              ref={fileRef}
-              style={{ display: "none" }}
-              onChange={(e) => setFile(e.target.files[0] || null)}
-            />
-            <textarea
-              className={s.replyInput}
-              rows={2}
-              placeholder={
-                isClosed ? "This ticket is closed." : "Write a reply..."
-              }
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend(e);
-                }
-              }}
-              disabled={isClosed}
-            />
-            <button
-              type="submit"
-              className={s.sendBtn}
-              disabled={!text.trim() && !file}
-            >
-              <Send size={16} />
-            </button>
-          </div>
-          <p className={s.replyHint}>
-            Press Enter to send · Shift+Enter for new line
-          </p>
-        </form>
-      ) : (
-        <div className={s.closedBanner}>
-          <CheckCircle2 size={16} /> This ticket is closed.{" "}
-          <button className={s.reopenBtn} onClick={() => onAdvance(ticket.id)}>
-            Reopen
-          </button>
-        </div>
-      )}
-
-      {/* Confirm close modal */}
-      {confirmClose && (
-        <div className={p.modalBackdrop} onClick={() => setConfirmClose(false)}>
-          <div
-            className={`${p.modal} ${p.modalSm}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className={p.modalBody}
-              style={{
-                alignItems: "center",
-                textAlign: "center",
-                paddingTop: 28,
-                paddingBottom: 28,
-              }}
-            >
-              <div className={p.confirmIcon}>
-                <XCircle size={22} />
-              </div>
-              <h3 className={p.modalTitle} style={{ marginTop: 10 }}>
-                Close Ticket?
-              </h3>
-              <p className={p.confirmText}>
-                Are you sure you want to close <strong>{ticket.id}</strong>? You
-                can still reopen it later.
-              </p>
-            </div>
-            <div className={p.modalFoot} style={{ justifyContent: "center" }}>
-              <button
-                className={`${p.btn} ${p.btnOutline}`}
-                onClick={() => setConfirmClose(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className={`${p.btn} ${p.btnDanger}`}
-                onClick={() => {
-                  onResolve(ticket.id);
-                  setConfirmClose(false);
-                }}
-              >
-                <XCircle size={14} /> Close Ticket
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
-
-/* ─── Main page ──────────────────────────────────── */
-let nextId = 1025;
 
 export default function VendorTicketsPage() {
   const [tickets, setTickets] = useState([]);
-  const [view, setView] = useState("list"); // "list" | "detail"
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState("list");
   const [selected, setSelected] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [replyText, setReplyText] = useState("");
+  const [replyFile, setReplyFile] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [priorityFilter, setPriorityFilter] = useState("All");
-  const [sortDir, setSortDir] = useState("desc"); // "desc" | "asc"
+  
+  const fileRef = useRef(null);
+  const bottomRef = useRef(null);
 
   useEffect(() => {
-    // TODO: wire to real API endpoint — Phase X
-    setTickets([]);
-    setLoading(false);
+    fetchTickets();
   }, []);
 
-  /* Derived counts */
-  const counts = { Open: 0, "In Progress": 0, Resolved: 0, Closed: 0 };
-  tickets.forEach((t) => {
-    counts[t.status] = (counts[t.status] || 0) + 1;
-  });
+  useEffect(() => {
+    if (view === "detail") {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [selected?.messages, view]);
 
-  /* Filter + sort */
-  const filtered = tickets
-    .filter((t) => {
-      const ms =
-        t.subject.toLowerCase().includes(search.toLowerCase()) ||
-        t.id.toLowerCase().includes(search.toLowerCase());
-      const mv = statusFilter === "All" || t.status === statusFilter;
-      const mp = priorityFilter === "All" || t.priority === priorityFilter;
-      return ms && mv && mp;
-    })
-    .sort((a, b) =>
-      sortDir === "desc" ? b.id.localeCompare(a.id) : a.id.localeCompare(b.id),
-    );
-
-  /* Actions */
-  const openDetail = (ticket) => {
-    setSelected(ticket);
-    setView("detail");
+  const fetchTickets = async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.get("/vendors/support/tickets");
+      setTickets((res.data?.data || res.data || []).map(mapTicket));
+    } catch (err) {
+      console.error("Failed to fetch tickets", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleReply = (id, text, attachment) => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const msg = {
-      from: "vendor",
-      text,
-      time: `${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${timeStr}`,
-      attachment,
-    };
-    const updated = tickets.map((t) =>
-      t.id === id
-        ? { ...t, messages: [...t.messages, msg], updated: "Just now" }
-        : t,
-    );
-    setTickets(updated);
-    setSelected(updated.find((t) => t.id === id));
+  const handleCreateTicket = async (e) => {
+    e.preventDefault();
+    const subject = e.target.subject.value;
+    const type = e.target.type.value;
+    const description = e.target.description.value;
+    const file = e.target.file.files[0];
+
+    setSending(true);
+    setError(null);
+    try {
+      const res = await apiClient.post("/vendors/support/tickets", {
+        subject,
+        type,
+        description,
+      });
+
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadRes = await multipartClient.post(
+          `/vendors/support/tickets/${res.data.id}/messages/attachments`,
+          formData
+        );
+        const url = uploadRes.data?.url;
+        if (url) {
+          await apiClient.post(`/vendors/support/tickets/${res.data.id}/messages`, {
+            content: `(Attachment: ${url})`,
+          });
+        }
+      }
+
+      setShowCreate(false);
+      await fetchTickets();
+      // Open the new ticket
+      const newTkRes = await apiClient.get(`/vendors/support/tickets/${res.data.id}`);
+      setSelected(mapTicket(newTkRes.data));
+      setView("detail");
+    } catch (err) {
+      setError(err?.response?.data?.message || "Failed to create ticket.");
+    } finally {
+      setSending(false);
+    }
   };
 
-  const handleAdvance = (id) => {
-    const updated = tickets.map((t) => {
-      if (t.id !== id) return t;
-      const next = STATUS_NEXT[t.status] || t.status;
-      return { ...t, status: next, updated: "Just now" };
-    });
-    setTickets(updated);
-    const fresh = updated.find((t) => t.id === id);
-    setSelected(fresh);
+  const handleReply = async (e) => {
+    e.preventDefault();
+    if (!replyText.trim() && !replyFile) return;
+
+    setSending(true);
+    try {
+      let content = replyText;
+      if (replyFile) {
+        const formData = new FormData();
+        formData.append("file", replyFile);
+        const uploadRes = await multipartClient.post(
+          `/vendors/support/tickets/${selected.id}/messages/attachments`,
+          formData
+        );
+        const url = uploadRes.data?.url;
+        if (url) {
+          content = content ? `${content}\n(Attachment: ${url})` : `(Attachment: ${url})`;
+        }
+      }
+
+      await apiClient.post(`/vendors/support/tickets/${selected.id}/messages`, {
+        content: content || "Message sent",
+      });
+
+      setReplyText("");
+      setReplyFile(null);
+      const updatedRes = await apiClient.get(`/vendors/support/tickets/${selected.id}`);
+      setSelected(mapTicket(updatedRes.data));
+    } catch (err) {
+      console.error("Failed to reply", err);
+    } finally {
+      setSending(false);
+    }
   };
 
-  const handleClose = (id) => {
-    const updated = tickets.map((t) =>
-      t.id === id ? { ...t, status: "Closed", updated: "Just now" } : t,
-    );
-    setTickets(updated);
-    setSelected(updated.find((t) => t.id === id));
+  const handleCloseTicket = async (id) => {
+    if (!window.confirm("Are you sure you want to close this ticket?")) return;
+    try {
+      await apiClient.patch(`/vendors/support/tickets/${id}/close`);
+      const updatedRes = await apiClient.get(`/vendors/support/tickets/${id}`);
+      setSelected(mapTicket(updatedRes.data));
+      setTickets(prev => prev.map(t => t.id === id ? mapTicket(updatedRes.data) : t));
+    } catch (err) {
+      console.error("Failed to close ticket", err);
+    }
   };
 
-  const handleCreate = (form) => {
-    const newTicket = {
-      id: `TKT-${nextId++}`,
-      subject: form.subject,
-      category: form.category,
-      priority: form.priority,
-      status: "Open",
-      created: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-      updated: "Just now",
-      messages: [
-        {
-          from: "vendor",
-          text: form.description,
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          attachment: form.file
-            ? {
-                name: form.file.name,
-                type: form.file.type?.startsWith("image") ? "image" : "file",
-              }
-            : null,
-        },
-      ],
-    };
-    setTickets([newTicket, ...tickets]);
-    setShowCreate(false);
-    openDetail(newTicket);
+  const handleCancelTicket = async (id) => {
+    if (!window.confirm("Are you sure you want to cancel this ticket?")) return;
+    try {
+      await apiClient.patch(`/vendors/support/tickets/${id}/cancel`);
+      const updatedRes = await apiClient.get(`/vendors/support/tickets/${id}`);
+      setSelected(mapTicket(updatedRes.data));
+      setTickets(prev => prev.map(t => t.id === id ? mapTicket(updatedRes.data) : t));
+    } catch (err) {
+      console.error("Failed to cancel ticket", err);
+    }
   };
 
-  const addBtn = (
-    <button
-      className={`${p.btn} ${p.btnPrimary}`}
-      onClick={() => setShowCreate(true)}
-    >
-      <Plus size={15} /> New Ticket
-    </button>
+  const filteredTickets = tickets.filter(t => 
+    t.subject.toLowerCase().includes(search.toLowerCase()) ||
+    t.id.toLowerCase().includes(search.toLowerCase())
   );
 
-  /* ── Detail view ── */
-  if (view === "detail" && selected) {
-    return (
-      <VendorLayout pageTitle="" breadcrumb="Support">
-        <TicketDetail
-          ticket={selected}
-          onBack={() => setView("list")}
-          onReply={handleReply}
-          onAdvance={handleAdvance}
-          onResolve={handleClose}
-        />
-        {showCreate && (
-          <CreateTicketModal
-            onClose={() => setShowCreate(false)}
-            onSubmit={handleCreate}
-          />
-        )}
-      </VendorLayout>
-    );
-  }
-
-  /* ── List view ── */
   return (
     <VendorLayout
-      pageTitle="Support & Tickets"
-      pageSubtitle="Track and manage all your support requests."
+      pageTitle="Support Center"
+      pageSubtitle="Get help from our technical and business support teams."
       breadcrumb="Support"
-      headerAction={addBtn}
     >
-      {/* Status summary cards */}
-      <div className={s.summaryRow}>
-        {[
-          { label: "Open", color: "#ef4444", bg: "#fee2e2" },
-          { label: "In Progress", color: "#f59e0b", bg: "#fef3c7" },
-          { label: "Resolved", color: "#16a34a", bg: "#dcfce7" },
-          { label: "Closed", color: "#94a3b8", bg: "#f1f5f9" },
-        ].map(({ label, color, bg }) => (
-          <button
-            key={label}
-            className={`${s.summaryCard} ${statusFilter === label ? s.sumActive : ""}`}
-            style={{ "--sum-color": color, "--sum-bg": bg }}
-            onClick={() =>
-              setStatusFilter((prev) => (prev === label ? "All" : label))
-            }
-          >
-            <span className={s.sumCount}>{counts[label] || 0}</span>
-            <span className={s.sumLabel}>{label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Toolbar */}
-      <div className={p.toolbar}>
-        <div className={p.toolbarLeft}>
-          <div className={p.searchBox}>
-            <Search size={14} className={p.searchIcon} />
-            <input
-              className={p.searchInput}
-              placeholder="Search tickets by subject or ID..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <select
-            className={p.filterSelect}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="All">All Status</option>
-            {STATUS_ORDER.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-          <select
-            className={p.filterSelect}
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-          >
-            <option value="All">All Priorities</option>
-            <option>High</option>
-            <option>Medium</option>
-            <option>Low</option>
-          </select>
-        </div>
-        <div className={p.toolbarRight}>
-          <button
-            className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
-            onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
-            title={`Sort: ${sortDir === "desc" ? "Newest first" : "Oldest first"}`}
-          >
-            <ArrowUpDown size={13} /> {sortDir === "desc" ? "Newest" : "Oldest"}
-          </button>
-          <span className={p.pageInfo}>{filtered.length} tickets</span>
-        </div>
-      </div>
-
-      {/* Ticket list */}
-      {loading ? (
-        <TicketSkeleton />
-      ) : filtered.length === 0 ? (
-        <div className={p.tableCard}>
-          <div className={p.emptyState}>
-            <div className={p.emptyIcon}>
-              <MessageSquare size={24} />
+      <div className={p.settingsPanel} style={{ padding: 0, overflow: "hidden", minHeight: 600 }}>
+        {view === "list" ? (
+          <div style={{ padding: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18 }}>Support Tickets</h3>
+                <p style={{ margin: 0, fontSize: 13, color: "var(--vdr-text-muted)" }}>
+                  You have {tickets.length} total tickets.
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 12 }}>
+                <div style={{ position: "relative" }}>
+                   <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--vdr-text-muted)" }} />
+                   <input 
+                    className={p.input} 
+                    style={{ paddingLeft: 32, width: 240, height: 38 }} 
+                    placeholder="Search tickets..." 
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                   />
+                </div>
+                <button 
+                  className={`${p.btn} ${p.btnPrimary}`}
+                  onClick={() => setShowCreate(true)}
+                >
+                  <Plus size={14} /> New Ticket
+                </button>
+              </div>
             </div>
-            <h3 className={p.emptyTitle}>No tickets found</h3>
-            <p className={p.emptyText}>
-              You haven't raised any support tickets yet. Click "New Ticket" to
-              get help from our team.
-            </p>
-            <button
-              className={`${p.btn} ${p.btnPrimary}`}
-              onClick={() => setShowCreate(true)}
-              style={{ marginTop: 8 }}
-            >
-              <Plus size={14} /> Create Your First Ticket
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className={s.ticketList}>
-          {filtered.map((tk) => (
-            <article
-              key={tk.id}
-              className={`${s.ticketCard} ${tk.priority === "High" && tk.status === "Open" ? s.cardHighlight : ""}`}
-              onClick={() => openDetail(tk)}
-            >
-              {tk.priority === "High" && tk.status === "Open" && (
-                <div className={s.urgentStrip}>
-                  <AlertTriangle size={11} /> Urgent
-                </div>
-              )}
-              <div className={s.cardMain}>
-                <div className={s.cardLeft}>
-                  <div className={s.cardTopRow}>
-                    <span className={s.ticketId}>{tk.id}</span>
-                    <PriorityBadge priority={tk.priority} />
-                    <span className={s.catTag}>
-                      <Tag size={10} />
-                      {tk.category}
-                    </span>
-                  </div>
-                  <h3 className={s.ticketSubject}>{tk.subject}</h3>
-                  <div className={s.ticketMeta}>
-                    <span>
-                      <Clock size={11} /> Created {tk.created}
-                    </span>
-                    <span>
-                      <MessageSquare size={11} /> {tk.messages.length} message
-                      {tk.messages.length !== 1 ? "s" : ""}
-                    </span>
-                    <span>Updated {tk.updated}</span>
-                  </div>
-                </div>
-                <div className={s.cardRight}>
-                  <StatusBadge status={tk.status} />
-                  <button
-                    className={s.viewBtn}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openDetail(tk);
+
+            {loading ? (
+              <div style={{ padding: "80px 0", textAlign: "center" }}>
+                <div className={p.spin} style={{ border: "2px solid #ddd", borderTopColor: "var(--vdr-accent)", width: 32, height: 32, borderRadius: "50%", margin: "0 auto" }} />
+              </div>
+            ) : filteredTickets.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "80px 20px" }}>
+                <MessageSquare size={48} style={{ color: "var(--vdr-border)", marginBottom: 16 }} />
+                <h4 style={{ margin: "0 0 8px" }}>No tickets found</h4>
+                <p style={{ color: "var(--vdr-text-muted)", margin: 0, fontSize: 14 }}>
+                  {search ? "Try a different search term." : "Need help? Create a ticket and our team will assist you."}
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {filteredTickets.map(tk => (
+                  <div 
+                    key={tk.id} 
+                    className={p.ticketCard}
+                    style={{
+                      padding: 18,
+                      border: "1px solid var(--vdr-border)",
+                      borderRadius: 14,
+                      cursor: "pointer",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      transition: "all 0.2s",
+                      background: "white"
                     }}
+                    onClick={() => {
+                      setSelected(tk);
+                      setView("detail");
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = "var(--vdr-accent)"}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = "var(--vdr-border)"}
                   >
-                    View <ChevronRight size={13} />
+                    <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                      <div style={{ 
+                        width: 42, 
+                        height: 42, 
+                        borderRadius: 12, 
+                        background: STATUS_CFG[tk.status]?.bg, 
+                        color: STATUS_CFG[tk.status]?.color,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}>
+                        <MessageSquare size={20} />
+                      </div>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, color: "var(--vdr-text-muted)", fontWeight: 600 }}>#{tk.id.slice(0, 8)}</span>
+                          <span style={{ 
+                            fontSize: 10, 
+                            padding: "2px 8px", 
+                            borderRadius: 20, 
+                            background: STATUS_CFG[tk.status]?.bg,
+                            color: STATUS_CFG[tk.status]?.color,
+                            fontWeight: 700,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.5px"
+                          }}>
+                            {getStatusLabel(tk.status)}
+                          </span>
+                        </div>
+                        <h4 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>{tk.subject}</h4>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12, color: "var(--vdr-text-muted)" }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <Tag size={12} /> {tk.category}
+                          </span>
+                          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <Clock size={12} /> {tk.updated}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronRight size={18} style={{ color: "var(--vdr-text-muted)" }} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Ticket Detail View */
+          <div style={{ height: 700, display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--vdr-border)", display: "flex", alignItems: "center", gap: 16, background: "white" }}>
+              <button 
+                onClick={() => setView("list")} 
+                style={{ background: "#f1f5f9", border: "none", cursor: "pointer", padding: 8, borderRadius: 10, display: "flex" }}
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                   <h4 style={{ margin: 0, fontSize: 16 }}>{selected.subject}</h4>
+                   <span style={{ 
+                      fontSize: 10, 
+                      padding: "2px 8px", 
+                      borderRadius: 20, 
+                      background: STATUS_CFG[selected.status]?.bg,
+                      color: STATUS_CFG[selected.status]?.color,
+                      fontWeight: 700
+                    }}>
+                      {getStatusLabel(selected.status)}
+                    </span>
+                </div>
+                <span style={{ fontSize: 12, color: "var(--vdr-text-muted)" }}>Ticket ID: {selected.id}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {selected.status !== "CLOSED" && selected.status !== "CANCELED" && (
+                   <button 
+                    className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
+                    onClick={() => handleCancelTicket(selected.id)}
+                  >
+                    Cancel Ticket
+                  </button>
+                )}
+                {selected.status === "RESOLVED" && (
+                  <button 
+                    className={`${p.btn} ${p.btnPrimary} ${p.btnSm}`}
+                    onClick={() => handleCloseTicket(selected.id)}
+                  >
+                    Accept & Close
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            <div style={{ flex: 1, overflowY: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 20, background: "#f8fafc" }}>
+              <div style={{ textAlign: "center", margin: "10px 0" }}>
+                <span style={{ fontSize: 11, color: "var(--vdr-text-muted)", background: "white", padding: "4px 12px", borderRadius: 20, border: "1px solid var(--vdr-border)" }}>
+                  Ticket created on {selected.created}
+                </span>
+              </div>
+
+              {selected.messages?.map((msg, idx) => {
+                const isMe = msg.from === "me";
+                return (
+                  <div key={idx} style={{ 
+                    alignSelf: isMe ? "flex-end" : "flex-start",
+                    maxWidth: "75%",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: isMe ? "flex-end" : "flex-start"
+                  }}>
+                    <div style={{ 
+                      padding: "12px 16px",
+                      borderRadius: isMe ? "18px 18px 2px 18px" : "18px 18px 18px 2px",
+                      background: isMe ? "var(--vdr-accent)" : "white",
+                      color: isMe ? "white" : "var(--vdr-text)",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.04)",
+                      border: isMe ? "none" : "1px solid var(--vdr-border)",
+                      position: "relative"
+                    }}>
+                      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{msg.text}</p>
+                      {msg.attachment && (
+                        <a 
+                          href={msg.attachment.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{ 
+                            display: "flex", 
+                            alignItems: "center", 
+                            gap: 8, 
+                            marginTop: 8, 
+                            padding: 8, 
+                            background: isMe ? "rgba(255,255,255,0.15)" : "#f1f5f9", 
+                            borderRadius: 8,
+                            textDecoration: "none",
+                            color: "inherit",
+                            fontSize: 12
+                          }}
+                        >
+                          <FileText size={14} />
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{msg.attachment.name}</span>
+                        </a>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 10, color: "var(--vdr-text-muted)", marginTop: 6, padding: "0 4px" }}>
+                      {isMe ? "You" : "Support Agent"} • {msg.time}
+                    </span>
+                  </div>
+                );
+              })}
+              <div ref={bottomRef} />
+            </div>
+
+            {selected.status !== "CLOSED" && selected.status !== "CANCELED" && (
+              <div style={{ padding: 20, borderTop: "1px solid var(--vdr-border)", background: "white" }}>
+                {replyFile && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "#f1f5f9", borderRadius: 8, width: "fit-content", marginBottom: 10, fontSize: 12 }}>
+                    <Paperclip size={12} />
+                    <span>{replyFile.name}</span>
+                    <button onClick={() => setReplyFile(null)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex" }}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
+                  <div style={{ flex: 1, position: "relative" }}>
+                    <textarea 
+                      className={p.textarea} 
+                      style={{ minHeight: 48, maxHeight: 120, paddingRight: 40, paddingTop: 12 }}
+                      placeholder="Write your response..." 
+                      value={replyText}
+                      onChange={e => setReplyText(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleReply(e);
+                        }
+                      }}
+                    />
+                    <button 
+                      onClick={() => fileRef.current?.click()}
+                      style={{ position: "absolute", right: 12, top: 12, background: "none", border: "none", cursor: "pointer", color: "var(--vdr-text-muted)" }}
+                    >
+                      <Paperclip size={18} />
+                    </button>
+                    <input type="file" ref={fileRef} style={{ display: "none" }} onChange={e => setReplyFile(e.target.files[0])} />
+                  </div>
+                  <button 
+                    className={`${p.btn} ${p.btnPrimary}`} 
+                    style={{ height: 48, width: 48, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                    onClick={handleReply}
+                    disabled={(!replyText.trim() && !replyFile) || sending}
+                  >
+                    {sending ? <div className={p.spin} style={{ width: 16, height: 16 }} /> : <Send size={18} />}
                   </button>
                 </div>
+                <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--vdr-text-muted)" }}>
+                  Press Enter to send, Shift+Enter for new line.
+                </p>
               </div>
-            </article>
-          ))}
-        </div>
-      )}
+            )}
+          </div>
+        )}
+      </div>
 
       {showCreate && (
-        <CreateTicketModal
-          onClose={() => setShowCreate(false)}
-          onSubmit={handleCreate}
-        />
+        <div className={p.modalBackdrop} onClick={() => setShowCreate(false)}>
+          <div className={p.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 540 }}>
+            <div className={p.modalHead}>
+              <h2 className={p.modalTitle}>New Support Ticket</h2>
+              <button className={p.modalClose} onClick={() => setShowCreate(false)}><X size={18} /></button>
+            </div>
+            <form onSubmit={handleCreateTicket}>
+              <div className={p.modalBody}>
+                {error && (
+                  <div style={{ padding: 12, background: "#fee2e2", color: "#dc2626", borderRadius: 8, fontSize: 13, marginBottom: 16, display: "flex", gap: 8, alignItems: "center" }}>
+                    <AlertTriangle size={16} /> {error}
+                  </div>
+                )}
+                <div className={p.formGroup}>
+                  <label className={p.label}>Subject</label>
+                  <input name="subject" className={p.input} placeholder="Briefly summarize the issue" required />
+                </div>
+                <div className={p.formRow}>
+                  <div className={p.formGroup}>
+                    <label className={p.label}>Category</label>
+                    <select name="type" className={p.select}>
+                      {TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className={p.formGroup}>
+                  <label className={p.label}>Description</label>
+                  <textarea name="description" className={p.textarea} rows={4} placeholder="Provide details about your problem..." required />
+                </div>
+                <div className={p.formGroup}>
+                  <label className={p.label}>Attachment (Optional)</label>
+                  <div 
+                    onClick={() => document.getElementById('new-tkt-file').click()}
+                    style={{ 
+                      border: "2px dashed var(--vdr-border)", 
+                      borderRadius: 12, 
+                      padding: 20, 
+                      textAlign: "center", 
+                      cursor: "pointer",
+                      background: "#f8fafc"
+                    }}
+                  >
+                    <Paperclip size={24} style={{ color: "var(--vdr-accent)", marginBottom: 8 }} />
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 500 }}>Click to upload a file</p>
+                    <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--vdr-text-muted)" }}>JPG, PNG or PDF up to 5MB</p>
+                    <input id="new-tkt-file" name="file" type="file" style={{ display: "none" }} />
+                  </div>
+                </div>
+              </div>
+              <div className={p.modalFoot}>
+                <button type="button" className={`${p.btn} ${p.btnOutline}`} onClick={() => setShowCreate(false)}>Cancel</button>
+                <button type="submit" className={`${p.btn} ${p.btnPrimary}`} disabled={sending}>
+                  {sending ? "Creating..." : "Create Ticket"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </VendorLayout>
   );

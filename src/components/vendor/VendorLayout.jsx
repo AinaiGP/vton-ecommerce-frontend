@@ -71,9 +71,13 @@ function Sidebar({ collapsed, onToggle, mobileOpen, onClose }) {
         {
           icon: ExternalLink,
           label: "My Storefront",
-          to: "/vendors/storefront/urban-threads",
+          to: `/vendors/storefront/${user?.id}`,
         },
-        { icon: Headphones, label: t("vendor.support"), to: "/vendor/tickets" },
+        {
+          icon: Headphones,
+          label: "Support Center",
+          to: "/vendor/tickets",
+        },
         { icon: Settings, label: t("vendor.settings"), to: "/vendor/settings" },
       ],
     },
@@ -92,7 +96,11 @@ function Sidebar({ collapsed, onToggle, mobileOpen, onClose }) {
         {/* Brand */}
         <div className={s.brand}>
           <div className={s.brandLogo}>
-            <Store size={18} />
+            {user?.logoUrl ? (
+              <img src={user.logoUrl} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} />
+            ) : (
+              <span style={{ fontSize: 14, fontWeight: 700 }}>{(user?.brandName?.[0] || user?.firstName?.[0] || "V").toUpperCase()}</span>
+            )}
           </div>
           {!collapsed && (
             <div className={s.brandText}>
@@ -314,7 +322,13 @@ function Header({ onMenuToggle, dark, onDarkToggle }) {
               setNotifOpen(false);
             }}
           >
-            <div className={s.profileAvat}>{(user?.brandName?.[0] || user?.firstName?.[0] || user?.email?.[0] || "V").toUpperCase()}</div>
+            <div className={s.profileAvat}>
+              {user?.logoUrl ? (
+                <img src={user.logoUrl} alt="Avatar" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} />
+              ) : (
+                (user?.brandName?.[0] || user?.firstName?.[0] || user?.email?.[0] || "V").toUpperCase()
+              )}
+            </div>
             <span className={s.profileName}>{user?.brandName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Vendor'}</span>
             <ChevronDown
               size={13}

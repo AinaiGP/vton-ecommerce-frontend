@@ -87,7 +87,9 @@ export default function ProductCard({ product }) {
       <div className={styles.productInfo}>
         {/* Brand */}
         {product.vendor?.brandName && (
-          <p className={styles.brandName}>{product.vendor.brandName}</p>
+          <Link to={`/vendor/${product.vendor.id}`} className={styles.brandLink}>
+            <p className={styles.brandName}>{product.vendor.brandName}</p>
+          </Link>
         )}
 
         {/* Name */}
