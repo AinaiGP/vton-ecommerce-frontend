@@ -53,24 +53,8 @@ export default function Header() {
   const profileRef = useRef(null); // ref for click-outside
   const fileInputRef = useRef(null); // unused here but kept for consistency
 
-  // Read profile photo reactively — refresh whenever localStorage changes
-  const getPhoto = () =>
-    typeof window !== "undefined"
-      ? localStorage.getItem("ainai_profile_photo")
-      : null;
-  const [profilePhoto, setProfilePhoto] = useState(getPhoto);
-
-  // Sync photo if changed in another tab / profile page
-  useEffect(() => {
-    const sync = () => setProfilePhoto(getPhoto());
-    window.addEventListener("storage", sync);
-    // Also poll briefly in case same-tab update doesn't fire storage event
-    const interval = setInterval(sync, 1000);
-    return () => {
-      window.removeEventListener("storage", sync);
-      clearInterval(interval);
-    };
-  }, []);
+  // Read profile photo reactively from context
+  const profilePhoto = user?.primaryPhotoUrl || user?.photoUrl || null;
 
   // Dark mode
   useEffect(() => {

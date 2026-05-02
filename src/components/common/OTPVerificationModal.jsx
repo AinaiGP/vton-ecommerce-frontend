@@ -15,6 +15,7 @@ export default function OTPVerificationModal({
   email, 
   onVerify, 
   onClose,
+  onResend,
   title = "Verify Security Code",
   subtitle = "We've sent a 6-digit verification code to"
 }) {
@@ -149,7 +150,14 @@ export default function OTPVerificationModal({
           {timer > 0 ? (
             <span className={styles.timer}>Resend in {timer}s</span>
           ) : (
-            <button className={styles.resendBtn} disabled={loading}>
+            <button 
+              className={styles.resendBtn} 
+              disabled={loading}
+              onClick={() => {
+                if (onResend) onResend();
+                setTimer(60);
+              }}
+            >
               Resend Code
             </button>
           )}

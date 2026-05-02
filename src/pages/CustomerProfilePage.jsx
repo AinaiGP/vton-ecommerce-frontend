@@ -415,6 +415,18 @@ export default function CustomerProfilePage() {
     }
   };
 
+  const handleSetPrimaryPhoto = async (photo) => {
+    try {
+      await apiClient.patch(`/customers/profile/photos/${photo.id}/primary`);
+      setPhotoURL(photo.s3Url);
+      updateUser({ primaryPhotoUrl: photo.s3Url });
+      showAlert('success', 'Primary photo updated.');
+      fetchProfile();
+    } catch (err) {
+      showAlert('error', 'Failed to update primary photo.');
+    }
+  };
+
   const getInitials = () => {
     const f = firstName || user?.firstName || "";
     const l = lastName || user?.lastName || "";
@@ -462,6 +474,15 @@ export default function CustomerProfilePage() {
       await logout();
       navigate('/auth');
     }, 1500);
+  };
+
+  const handleResendEmailOTP = async () => {
+    try {
+      await apiClient.patch("/customers/profile", { newEmail: pendingEmail });
+      showAlert("success", "Verification code resent!");
+    } catch (err) {
+      showAlert("error", "Failed to resend verification code.");
+    }
   };
 
   /* Save password */
@@ -1062,16 +1083,24 @@ export default function CustomerProfilePage() {
               {/* Photo grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 16, marginBottom: 20 }}>
                 {profilePhotos.map((photo, idx) => (
-                  <div key={photo.id} style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: idx === 0 ? '2px solid var(--burgundy)' : '2px solid var(--ivory-dark)', aspectRatio: '1' }}>
+                  <div key={photo.id} style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: photo.isPrimary ? '2px solid var(--burgundy)' : '2px solid var(--ivory-dark)', aspectRatio: '1' }}>
                     <img
                       src={photo.s3Url}
                       alt={`Profile photo ${idx + 1}`}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
-                    {idx === 0 && (
+                    {photo.isPrimary && (
                       <span style={{ position: 'absolute', top: 6, left: 6, background: 'var(--burgundy)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99 }}>
                         Primary
                       </span>
+                    )}
+                    {!photo.isPrimary && (
+                      <button
+                        onClick={() => handleSetPrimaryPhoto(photo)}
+                        style={{ position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)', background: 'rgba(255,255,255,0.9)', border: '1px solid var(--ivory-dark)', borderRadius: 20, padding: '4px 8px', fontSize: 10, fontWeight: 600, color: 'var(--charcoal)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        Set Primary
+                      </button>
                     )}
                     <button
                       onClick={() => handleDeletePhoto(photo.id, photo.s3Url)}
@@ -1145,6 +1174,7 @@ export default function CustomerProfilePage() {
           email={pendingEmail}
           onVerify={handleVerifyEmail}
           onClose={() => setShowVerify(false)}
+          onResend={handleResendEmailOTP}
           title="Verify Email Change"
           subtitle="We've sent a 6-digit code to"
         />

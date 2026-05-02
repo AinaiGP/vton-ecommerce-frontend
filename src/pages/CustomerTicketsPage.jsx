@@ -31,8 +31,6 @@ const TICKET_TYPES = [
   { value: "ORDER_DISPUTE", label: "Order Issue" },
 ];
 
-const PRIORITIES = ["LOW", "NORMAL", "HIGH", "URGENT"];
-
 const STATUS_CFG = {
   OPEN: { color: "#ef4444", bg: "#fee2e2", label: "Open" },
   IN_PROGRESS: { color: "#f59e0b", bg: "#fef3c7", label: "In Progress" },
@@ -71,7 +69,6 @@ function mapTicket(ticket) {
     subject: ticket.subject,
     category: getCategoryLabel(ticket.type),
     type: ticket.type,
-    priority: ticket.priority,
     status: ticket.status,
     rawStatus: ticket.status,
     created: new Date(ticket.createdAt).toLocaleDateString("en-US", {
@@ -102,23 +99,6 @@ function StatusBadge({ status }) {
     </span>
   );
 }
-
-function PriorityBadge({ priority }) {
-  let color = "#16a34a"; // LOW
-  if (priority === "NORMAL") color = "#3b82f6";
-  if (priority === "HIGH") color = "#f59e0b";
-  if (priority === "URGENT") color = "#ef4444";
-
-  return (
-    <span
-      className={styles.priorityBadge}
-      style={{ color: color, background: color + "18" }}
-    >
-      {priority}
-    </span>
-  );
-}
-
 function FileAttachment({ att }) {
   if (!att) return null;
   return (
@@ -153,7 +133,6 @@ function CreateModal({ onClose, onSubmit }) {
   const [form, setForm] = useState({
     subject: "",
     type: "GENERAL_SUPPORT",
-    priority: "NORMAL",
     description: "",
     orderId: "",
   });
@@ -199,7 +178,7 @@ function CreateModal({ onClose, onSubmit }) {
               />
             </div>
             <div className={styles.formRow}>
-              <div className={styles.formGroup}>
+              <div className={styles.formGroup} style={{ width: "100%" }}>
                 <label className={styles.label}>Category</label>
                 <select
                   className={styles.select}
@@ -210,20 +189,6 @@ function CreateModal({ onClose, onSubmit }) {
                 >
                   {TICKET_TYPES.map((c) => (
                     <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Priority</label>
-                <select
-                  className={styles.select}
-                  value={form.priority}
-                  onChange={(e) =>
-                    setForm({ ...form, priority: e.target.value })
-                  }
-                >
-                  {PRIORITIES.map((p) => (
-                    <option key={p} value={p}>{p}</option>
                   ))}
                 </select>
               </div>
@@ -867,19 +832,13 @@ export default function CustomerTicketsPage() {
             {filtered.map((tk) => (
               <article
                 key={tk.id}
-                className={`${styles.ticketCard} ${tk.priority === "HIGH" && tk.status === "OPEN" ? styles.cardHighlight : ""}`}
+                className={styles.ticketCard}
                 onClick={() => openDetail(tk)}
               >
-                {tk.priority === "HIGH" && tk.status === "OPEN" && (
-                  <div className={styles.urgentStrip}>
-                    <AlertTriangle size={11} /> Urgent
-                  </div>
-                )}
                 <div className={styles.cardMain}>
                   <div className={styles.cardLeft}>
                     <div className={styles.cardTopRow}>
                       <span className={styles.ticketId}>{tk.id.slice(0, 8)}…</span>
-                      <PriorityBadge priority={tk.priority} />
                       <span className={styles.catTag}>
                         <Tag size={10} />
                         {tk.category}

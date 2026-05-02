@@ -131,6 +131,12 @@ export default function WardrobePage() {
   const [wishlistedRecs, setWishlistedRecs] = useState({});
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
+  
+  // Upload Modal State
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadLabel, setUploadLabel] = useState("");
+  const [uploadCategory, setUploadCategory] = useState("tops");
 
   /* ── Sync outfits to local storage ── */
   useEffect(() => {
@@ -150,7 +156,7 @@ export default function WardrobePage() {
             raw.map((item) => ({
               id: item.id,
               name: item.label || "Unnamed Item",
-              category: "all", // backend doesn't support categories yet
+              category: item.category || "all",
               color: "#e2e8f0",
               url: item.imageUrl,
               _raw: item,
@@ -179,43 +185,54 @@ export default function WardrobePage() {
       : items.filter((i) => i.category === activeCategory);
 
   /* ── Upload ── */
-  const handleFiles = useCallback(async (files) => {
+  const handleFiles = useCallback((files) => {
     if (files.length === 0) return;
-    setUploading(true);
+    const file = files[0];
+    if (!file.type.startsWith("image/")) return;
     
-    // We upload files sequentially to avoid overwhelming the server
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (!file.type.startsWith("image/")) continue;
-      
-      try {
-        const formData = new FormData();
-        formData.append("photo", file);
-        formData.append("label", file.name.replace(/\.[^.]+$/, ""));
-        
-        const res = await multipartClient.post("/customers/wardrobe", formData);
-        
-        const newItem = res.data;
-        if (newItem) {
-          setItems((prev) => [
-            ...prev,
-            {
-              id: newItem.id,
-              name: newItem.label || "Unnamed Item",
-              category: "all",
-              color: "#a8b5a0",
-              url: newItem.imageUrl,
-              isCustom: true,
-            },
-          ]);
-        }
-      } catch (err) {
-        showToast("Failed to upload " + file.name, "error");
-      }
-    }
-    setUploading(false);
-    if (files.length > 0) showToast(`Added ${files.length} item(s) to wardrobe!`);
+    setUploadFile(file);
+    setUploadLabel(file.name.replace(/\.[^.]+$/, ""));
+    setUploadCategory("tops"); // default
+    setUploadModalOpen(true);
   }, []);
+
+  const handleUploadSubmit = async (e) => {
+    e.preventDefault();
+    if (!uploadFile) return;
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("photo", uploadFile);
+      formData.append("label", uploadLabel);
+      formData.append("category", uploadCategory);
+      
+      const res = await multipartClient.post("/customers/wardrobe", formData);
+      
+      const newItem = res.data;
+      if (newItem) {
+        setItems((prev) => [
+          {
+            id: newItem.id,
+            name: newItem.label || "Unnamed Item",
+            category: newItem.category || "all",
+            color: "#a8b5a0",
+            url: newItem.imageUrl,
+            isCustom: true,
+          },
+          ...prev,
+        ]);
+      }
+      showToast("Item added to wardrobe!");
+      setUploadModalOpen(false);
+    } catch (err) {
+      showToast("Failed to upload item", "error");
+    } finally {
+      setUploading(false);
+      setUploadFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const onDrop = (e) => {
     e.preventDefault();
@@ -316,6 +333,84 @@ export default function WardrobePage() {
           {toast.type === "success" && <Check size={15} />}
           {toast.type === "error" && <X size={15} />}
           {toast.msg}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════
+          UPLOAD MODAL
+      ═══════════════════════════════════ */}
+      {uploadModalOpen && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>Add Wardrobe Item</h3>
+              <button
+                className={styles.modalClose}
+                onClick={() => {
+                  setUploadModalOpen(false);
+                  setUploadFile(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form className={styles.modalBody} onSubmit={handleUploadSubmit}>
+              {uploadFile && (
+                <div style={{ marginBottom: "16px", borderRadius: "8px", overflow: "hidden", aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--ivory-dark)" }}>
+                  <img
+                    src={URL.createObjectURL(uploadFile)}
+                    alt="Preview"
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                </div>
+              )}
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Item Name</label>
+                <input
+                  type="text"
+                  className={styles.input}
+                  value={uploadLabel}
+                  onChange={(e) => setUploadLabel(e.target.value)}
+                  placeholder="e.g. Vintage Denim Jacket"
+                  required
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Category</label>
+                <select
+                  className={styles.select}
+                  value={uploadCategory}
+                  onChange={(e) => setUploadCategory(e.target.value)}
+                >
+                  {CATEGORIES.filter(c => c.id !== "all").map(c => (
+                    <option key={c.id} value={c.id}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className={styles.modalActions}>
+                <button
+                  type="button"
+                  className={styles.modalCancel}
+                  onClick={() => {
+                    setUploadModalOpen(false);
+                    setUploadFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  disabled={uploading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={styles.modalSave}
+                  disabled={uploading}
+                >
+                  {uploading ? "Uploading..." : "Save Item"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

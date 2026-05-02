@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Mail, ArrowLeft, CheckCircle, Eye, EyeOff, Lock, KeyRound, ShieldCheck } from "lucide-react";
 import AinaiLogo from "../components/common/AinaiLogo";
@@ -101,7 +101,16 @@ function StepVerify({ email, onNext, onResend }) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(60);
   const inputRefs = [useRef(null), useRef(null), useRef(null), useRef(null), useRef(null), useRef(null)];
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const handleKey = (index, e) => {
     if (e.key === 'Backspace') {
@@ -194,8 +203,22 @@ function StepVerify({ email, onNext, onResend }) {
 
       <p className={styles.switchPrompt}>
         Didn't get the code?{' '}
-        <button className={styles.switchLink} style={{ background: 'none', border: 'none', padding: 0 }} onClick={onResend}>
-          Click to resend
+        <button
+          className={styles.switchLink}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            opacity: resendCooldown > 0 ? 0.5 : 1,
+            cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer'
+          }}
+          disabled={resendCooldown > 0}
+          onClick={() => {
+            onResend();
+            setResendCooldown(60);
+          }}
+        >
+          {resendCooldown > 0 ? `Resend in 0:${String(resendCooldown).padStart(2, '0')}` : 'Click to resend'}
         </button>
       </p>
     </div>

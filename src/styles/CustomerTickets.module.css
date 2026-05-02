@@ -366,12 +366,19 @@
   flex-direction: column;
   gap: 16px;
 }
+.modal form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 .modalFoot {
   padding: 16px 24px;
   border-top: 1px solid var(--ivory-dark);
   display: flex;
   gap: 10px;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 /* Form */
