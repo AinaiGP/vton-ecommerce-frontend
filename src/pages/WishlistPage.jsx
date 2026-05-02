@@ -6,6 +6,7 @@ import Footer from "../components/common/Footer";
 import styles from "../styles/WishlistPage.module.css";
 import apiClient from "../utils/apiClient";
 import { useCart } from "../context/CartContext";
+import { formatPrice } from "../utils/productHelpers";
 
 export default function WishlistPage() {
   const [items, setItems] = useState([]);
@@ -20,15 +21,18 @@ export default function WishlistPage() {
   const fetchWishlist = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get('/customers/wishlist?limit=100');
-      const mapped = res.data.data.map(w => ({
+      const res = await apiClient.get("/customers/wishlist?limit=100");
+      const mapped = res.data.data.map((w) => ({
         id: w.variantId,
         productId: w.productId,
         name: w.product?.name || "Product",
         price: w.variant?.price || w.product?.basePrice || 0,
-        image: w.variant?.images?.[0]?.s3Url || w.product?.images?.[0]?.s3Url || '/placeholder.png',
-        category: w.product?.category?.name || 'Category',
-        badge: w.product?.tags?.[0] || '',
+        image:
+          w.variant?.images?.[0]?.s3Url ||
+          w.product?.images?.[0]?.s3Url ||
+          "/placeholder.png",
+        category: w.product?.category?.name || "Category",
+        badge: w.product?.tags?.[0] || "",
       }));
       setItems(mapped);
     } catch (err) {
@@ -92,7 +96,11 @@ export default function WishlistPage() {
             </p>
           </div>
           {items.length > 0 && (
-            <button className={styles.clearBtn} onClick={clearAll} disabled={loading}>
+            <button
+              className={styles.clearBtn}
+              onClick={clearAll}
+              disabled={loading}
+            >
               Clear all
             </button>
           )}
@@ -100,7 +108,11 @@ export default function WishlistPage() {
 
         {loading && items.length === 0 ? (
           <div style={{ padding: "40px", textAlign: "center" }}>
-            <Loader2 className={styles.spin} size={32} style={{ margin: "auto", color: "var(--burgundy)" }} />
+            <Loader2
+              className={styles.spin}
+              size={32}
+              style={{ margin: "auto", color: "var(--burgundy)" }}
+            />
           </div>
         ) : items.length === 0 ? (
           <div className={styles.empty}>
@@ -108,7 +120,7 @@ export default function WishlistPage() {
               <Heart size={64} strokeWidth={1} />
             </div>
             <h2>Your wishlist is empty</h2>
-            <p>Save items you love to come back to them later.</p>
+            <p>Start browsing to save items.</p>
             <Link to="/browse" className={styles.browseCta}>
               Start Exploring
             </Link>
@@ -117,13 +129,18 @@ export default function WishlistPage() {
           <div className={styles.grid}>
             {items.map((item) => (
               <div key={item.id} className={styles.card}>
-                <Link to={`/product/${item.productId}`} className={styles.imgWrap}>
+                <Link
+                  to={`/product/${item.productId}`}
+                  className={styles.imgWrap}
+                >
                   <img
                     src={item.image}
                     alt={item.name}
                     className={styles.img}
                   />
-                  {item.badge && <span className={styles.badge}>{item.badge}</span>}
+                  {item.badge && (
+                    <span className={styles.badge}>{item.badge}</span>
+                  )}
                   <button
                     className={styles.removeBtn}
                     onClick={(e) => {
@@ -137,7 +154,7 @@ export default function WishlistPage() {
                 <div className={styles.info}>
                   <span className={styles.cat}>{item.category}</span>
                   <h3 className={styles.name}>{item.name}</h3>
-                  <p className={styles.price}>EGP {item.price.toFixed(2)}</p>
+                  <p className={styles.price}>{formatPrice(item.price)}</p>
                   <div className={styles.cardActions}>
                     <button
                       className={`${styles.cartBtn} ${added[item.id] ? styles.cartBtnAdded : ""}`}

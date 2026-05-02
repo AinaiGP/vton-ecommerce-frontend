@@ -36,58 +36,12 @@ const CATEGORIES = [
   { id: "accessories", label: "Accessories", icon: <Watch size={16} /> },
 ];
 
-const SEED_OUTFITS = [
-  {
-    id: 1,
-    name: "Office Chic",
-    items: [], // will be empty since real items have UUIDs, but we'll leave it as a placeholder
-    cover:
-      "https://images.unsplash.com/photo-1487222477894-8943e31ef7b2?w=300&h=400&fit=crop&q=80",
-  },
-  {
-    id: 2,
-    name: "Weekend Casual",
-    items: [],
-    cover:
-      "https://images.unsplash.com/photo-1529139574466-a303027614b7?w=300&h=400&fit=crop&q=80",
-  },
-];
-
-const AI_RECS = [
-  {
-    id: 101,
-    name: "Ivory Silk Blouse",
-    price: 199,
-    match: 96,
-    img: "https://images.unsplash.com/photo-1554568218-0f1715e72254?w=300&h=400&fit=crop&q=80",
-  },
-  {
-    id: 102,
-    name: "Camel Wide-Leg Pants",
-    price: 249,
-    match: 91,
-    img: "https://images.unsplash.com/photo-1594938298603-c8148c4b4f8f?w=300&h=400&fit=crop&q=80",
-  },
-  {
-    id: 103,
-    name: "Burgundy Midi Skirt",
-    price: 179,
-    match: 88,
-    img: "https://images.unsplash.com/photo-1583496661160-fb5886a0aaaa?w=300&h=400&fit=crop&q=80",
-  },
-  {
-    id: 104,
-    name: "Gold Drop Earrings",
-    price: 89,
-    match: 94,
-    img: "https://images.unsplash.com/photo-1630350276620-d30b91a09fa8?w=300&h=400&fit=crop&q=80",
-  },
-];
-
 /* ─── Loading Spinner ─── */
 function LoadingSpinner() {
   return (
-    <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
+    <div
+      style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}
+    >
       <div
         style={{
           width: 36,
@@ -109,14 +63,15 @@ export default function WardrobePage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [items, setItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(true);
-  
+  const [allCategories, setAllCategories] = useState([]);
+
   // Try to load outfits from local storage
   const [outfits, setOutfits] = useState(() => {
     try {
       const saved = localStorage.getItem("ainai_outfits");
-      return saved ? JSON.parse(saved) : SEED_OUTFITS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return SEED_OUTFITS;
+      return [];
     }
   });
 
@@ -131,7 +86,7 @@ export default function WardrobePage() {
   const [wishlistedRecs, setWishlistedRecs] = useState({});
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
-  
+
   // Upload Modal State
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
@@ -143,13 +98,25 @@ export default function WardrobePage() {
     localStorage.setItem("ainai_outfits", JSON.stringify(outfits));
   }, [outfits]);
 
+  /* ── Fetch Categories ── */
+  useEffect(() => {
+    apiClient
+      .get("/categories")
+      .then((res) => {
+        setAllCategories(res.data);
+      })
+      .catch(console.error);
+  }, []);
+
   /* ── Fetch Wardrobe Items ── */
   useEffect(() => {
     let cancelled = false;
     async function fetchWardrobe() {
       setLoadingItems(true);
       try {
-        const res = await apiClient.get("/customers/wardrobe", { params: { limit: 100, page: 1 } });
+        const res = await apiClient.get("/customers/wardrobe", {
+          params: { limit: 100, page: 1 },
+        });
         if (!cancelled) {
           const raw = res.data?.data || res.data || [];
           setItems(
@@ -160,7 +127,7 @@ export default function WardrobePage() {
               color: "#e2e8f0",
               url: item.imageUrl,
               _raw: item,
-            }))
+            })),
           );
         }
       } catch (err) {
@@ -170,13 +137,18 @@ export default function WardrobePage() {
       }
     }
     fetchWardrobe();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /* helpers */
   const showToast = (msg, type = "success") => {
     setToast({ msg, type, id: Date.now() });
-    setTimeout(() => setToast((prev) => (prev?.id === toast?.id ? null : prev)), 2800);
+    setTimeout(
+      () => setToast((prev) => (prev?.id === toast?.id ? null : prev)),
+      2800,
+    );
   };
 
   const filteredItems =
@@ -184,12 +156,25 @@ export default function WardrobePage() {
       ? items
       : items.filter((i) => i.category === activeCategory);
 
+  const visibleCategories = [
+    { id: "all", label: "All Items", icon: <LayoutGrid size={16} /> },
+    ...allCategories
+      .filter((cat) => items.some((item) => item.category === cat.id))
+      .map((cat) => ({
+        id: cat.id,
+        label: cat.name,
+        icon: CATEGORIES.find(
+          (c) => c.id === cat.name.toLowerCase() || c.label === cat.name,
+        )?.icon || <Package size={16} />,
+      })),
+  ];
+
   /* ── Upload ── */
   const handleFiles = useCallback((files) => {
     if (files.length === 0) return;
     const file = files[0];
     if (!file.type.startsWith("image/")) return;
-    
+
     setUploadFile(file);
     setUploadLabel(file.name.replace(/\.[^.]+$/, ""));
     setUploadCategory("tops"); // default
@@ -206,9 +191,9 @@ export default function WardrobePage() {
       formData.append("photo", uploadFile);
       formData.append("label", uploadLabel);
       formData.append("category", uploadCategory);
-      
+
       const res = await multipartClient.post("/customers/wardrobe", formData);
-      
+
       const newItem = res.data;
       if (newItem) {
         setItems((prev) => [
@@ -279,7 +264,7 @@ export default function WardrobePage() {
     }
     const name = outfitName.trim() || `Outfit ${outfits.length + 1}`;
     const coverItem = items.find((i) => i.id === selectedForOutfit[0]);
-    
+
     setOutfits((prev) => [
       ...prev,
       {
@@ -357,11 +342,26 @@ export default function WardrobePage() {
             </div>
             <form className={styles.modalBody} onSubmit={handleUploadSubmit}>
               {uploadFile && (
-                <div style={{ marginBottom: "16px", borderRadius: "8px", overflow: "hidden", aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--ivory-dark)" }}>
+                <div
+                  style={{
+                    marginBottom: "16px",
+                    borderRadius: "8px",
+                    overflow: "hidden",
+                    aspectRatio: "1",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "var(--ivory-dark)",
+                  }}
+                >
                   <img
                     src={URL.createObjectURL(uploadFile)}
                     alt="Preview"
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
                   />
                 </div>
               )}
@@ -383,8 +383,10 @@ export default function WardrobePage() {
                   value={uploadCategory}
                   onChange={(e) => setUploadCategory(e.target.value)}
                 >
-                  {CATEGORIES.filter(c => c.id !== "all").map(c => (
-                    <option key={c.id} value={c.id}>{c.label}</option>
+                  {allCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -434,7 +436,21 @@ export default function WardrobePage() {
             disabled={uploading}
             style={uploading ? { opacity: 0.7, cursor: "not-allowed" } : {}}
           >
-            {uploading ? <div className={styles.spinner} style={{width: 14, height: 14, border: '2px solid white', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite'}}></div> : <Upload size={16} />} 
+            {uploading ? (
+              <div
+                className={styles.spinner}
+                style={{
+                  width: 14,
+                  height: 14,
+                  border: "2px solid white",
+                  borderTop: "2px solid transparent",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                }}
+              ></div>
+            ) : (
+              <Upload size={16} />
+            )}
             {uploading ? "Uploading..." : "Upload Clothes"}
           </button>
           <input
@@ -502,7 +518,7 @@ export default function WardrobePage() {
 
             {/* Category Filter */}
             <div className={styles.categoryBar}>
-              {CATEGORIES.map((cat) => (
+              {visibleCategories.map((cat) => (
                 <button
                   key={cat.id}
                   className={`${styles.catBtn} ${activeCategory === cat.id ? styles.catBtnActive : ""}`}
@@ -527,7 +543,8 @@ export default function WardrobePage() {
                 <Shirt size={56} strokeWidth={1} className={styles.emptyIcon} />
                 <h3>
                   No items in{" "}
-                  {CATEGORIES.find((c) => c.id === activeCategory)?.label}
+                  {visibleCategories.find((c) => c.id === activeCategory)
+                    ?.label || "this category"}
                 </h3>
                 <p>
                   Upload photos of your clothes to start building your wardrobe.
@@ -544,7 +561,8 @@ export default function WardrobePage() {
                         className={styles.cardImage}
                       />
                       <span className={styles.cardCatBadge}>
-                        {CATEGORIES.find((c) => c.id === item.category)?.label}
+                        {allCategories.find((c) => c.id === item.category)
+                          ?.name || "Other"}
                       </span>
                       <div className={styles.cardOverlay}>
                         <button
@@ -605,7 +623,9 @@ export default function WardrobePage() {
                 <div
                   className={styles.addCard}
                   onClick={() => !uploading && fileInputRef.current?.click()}
-                  style={uploading ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+                  style={
+                    uploading ? { opacity: 0.6, cursor: "not-allowed" } : {}
+                  }
                 >
                   <Plus size={32} />
                   <span>Add Item</span>
@@ -633,7 +653,7 @@ export default function WardrobePage() {
 
                 {/* Category filter inside builder */}
                 <div className={styles.categoryBarCompact}>
-                  {CATEGORIES.map((cat) => (
+                  {visibleCategories.map((cat) => (
                     <button
                       key={cat.id}
                       className={`${styles.catBtnSm} ${activeCategory === cat.id ? styles.catBtnSmActive : ""}`}
@@ -777,7 +797,10 @@ export default function WardrobePage() {
                     <div key={outfit.id} className={styles.outfitCard}>
                       <div className={styles.outfitCover}>
                         <img
-                          src={outfit.cover || "https://images.unsplash.com/photo-1529139574466-a303027614b7?w=300&h=400&fit=crop&q=80"}
+                          src={
+                            outfit.cover ||
+                            "https://images.unsplash.com/photo-1529139574466-a303027614b7?w=300&h=400&fit=crop&q=80"
+                          }
                           alt={outfit.name}
                           className={styles.outfitCoverImg}
                         />
@@ -862,117 +885,15 @@ export default function WardrobePage() {
         ═══════════════════════════════════ */}
         {tab === "ai" && (
           <div className={styles.tabContent}>
-            <div className={styles.aiHeader}>
-              <div className={styles.aiHeaderText}>
-                <h2 className={styles.sectionHeading}>
-                  <Sparkles size={20} /> AI Style Picks
-                </h2>
-                <p className={styles.aiSubtitle}>
-                  Based on your {items.length}-item wardrobe, our AI recommends
-                  these store pieces to elevate your style.
-                </p>
-              </div>
-              <div className={styles.aiMatchBadge}>
-                <Star size={14} /> Personalized for you
-              </div>
+            <div className={styles.empty}>
+              <Sparkles
+                size={56}
+                strokeWidth={1}
+                className={styles.emptyIcon}
+              />
+              <h3>AI Picks Coming Soon</h3>
+              <p>We're building an intelligent stylist just for you.</p>
             </div>
-
-            <div className={styles.aiGrid}>
-              {AI_RECS.map((rec) => (
-                <div key={rec.id} className={styles.aiCard}>
-                  <div className={styles.aiImgWrap}>
-                    <img
-                      src={rec.img}
-                      alt={rec.name}
-                      className={styles.aiImg}
-                    />
-                    <div className={styles.aiMatchLabel}>
-                      <Sparkles size={12} /> {rec.match}% match
-                    </div>
-                    <button
-                      className={`${styles.wishlistBtn} ${wishlistedRecs[rec.id] ? styles.wishlistBtnActive : ""}`}
-                      onClick={() => toggleWishlistRec(rec.id)}
-                    >
-                      <Heart
-                        size={16}
-                        fill={wishlistedRecs[rec.id] ? "currentColor" : "none"}
-                      />
-                    </button>
-                  </div>
-                  <div className={styles.aiInfo}>
-                    <h3 className={styles.aiName}>{rec.name}</h3>
-                    <p className={styles.aiPrice}>EGP {rec.price.toFixed(0)}</p>
-                    <div className={styles.aiCardActions}>
-                      <Link
-                        to={`/product/${rec.id}`}
-                        className={styles.aiViewBtn}
-                      >
-                        View Product
-                      </Link>
-                      <Link to="/ai-try-on" className={styles.aiTryBtn}>
-                        <Eye size={14} /> Try On
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Combo suggestions */}
-            {items.length > 2 && (
-            <div className={styles.comboSection}>
-              <h3 className={styles.comboTitle}>
-                <Shuffle size={18} /> Outfit Combinations from Your Wardrobe
-              </h3>
-              <div className={styles.comboGrid}>
-                {[
-                  {
-                    label: "Day at Work",
-                    pieces: items.slice(0, 3).map(i => i.id),
-                    desc: "Crisp, professional & polished",
-                  },
-                  {
-                    label: "Evening Out",
-                    pieces: items.slice(Math.max(0, items.length - 3)).map(i => i.id),
-                    desc: "Elegant & effortlessly chic",
-                  },
-                ].map((combo, idx) => {
-                  const comboItems = combo.pieces
-                    .map((id) => items.find((i) => i.id === id))
-                    .filter(Boolean);
-                  if (comboItems.length === 0) return null;
-                  return (
-                    <div key={idx} className={styles.comboCard}>
-                      <div className={styles.comboThumbs}>
-                        {comboItems.map((item) => (
-                          <img
-                            key={item.id}
-                            src={item.url}
-                            alt={item.name}
-                            className={styles.comboThumb}
-                          />
-                        ))}
-                      </div>
-                      <div className={styles.comboInfo}>
-                        <h4 className={styles.comboLabel}>{combo.label}</h4>
-                        <p className={styles.comboDesc}>{combo.desc}</p>
-                        <button
-                          className={styles.comboSaveBtn}
-                          onClick={() => {
-                            setSelectedForOutfit(combo.pieces);
-                            setOutfitName(combo.label);
-                            setTab("builder");
-                          }}
-                        >
-                          <Plus size={13} /> Use in Builder
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            )}
           </div>
         )}
       </main>

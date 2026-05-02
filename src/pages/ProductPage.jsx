@@ -50,10 +50,10 @@ export default function ProductPage() {
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
-  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [wishlistItems, setWishlistItems] = useState([]);
   const [vtonOpen, setVtonOpen] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
-  const [cartMessage, setCartMessage] = useState('');
+  const [cartMessage, setCartMessage] = useState("");
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
@@ -87,6 +87,15 @@ export default function ProductPage() {
 
     fetchProduct();
   }, [id, retryKey]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      apiClient
+        .get("/customers/wishlist?limit=100")
+        .then((res) => setWishlistItems(res.data.data.map((w) => w.variantId)))
+        .catch(console.error);
+    }
+  }, [isAuthenticated]);
 
   const sortedImages = useMemo(() => {
     if (!product?.images?.length) return [];
@@ -140,13 +149,17 @@ export default function ProductPage() {
   const isOutOfStock = hasSelectedVariant && availableQty <= 0;
   const isAddToCartDisabled = !hasSelectedVariant || isOutOfStock;
 
+  const isWishlisted = selectedVariant
+    ? wishlistItems.includes(selectedVariant.id)
+    : false;
+
   const incrementQty = () => {
     const max = Math.min(availableQty, 5);
-    if (quantity < max) setQuantity(prev => prev + 1);
+    if (quantity < max) setQuantity((prev) => prev + 1);
   };
 
   const decrementQty = () => {
-    if (quantity > 1) setQuantity(prev => prev - 1);
+    if (quantity > 1) setQuantity((prev) => prev - 1);
   };
 
   const handleAddToCart = async () => {
@@ -155,23 +168,54 @@ export default function ProductPage() {
     }
 
     setAddingToCart(true);
-    setCartMessage('');
+    setCartMessage("");
     try {
       // POST /cart/items — body from AddToCartDto: { productId, variantId, quantity }
-      await apiClient.post('/cart/items', {
+      await apiClient.post("/cart/items", {
         productId: product.id,
         variantId: selectedVariant.id,
         quantity: quantity,
       });
-      setCartMessage('Added to cart!');
+      setCartMessage("Added to cart!");
       await refreshCartCount();
-      window.setTimeout(() => setCartMessage(''), 2000);
+      window.setTimeout(() => setCartMessage(""), 2000);
     } catch (err) {
-      const msg = err?.response?.data?.message || 'Failed to add to cart.';
+      const msg = err?.response?.data?.message || "Failed to add to cart.";
       setCartMessage(Array.isArray(msg) ? msg[0] : msg);
-      window.setTimeout(() => setCartMessage(''), 3000);
+      window.setTimeout(() => setCartMessage(""), 3000);
     } finally {
       setAddingToCart(false);
+    }
+  };
+
+  const handleWishlistToggle = async () => {
+    if (!isAuthenticated) {
+      navigate("/auth", { state: { from: location } });
+      return;
+    }
+    if (!selectedVariant) return;
+
+    if (isWishlisted) {
+      setWishlistItems((prev) =>
+        prev.filter((vid) => vid !== selectedVariant.id),
+      );
+      try {
+        await apiClient.delete(`/customers/wishlist/${selectedVariant.id}`);
+      } catch (err) {
+        setWishlistItems((prev) => [...prev, selectedVariant.id]); // rollback
+      }
+    } else {
+      setWishlistItems((prev) => [...prev, selectedVariant.id]);
+      try {
+        await apiClient.post("/customers/wishlist", {
+          productId: product.id,
+          variantId: selectedVariant.id,
+        });
+      } catch (err) {
+        setWishlistItems((prev) =>
+          prev.filter((vid) => vid !== selectedVariant.id),
+        ); // rollback
+      }
     }
   };
 
@@ -357,23 +401,25 @@ export default function ProductPage() {
               <div className={styles.quantitySection}>
                 <h4 className={styles.optionLabel}>Quantity</h4>
                 <div className={styles.quantityControl}>
-                  <button 
-                    className={styles.qtyBtn} 
-                    onClick={decrementQty} 
+                  <button
+                    className={styles.qtyBtn}
+                    onClick={decrementQty}
                     disabled={quantity <= 1}
                   >
                     <Minus size={16} />
                   </button>
                   <span className={styles.qtyVal}>{quantity}</span>
-                  <button 
-                    className={styles.qtyBtn} 
-                    onClick={incrementQty} 
+                  <button
+                    className={styles.qtyBtn}
+                    onClick={incrementQty}
                     disabled={quantity >= Math.min(availableQty, 5)}
                   >
                     <Plus size={16} />
                   </button>
                 </div>
-                {quantity >= 5 && <p className={styles.limitNote}>Limit: 5 per item</p>}
+                {quantity >= 5 && (
+                  <p className={styles.limitNote}>Limit: 5 per item</p>
+                )}
               </div>
             )}
 
@@ -384,19 +430,14 @@ export default function ProductPage() {
                 disabled={isAddToCartDisabled || addingToCart}
               >
                 <ShoppingBag size={20} />
-                <span>{addingToCart ? 'Adding...' : 'Add to Cart'}</span>
+                <span>{addingToCart ? "Adding..." : "Add to Cart"}</span>
               </button>
 
               <button
                 className={styles.wishlistButton}
-                onClick={() => {
-                  if (!isAuthenticated) {
-                    navigate("/auth", { state: { from: location } });
-                    return;
-                  }
-                  setIsWishlisted(!isWishlisted);
-                }}
+                onClick={handleWishlistToggle}
                 aria-label="Add to wishlist"
+                disabled={!selectedVariant}
               >
                 <Heart
                   size={22}
@@ -407,10 +448,13 @@ export default function ProductPage() {
             </div>
 
             {cartMessage && (
-              <p className={styles.cartMessage
-                ? `${styles.cartMessage} ${cartMessage.includes('Failed') || cartMessage.includes('Error') ? styles.cartMessageError : ''}`
-                : styles.cartMessageError
-              }>
+              <p
+                className={
+                  styles.cartMessage
+                    ? `${styles.cartMessage} ${cartMessage.includes("Failed") || cartMessage.includes("Error") ? styles.cartMessageError : ""}`
+                    : styles.cartMessageError
+                }
+              >
                 {cartMessage}
               </p>
             )}

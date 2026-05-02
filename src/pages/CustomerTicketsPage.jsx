@@ -34,7 +34,11 @@ const TICKET_TYPES = [
 const STATUS_CFG = {
   OPEN: { color: "#ef4444", bg: "#fee2e2", label: "Open" },
   IN_PROGRESS: { color: "#f59e0b", bg: "#fef3c7", label: "In Progress" },
-  AWAITING_RESPONSE: { color: "#8b5cf6", bg: "#f5f3ff", label: "Waiting for Customer" },
+  AWAITING_RESPONSE: {
+    color: "#8b5cf6",
+    bg: "#f5f3ff",
+    label: "Waiting for Customer",
+  },
   ESCALATED: { color: "#dc2626", bg: "#fff1f2", label: "Escalated to Admin" },
   RESOLVED: { color: "#16a34a", bg: "#dcfce7", label: "Solved" },
   CLOSED: { color: "#94a3b8", bg: "#f1f5f9", label: "Closed" },
@@ -57,7 +61,10 @@ function mapTicket(ticket) {
       from: m.senderRole === "customer" ? "customer" : "support",
       text: m.content,
       time: new Date(m.createdAt).toLocaleString("en-US", {
-        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
       }),
       attachment: m.attachments?.length
         ? { name: m.attachments[0].split("/").pop(), type: "file" }
@@ -72,10 +79,15 @@ function mapTicket(ticket) {
     status: ticket.status,
     rawStatus: ticket.status,
     created: new Date(ticket.createdAt).toLocaleDateString("en-US", {
-      month: "short", day: "numeric", year: "numeric",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     }),
     updated: new Date(ticket.updatedAt).toLocaleString("en-US", {
-      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     }),
     messages,
     _raw: ticket,
@@ -83,7 +95,11 @@ function mapTicket(ticket) {
 }
 
 function StatusBadge({ status }) {
-  const c = STATUS_CFG[status] || { color: "#94a3b8", bg: "#f1f5f9", label: status };
+  const c = STATUS_CFG[status] || {
+    color: "#94a3b8",
+    bg: "#f1f5f9",
+    label: status,
+  };
   return (
     <span className={styles.badge} style={{ background: c.bg, color: c.color }}>
       <span
@@ -112,7 +128,9 @@ function FileAttachment({ att }) {
 /* ─── Loading Spinner ─── */
 function LoadingSpinner() {
   return (
-    <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
+    <div
+      style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}
+    >
       <div
         style={{
           width: 36,
@@ -183,21 +201,19 @@ function CreateModal({ onClose, onSubmit }) {
                 <select
                   className={styles.select}
                   value={form.type}
-                  onChange={(e) =>
-                    setForm({ ...form, type: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, type: e.target.value })}
                 >
                   {TICKET_TYPES.map((c) => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
                   ))}
                 </select>
               </div>
             </div>
             {form.type === "ORDER_DISPUTE" && (
               <div className={styles.formGroup}>
-                <label className={styles.label}>
-                  Related Order ID *
-                </label>
+                <label className={styles.label}>Related Order ID *</label>
                 <input
                   className={styles.input}
                   value={form.orderId}
@@ -267,9 +283,7 @@ function CreateModal({ onClose, onSubmit }) {
                 onChange={(e) => setFile(e.target.files[0] || null)}
               />
             </div>
-            {error && (
-              <p style={{ color: "#dc2626", fontSize: 12 }}>{error}</p>
-            )}
+            {error && <p style={{ color: "#dc2626", fontSize: 12 }}>{error}</p>}
             {form.priority === "HIGH" || form.priority === "URGENT" ? (
               <div className={styles.highCallout}>
                 <AlertTriangle size={15} /> High priority tickets are reviewed
@@ -301,7 +315,7 @@ function CreateModal({ onClose, onSubmit }) {
 }
 
 /* ─── Ticket Detail (Chat) ─── */
-function TicketDetail({ ticket, onBack, onReply, onClose }) {
+function TicketDetail({ ticket, onBack, onReply, onClose, onCancel }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const [sending, setSending] = useState(false);
@@ -326,7 +340,10 @@ function TicketDetail({ ticket, onBack, onReply, onClose }) {
     }
   };
 
-  const isClosed = ticket.status === "CLOSED" || ticket.status === "RESOLVED" || ticket.status === "CANCELED";
+  const isClosed =
+    ticket.status === "CLOSED" ||
+    ticket.status === "RESOLVED" ||
+    ticket.status === "CANCELED";
 
   return (
     <div className={styles.detailShell}>
@@ -343,16 +360,29 @@ function TicketDetail({ ticket, onBack, onReply, onClose }) {
             <Tag size={11} />
             {ticket.category}
           </span>
-          <PriorityBadge priority={ticket.priority} />
           <StatusBadge status={ticket.status} />
         </div>
         {!isClosed && (
-          <button
-            className={`${styles.btn} ${styles.btnDanger} ${styles.btnSm}`}
-            onClick={() => setConfirmClose(true)}
-          >
-            <XCircle size={13} /> Close Ticket
-          </button>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              className={`${styles.btn} ${styles.btnOutline} ${styles.btnSm}`}
+              onClick={() => {
+                if (
+                  window.confirm("Are you sure you want to cancel this ticket?")
+                ) {
+                  onCancel(ticket.id);
+                }
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              className={`${styles.btn} ${styles.btnDanger} ${styles.btnSm}`}
+              onClick={() => setConfirmClose(true)}
+            >
+              <CheckCircle2 size={13} /> Close
+            </button>
+          </div>
         )}
       </div>
 
@@ -550,7 +580,9 @@ export default function CustomerTicketsPage() {
       }
     }
     fetchTickets();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const refetchTickets = async () => {
@@ -583,7 +615,7 @@ export default function CustomerTicketsPage() {
     }
 
     const res = await apiClient.post("/customers/support/tickets", payload);
-    
+
     if (form.file) {
       try {
         const formData = new FormData();
@@ -594,9 +626,12 @@ export default function CustomerTicketsPage() {
         );
         attachmentUrl = uploadRes.data?.url || null;
         if (attachmentUrl) {
-          await apiClient.post(`/customers/support/tickets/${res.data.id}/messages`, {
-            content: `(attachment: ${attachmentUrl})`,
-          });
+          await apiClient.post(
+            `/customers/support/tickets/${res.data.id}/messages`,
+            {
+              content: `(attachment: ${attachmentUrl})`,
+            },
+          );
         }
       } catch (err) {
         console.error("Failed to upload attachment", err);
@@ -607,7 +642,9 @@ export default function CustomerTicketsPage() {
     addToast("Ticket created successfully!");
     await refetchTickets();
     // find newly created ticket to open
-    const newTk = (await apiClient.get(`/customers/support/tickets/${res.data.id}`)).data;
+    const newTk = (
+      await apiClient.get(`/customers/support/tickets/${res.data.id}`)
+    ).data;
     if (newTk) {
       setSelected(mapTicket(newTk));
       setView("detail");
@@ -656,10 +693,27 @@ export default function CustomerTicketsPage() {
     }
   };
 
+  /* ── Cancel ticket ── */
+  const handleCancel = async (id) => {
+    try {
+      await apiClient.patch(`/customers/support/tickets/${id}/cancel`);
+      addToast("Ticket canceled.");
+      const res = await apiClient.get(`/customers/support/tickets/${id}`);
+      const updated = mapTicket(res.data);
+      setSelected(updated);
+      setTickets((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    } catch {
+      addToast("Failed to cancel ticket.", "error");
+    }
+  };
+
   // Limit one active ticket constraint handling
   // Wait, the prompt says: "Requirement: Implement one-active-ticket limit logic using status checks (!CLOSED_STATUSES). UX: 'New Ticket' button must be conditionally disabled when an open ticket exists."
   const activeTickets = tickets.filter(
-    (t) => t.status !== "CLOSED" && t.status !== "RESOLVED" && t.status !== "CANCELED"
+    (t) =>
+      t.status !== "CLOSED" &&
+      t.status !== "RESOLVED" &&
+      t.status !== "CANCELED",
   );
   const hasActiveTicket = activeTickets.length > 0;
 
@@ -674,16 +728,24 @@ export default function CustomerTicketsPage() {
       const ms =
         t.subject.toLowerCase().includes(search.toLowerCase()) ||
         t.id.toLowerCase().includes(search.toLowerCase());
-      const mv = statusFilter === "All" || getStatusLabel(t.status) === statusFilter;
+      const mv =
+        statusFilter === "All" || getStatusLabel(t.status) === statusFilter;
       return ms && mv;
     })
     .sort((a, b) =>
       sortDir === "desc" ? (b.id > a.id ? 1 : -1) : a.id > b.id ? 1 : -1,
     );
 
-  const openDetail = (ticket) => {
-    setSelected(ticket);
-    setView("detail");
+  const openDetail = async (ticket) => {
+    try {
+      const res = await apiClient.get(
+        `/customers/support/tickets/${ticket.id}`,
+      );
+      setSelected(mapTicket(res.data));
+      setView("detail");
+    } catch (err) {
+      addToast("Failed to load ticket details", "error");
+    }
   };
 
   if (view === "detail" && selected) {
@@ -691,10 +753,41 @@ export default function CustomerTicketsPage() {
       <div style={{ minHeight: "100vh", background: "var(--ivory)" }}>
         <Header />
         {/* Toasts */}
-        <div style={{ position: "fixed", top: 80, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div
+          style={{
+            position: "fixed",
+            top: 80,
+            right: 20,
+            zIndex: 9999,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
           {toasts.map((toast) => (
-            <div key={toast.id} style={{ background: toast.type === "error" ? "#fee2e2" : "#dcfce7", border: `1px solid ${toast.type === "error" ? "#fca5a5" : "#86efac"}`, color: toast.type === "error" ? "#dc2626" : "#15803d", padding: "12px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", animation: "fadeIn 0.2s ease" }}>
-              {toast.type === "error" ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />} {toast.text}
+            <div
+              key={toast.id}
+              style={{
+                background: toast.type === "error" ? "#fee2e2" : "#dcfce7",
+                border: `1px solid ${toast.type === "error" ? "#fca5a5" : "#86efac"}`,
+                color: toast.type === "error" ? "#dc2626" : "#15803d",
+                padding: "12px 18px",
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
+                animation: "fadeIn 0.2s ease",
+              }}
+            >
+              {toast.type === "error" ? (
+                <AlertTriangle size={15} />
+              ) : (
+                <CheckCircle2 size={15} />
+              )}{" "}
+              {toast.text}
             </div>
           ))}
         </div>
@@ -704,6 +797,7 @@ export default function CustomerTicketsPage() {
             onBack={() => setView("list")}
             onReply={handleReply}
             onClose={handleClose}
+            onCancel={handleCancel}
           />
         </div>
         <Footer />
@@ -722,10 +816,41 @@ export default function CustomerTicketsPage() {
     >
       <Header />
       {/* Toasts */}
-      <div style={{ position: "fixed", top: 80, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div
+        style={{
+          position: "fixed",
+          top: 80,
+          right: 20,
+          zIndex: 9999,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}
+      >
         {toasts.map((toast) => (
-          <div key={toast.id} style={{ background: toast.type === "error" ? "#fee2e2" : "#dcfce7", border: `1px solid ${toast.type === "error" ? "#fca5a5" : "#86efac"}`, color: toast.type === "error" ? "#dc2626" : "#15803d", padding: "12px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", animation: "fadeIn 0.2s ease" }}>
-            {toast.type === "error" ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />} {toast.text}
+          <div
+            key={toast.id}
+            style={{
+              background: toast.type === "error" ? "#fee2e2" : "#dcfce7",
+              border: `1px solid ${toast.type === "error" ? "#fca5a5" : "#86efac"}`,
+              color: toast.type === "error" ? "#dc2626" : "#15803d",
+              padding: "12px 18px",
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
+              animation: "fadeIn 0.2s ease",
+            }}
+          >
+            {toast.type === "error" ? (
+              <AlertTriangle size={15} />
+            ) : (
+              <CheckCircle2 size={15} />
+            )}{" "}
+            {toast.text}
           </div>
         ))}
       </div>
@@ -743,14 +868,30 @@ export default function CustomerTicketsPage() {
             onClick={() => setShowCreate(true)}
             disabled={hasActiveTicket}
             title={hasActiveTicket ? "You already have an active ticket" : ""}
-            style={hasActiveTicket ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+            style={
+              hasActiveTicket ? { opacity: 0.6, cursor: "not-allowed" } : {}
+            }
           >
             <Plus size={15} /> New Ticket
           </button>
         </div>
         {hasActiveTicket && (
-          <div style={{ marginBottom: 20, padding: 12, background: "#eff6ff", color: "#1d4ed8", borderRadius: 8, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
-            <AlertTriangle size={16} /> You currently have an open support ticket. Please wait for it to be resolved or close it before opening a new one.
+          <div
+            style={{
+              marginBottom: 20,
+              padding: 12,
+              background: "#eff6ff",
+              color: "#1d4ed8",
+              borderRadius: 8,
+              fontSize: 13,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <AlertTriangle size={16} /> You currently have an open support
+            ticket. Please wait for it to be resolved or close it before opening
+            a new one.
           </div>
         )}
 
@@ -793,7 +934,15 @@ export default function CustomerTicketsPage() {
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             <option value="All">All Status</option>
-            {["Open", "In Progress", "Waiting for Customer", "Escalated to Admin", "Solved", "Closed", "Canceled"].map((s) => (
+            {[
+              "Open",
+              "In Progress",
+              "Waiting for Customer",
+              "Escalated to Admin",
+              "Solved",
+              "Closed",
+              "Canceled",
+            ].map((s) => (
               <option key={s}>{s}</option>
             ))}
           </select>
@@ -838,7 +987,9 @@ export default function CustomerTicketsPage() {
                 <div className={styles.cardMain}>
                   <div className={styles.cardLeft}>
                     <div className={styles.cardTopRow}>
-                      <span className={styles.ticketId}>{tk.id.slice(0, 8)}…</span>
+                      <span className={styles.ticketId}>
+                        {tk.id.slice(0, 8)}…
+                      </span>
                       <span className={styles.catTag}>
                         <Tag size={10} />
                         {tk.category}

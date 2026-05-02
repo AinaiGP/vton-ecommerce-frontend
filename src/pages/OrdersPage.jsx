@@ -25,10 +25,10 @@ import { formatPrice } from "../utils/formatPrice";
 // Using exact enum values from order-status.enum.ts
 const TRACK_STEPS = [
   { key: "pending_payment", label: "Ordered" },
-  { key: "confirmed",       label: "Confirmed" },
-  { key: "processing",      label: "Processing" },
-  { key: "shipped",         label: "Shipped" },
-  { key: "completed",       label: "Delivered" },
+  { key: "confirmed", label: "Confirmed" },
+  { key: "processing", label: "Processing" },
+  { key: "shipped", label: "Shipped" },
+  { key: "completed", label: "Delivered" },
 ];
 
 function getTrackStep(status) {
@@ -40,32 +40,32 @@ function getTrackStep(status) {
 /* ─── Map backend status → display label ─── */
 const STATUS_LABEL = {
   pending_payment: "Pending",
-  confirmed:       "Ordered",
-  processing:      "Processing",
-  shipped:         "Shipped",
-  completed:       "Delivered",
-  canceled:        "Cancelled",
-  refunded:        "Refunded",
-  return_requested:"Return Requested",
-  returned:        "Returned",
+  confirmed: "Confirmed",
+  processing: "Processing",
+  shipped: "Shipped",
+  completed: "Delivered",
+  canceled: "Canceled",
+  refunded: "Refunded",
+  return_requested: "Return Requested",
+  returned: "Returned",
 };
 
 const STATUS_CFG = {
-  Delivered:          { color: "#16a34a", bg: "#dcfce7", icon: CheckCircle2 },
-  Shipped:            { color: "#0891b2", bg: "#ecfeff", icon: Truck },
-  Processing:         { color: "#ca8a04", bg: "#fef9c3", icon: Clock },
-  Pending:            { color: "#6b7280", bg: "#f3f4f6", icon: Clock },
-  Ordered:            { color: "#6b7280", bg: "#f3f4f6", icon: Package },
-  Cancelled:          { color: "#dc2626", bg: "#fee2e2", icon: XCircle },
-  Refunded:           { color: "#0891b2", bg: "#ecfeff", icon: RotateCcw },
+  Delivered: { color: "#16a34a", bg: "#dcfce7", icon: CheckCircle2 },
+  Shipped: { color: "#0891b2", bg: "#ecfeff", icon: Truck },
+  Processing: { color: "#ca8a04", bg: "#fef9c3", icon: Clock },
+  Pending: { color: "#6b7280", bg: "#f3f4f6", icon: Clock },
+  Confirmed: { color: "#2563eb", bg: "#eff6ff", icon: CheckCircle2 },
+  Canceled: { color: "#dc2626", bg: "#fee2e2", icon: XCircle },
+  Refunded: { color: "#0891b2", bg: "#ecfeff", icon: RotateCcw },
   "Return Requested": { color: "#f59e0b", bg: "#fef3c7", icon: RotateCcw },
-  Returned:           { color: "#16a34a", bg: "#dcfce7", icon: RotateCcw },
+  Returned: { color: "#16a34a", bg: "#dcfce7", icon: RotateCcw },
 };
 
 const PAY_CFG = {
-  Paid:     { color: "#16a34a", bg: "#dcfce7" },
+  Paid: { color: "#16a34a", bg: "#dcfce7" },
   Refunded: { color: "#0891b2", bg: "#ecfeff" },
-  Pending:  { color: "#ca8a04", bg: "#fef9c3" },
+  Pending: { color: "#ca8a04", bg: "#fef9c3" },
 };
 
 /* ─── Map backend order to UI shape ─── */
@@ -73,7 +73,9 @@ function mapOrder(o) {
   const statusLabel = STATUS_LABEL[o.status] || o.status;
 
   // Derive payment method: if stripe intent exists → Credit Card, else → Cash on Delivery
-  const paymentMethod = o.stripePaymentIntentId ? "Credit Card" : "Cash on Delivery";
+  const paymentMethod = o.stripePaymentIntentId
+    ? "Credit Card"
+    : "Cash on Delivery";
 
   // Payment status: canceled/refunded → Refunded, else → Paid
   const paymentStatus =
@@ -84,12 +86,12 @@ function mapOrder(o) {
     .join(", ");
 
   const items = (o.items || []).map((item) => ({
-    id:    item.id,
-    name:  item.productName,
-    qty:   item.quantity,
-    size:  item.variantSize || "—",
+    id: item.id,
+    name: item.productName,
+    qty: item.quantity,
+    size: item.variantSize || "—",
     color: item.variantColor || "—",
-    price: item.unitPrice,   // piasters
+    price: item.unitPrice, // piasters
     image: item.imageUrl || "",
   }));
 
@@ -97,14 +99,16 @@ function mapOrder(o) {
   const track = TRACK_STEPS.map((s) => s.label);
 
   return {
-    id:            o.id,
-    orderNumber:   o.orderNumber,
-    date:          new Date(o.createdAt).toLocaleDateString("en-US", {
-      month: "short", day: "numeric", year: "numeric",
+    id: o.id,
+    orderNumber: o.orderNumber,
+    date: new Date(o.createdAt).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     }),
-    status:        statusLabel,
-    rawStatus:     o.status,
-    total:         o.total,     // piasters
+    status: statusLabel,
+    rawStatus: o.status,
+    total: o.total, // piasters
     paymentStatus,
     paymentMethod,
     address,
@@ -156,11 +160,14 @@ function CancelModal({ order, onConfirm, onClose, loading, error }) {
               marginBottom: 20,
             }}
           >
-            Are you sure you want to cancel <strong>{order.orderNumber || order.id}</strong>? This
-            action cannot be undone.
+            Are you sure you want to cancel{" "}
+            <strong>{order.orderNumber || order.id}</strong>? This action cannot
+            be undone.
           </p>
           {error && (
-            <p style={{ color: "#dc2626", fontSize: 12, marginBottom: 12 }}>{error}</p>
+            <p style={{ color: "#dc2626", fontSize: 12, marginBottom: 12 }}>
+              {error}
+            </p>
           )}
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <button
@@ -313,11 +320,17 @@ function ReturnModal({ order, onSubmit, onClose, loading, error }) {
             />
           </div>
           {error && (
-            <p style={{ color: "#dc2626", fontSize: 12, marginTop: 8 }}>{error}</p>
+            <p style={{ color: "#dc2626", fontSize: 12, marginTop: 8 }}>
+              {error}
+            </p>
           )}
         </div>
         <div className={t.modalFoot}>
-          <button className={`${t.btn} ${t.btnOutline}`} onClick={onClose} disabled={loading}>
+          <button
+            className={`${t.btn} ${t.btnOutline}`}
+            onClick={onClose}
+            disabled={loading}
+          >
             Cancel
           </button>
           <button
@@ -333,7 +346,8 @@ function ReturnModal({ order, onSubmit, onClose, loading, error }) {
               })
             }
           >
-            <Send size={14} /> {loading ? "Submitting…" : "Submit Return Request"}
+            <Send size={14} />{" "}
+            {loading ? "Submitting…" : "Submit Return Request"}
           </button>
         </div>
       </div>
@@ -344,7 +358,14 @@ function ReturnModal({ order, onSubmit, onClose, loading, error }) {
 /* ─── Loading Spinner ─── */
 function LoadingSpinner() {
   return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "80px 0" }}>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: "80px 0",
+      }}
+    >
       <div
         style={{
           width: 40,
@@ -395,7 +416,9 @@ export default function OrdersPage() {
       }
     }
     fetchOrders();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const addToast = (text, type = "success") => {
@@ -419,14 +442,21 @@ export default function OrdersPage() {
       setOrders((prev) =>
         prev.map((o) =>
           o.id === cancelModal
-            ? { ...o, status: "Cancelled", paymentStatus: "Refunded", rawStatus: "canceled" }
+            ? {
+                ...o,
+                status: "Canceled",
+                paymentStatus: "Refunded",
+                rawStatus: "canceled",
+              }
             : o,
         ),
       );
       setCancelModal(null);
       addToast("Order has been cancelled.", "success");
     } catch (err) {
-      const msg = err?.response?.data?.message || "Failed to cancel order. Please try again.";
+      const msg =
+        err?.response?.data?.message ||
+        "Failed to cancel order. Please try again.";
       setCancelError(Array.isArray(msg) ? msg.join(", ") : msg);
     } finally {
       setCancelLoading(false);
@@ -448,7 +478,8 @@ export default function OrdersPage() {
       setReturnModal(null);
       addToast("Return request submitted!", "success");
     } catch (err) {
-      const msg = err?.response?.data?.message || "Failed to submit return request.";
+      const msg =
+        err?.response?.data?.message || "Failed to submit return request.";
       setReturnError(Array.isArray(msg) ? msg.join(", ") : msg);
     } finally {
       setReturnLoading(false);
@@ -456,7 +487,14 @@ export default function OrdersPage() {
   };
 
   // Status filter tabs use display labels
-  const STATUS_FILTER_OPTIONS = ["All", "Processing", "Shipped", "Delivered", "Cancelled"];
+  const STATUS_FILTER_OPTIONS = [
+    "All",
+    "Confirmed",
+    "Processing",
+    "Shipped",
+    "Delivered",
+    "Canceled",
+  ];
 
   const filtered =
     statusFilter === "All"
@@ -523,33 +561,29 @@ export default function OrdersPage() {
           </div>
           {/* Filter tabs */}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {STATUS_FILTER_OPTIONS.map(
-              (s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: 99,
-                    border: "1.5px solid",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    transition: "all 0.15s",
-                    background:
-                      statusFilter === s ? "var(--burgundy)" : "white",
-                    color:
-                      statusFilter === s ? "white" : "var(--charcoal-muted)",
-                    borderColor:
-                      statusFilter === s
-                        ? "var(--burgundy)"
-                        : "var(--ivory-dark)",
-                  }}
-                >
-                  {s}
-                </button>
-              ),
-            )}
+            {STATUS_FILTER_OPTIONS.map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 99,
+                  border: "1.5px solid",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  background: statusFilter === s ? "var(--burgundy)" : "white",
+                  color: statusFilter === s ? "white" : "var(--charcoal-muted)",
+                  borderColor:
+                    statusFilter === s
+                      ? "var(--burgundy)"
+                      : "var(--ivory-dark)",
+                }}
+              >
+                {s}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -585,7 +619,9 @@ export default function OrdersPage() {
                     onClick={() => setExpanded(isOpen ? null : order.id)}
                   >
                     <div className={styles.orderMeta}>
-                      <span className={styles.orderId}>{order.orderNumber || order.id}</span>
+                      <span className={styles.orderId}>
+                        {order.orderNumber || order.id}
+                      </span>
                       <span className={styles.orderDate}>{order.date}</span>
                     </div>
                     <div className={styles.orderMeta}>
@@ -741,7 +777,9 @@ export default function OrdersPage() {
                                 {item.color}
                               </p>
                             </div>
-                            <p className={styles.itemPrice}>{formatPrice(item.price)}</p>
+                            <p className={styles.itemPrice}>
+                              {formatPrice(item.price)}
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -758,7 +796,10 @@ export default function OrdersPage() {
         <CancelModal
           order={orders.find((o) => o.id === cancelModal)}
           onConfirm={handleCancelConfirm}
-          onClose={() => { setCancelModal(null); setCancelError(null); }}
+          onClose={() => {
+            setCancelModal(null);
+            setCancelError(null);
+          }}
           loading={cancelLoading}
           error={cancelError}
         />
@@ -767,7 +808,10 @@ export default function OrdersPage() {
         <ReturnModal
           order={returnModal}
           onSubmit={handleReturnSubmit}
-          onClose={() => { setReturnModal(null); setReturnError(null); }}
+          onClose={() => {
+            setReturnModal(null);
+            setReturnError(null);
+          }}
           loading={returnLoading}
           error={returnError}
         />
