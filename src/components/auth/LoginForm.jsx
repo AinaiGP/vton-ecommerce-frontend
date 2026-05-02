@@ -116,6 +116,7 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    setErrorMessage('');
   };
 
   return (

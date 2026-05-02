@@ -98,40 +98,59 @@ function StepRequest({ onNext }) {
 
 /* Step 2: Verify OTP */
 function StepVerify({ email, onNext, onResend }) {
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const inputs = useRef([]);
+  const [error, setError] = useState('');
+  const inputRefs = [useRef(null), useRef(null), useRef(null), useRef(null), useRef(null), useRef(null)];
 
-  const handleChange = (index, value) => {
-    if (!/^\d*$/.test(value)) return;
-    const newOtp = [...otp];
-    newOtp[index] = value.slice(-1);
-    setOtp(newOtp);
-    if (value && index < 5) inputs.current[index + 1].focus();
-  };
-
-  const handleKeyDown = (index, e) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
-      inputs.current[index - 1].focus();
+  const handleKey = (index, e) => {
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      const digits = code.split('');
+      if (digits[index]) {
+        digits[index] = '';
+        setCode(digits.join(''));
+      } else if (index > 0) {
+        digits[index - 1] = '';
+        setCode(digits.join(''));
+        inputRefs[index - 1].current?.focus();
+      }
+      return;
+    }
+    if (e.key.match(/^[0-9]$/)) {
+      e.preventDefault();
+      const digits = code.split('');
+      digits[index] = e.key;
+      setCode(digits.join(''));
+      if (index < 5) {
+        inputRefs[index + 1].current?.focus();
+      }
     }
   };
 
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    setCode(pasted.padEnd(6, '').slice(0, 6));
+    const nextEmpty = Math.min(pasted.length, 5);
+    inputRefs[nextEmpty].current?.focus();
+  };
+
+  const digits = code.split('');
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const code = otp.join("");
-    if (code.length < 6) { setError("Please enter all 6 digits."); return; }
-    
+    if (code.replace(/\s/g, '').length < 6) { setError('Please enter all 6 digits.'); return; }
+
     setLoading(true);
-    setError("");
+    setError('');
     try {
-      // Real API call: POST /auth/verify-reset-otp
       const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/verify-reset-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp: code }),
       });
-      if (!res.ok) throw new Error("Invalid or expired code.");
+      if (!res.ok) throw new Error('Invalid or expired code.');
       onNext(code);
     } catch (err) {
       setError(err.message);
@@ -149,37 +168,40 @@ function StepVerify({ email, onNext, onResend }) {
       </div>
 
       <form className={styles.form} onSubmit={handleSubmit}>
-        <div className={s.otpGrid}>
-          {otp.map((digit, i) => (
+        <div className={s.otpRow}>
+          {Array.from({ length: 6 }).map((_, i) => (
             <input
               key={i}
-              ref={el => (inputs.current[i] = el)}
+              ref={inputRefs[i]}
               type="text"
               inputMode="numeric"
               maxLength={1}
-              className={`${s.otpInput} ${error ? s.otpInputError : ""}`}
-              value={digit}
-              onChange={e => handleChange(i, e.target.value)}
-              onKeyDown={e => handleKeyDown(i, e)}
+              value={digits[i] || ''}
+              onChange={() => {}}
+              onKeyDown={(e) => handleKey(i, e)}
+              onPaste={handlePaste}
+              className={s.otpBox}
+              autoFocus={i === 0}
             />
           ))}
         </div>
         {error && <p className={styles.formMessageError}>{error}</p>}
 
-        <button type="submit" className={styles.submitButton} disabled={loading || otp.some(d => d === "")}>
-          {loading ? "Verifying…" : "Verify Code"}
+        <button type="submit" className={styles.submitButton} disabled={loading || code.replace(/\D/g, '').length < 6}>
+          {loading ? 'Verifying…' : 'Verify Code'}
         </button>
       </form>
 
       <p className={styles.switchPrompt}>
-        Didn't get the code?{" "}
-        <button className={styles.switchLink} style={{ background: "none", border: "none", padding: 0 }} onClick={onResend}>
+        Didn't get the code?{' '}
+        <button className={styles.switchLink} style={{ background: 'none', border: 'none', padding: 0 }} onClick={onResend}>
           Click to resend
         </button>
       </p>
     </div>
   );
 }
+
 
 /* Step 3: Enter new password */
 function StepReset({ email, otp, onNext }) {

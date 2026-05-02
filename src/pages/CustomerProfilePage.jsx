@@ -17,6 +17,7 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
+  Images,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
@@ -24,6 +25,7 @@ import { useAuth } from "../context/AuthContext";
 import apiClient, { multipartClient } from "../utils/apiClient";
 import styles from "../styles/CustomerProfile.module.css";
 import OTPVerificationModal from "../components/common/OTPVerificationModal";
+import { useNavigate } from "react-router-dom";
 
 /* ─── Password strength ─── */
 function StrengthMeter({ password }) {
@@ -248,12 +250,15 @@ const TABS = [
   { id: "security", label: "Security", icon: Lock },
   { id: "phones", label: "Phones", icon: Phone },
   { id: "addresses", label: "Addresses", icon: MapPin },
+  { id: "photos", label: "My Photos", icon: Images },
 ];
 
 /* ─── Main page ─── */
 export default function CustomerProfilePage() {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, logout } = useAuth();
+  const navigate = useNavigate();
   const fileRef = useRef(null);
+  const photoInputRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState("profile");
   const [photoURL, setPhotoURL] = useState(null);
@@ -279,14 +284,27 @@ export default function CustomerProfilePage() {
   /* Phones */
   const [phones, setPhones] = useState([]);
   const [phoneModal, setPhoneModal] = useState(null);
+  const [phoneError, setPhoneError] = useState('');
 
   /* Addresses */
   const [addresses, setAddresses] = useState([]);
   const [addrModal, setAddrModal] = useState(null);
 
+  /* Photos */
+  const [profilePhotos, setProfilePhotos] = useState([]);
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [photoUploadLoading, setPhotoUploadLoading] = useState(false);
+
   useEffect(() => {
     fetchProfile();
   }, []);
+
+  // Sync profilePhotos from fetched profile data
+  useEffect(() => {
+    if (profilePhotos !== undefined) {
+      /* already updated via fetchProfile */
+    }
+  }, [profilePhotos]);
 
   const fetchProfile = async () => {
     try {
@@ -294,13 +312,15 @@ export default function CustomerProfilePage() {
       const c = res.data;
       setFirstName(c.firstName || "");
       setLastName(c.lastName || "");
-      setEmail(user?.email || ""); // Email is on User, not Customer directly in the profile response usually
+      setEmail(user?.email || "");
       setGender(c.gender || "");
       setPhones(c.phoneNumbers || []);
       setAddresses(c.shippingAddresses || []);
-
-      if (c.profilePhotos?.length > 0) {
-        setPhotoURL(c.profilePhotos[0].s3Url);
+      // FIX 4B: store all profile photos
+      const photos = c.profilePhotos || [];
+      setProfilePhotos(photos);
+      if (photos.length > 0) {
+        setPhotoURL(photos[0].s3Url);
       }
     } catch (err) {
       console.error("Failed to fetch profile", err);
@@ -312,7 +332,7 @@ export default function CustomerProfilePage() {
     setTimeout(() => setAlert(null), 3500);
   };
 
-  /* Photo upload */
+  /* Photo upload (header avatar) */
   const handlePhotoChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -328,12 +348,70 @@ export default function CustomerProfilePage() {
       );
       const newUrl = res.data.s3Url;
       setPhotoURL(newUrl);
+      // FIX 4A: Write to localStorage so Header avatar updates immediately
+      localStorage.setItem('ainai_profile_photo', newUrl);
+      updateUser({ primaryPhotoUrl: newUrl });
       showAlert("success", "Profile photo updated!");
-      fetchProfile(); // Refresh to get the photo ID if needed
+      fetchProfile();
     } catch (err) {
       showAlert("error", "Failed to upload photo.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  /* FIX 4B: Add profile photo (Photos tab) */
+  const handleTabPhotoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (profilePhotos.length >= 5) {
+      showAlert('error', 'Maximum 5 photos reached.');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      setPhotoUploadLoading(true);
+      const res = await multipartClient.post('/customers/profile/photos', formData);
+      const newUrl = res.data.s3Url;
+      // If this is the first photo, update the header avatar
+      if (profilePhotos.length === 0) {
+        setPhotoURL(newUrl);
+        localStorage.setItem('ainai_profile_photo', newUrl);
+        updateUser({ primaryPhotoUrl: newUrl });
+      }
+      showAlert('success', 'Photo added!');
+      fetchProfile();
+    } catch (err) {
+      showAlert('error', 'Failed to upload photo.');
+    } finally {
+      setPhotoUploadLoading(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
+  /* FIX 4B: Delete profile photo */
+  const handleDeletePhoto = async (photoId, photoUrl) => {
+    if (!window.confirm('Delete this photo?')) return;
+    try {
+      await apiClient.delete(`/customers/profile/photos/${photoId}`);
+      const remaining = profilePhotos.filter((p) => p.id !== photoId);
+      // If deleted photo was the displayed avatar, update to next available
+      if (photoURL === photoUrl) {
+        const nextUrl = remaining[0]?.s3Url || null;
+        setPhotoURL(nextUrl);
+        if (nextUrl) {
+          localStorage.setItem('ainai_profile_photo', nextUrl);
+          updateUser({ primaryPhotoUrl: nextUrl });
+        } else {
+          localStorage.removeItem('ainai_profile_photo');
+          updateUser({ primaryPhotoUrl: null });
+        }
+      }
+      showAlert('success', 'Photo deleted.');
+      fetchProfile();
+    } catch (err) {
+      showAlert('error', 'Failed to delete photo.');
     }
   };
 
@@ -378,11 +456,12 @@ export default function CustomerProfilePage() {
       otp: otpCode,
     });
     setShowVerify(false);
-    showAlert("success", "Email updated! Please log in again.");
-    // In a real app, we might force logout or update context
-    setTimeout(() => {
-      window.location.reload();
-    }, 2000);
+    // FIX 2: Force logout — backend invalidates tokens on email change
+    showAlert("success", "Email updated. Please log in again.");
+    setTimeout(async () => {
+      await logout();
+      navigate('/auth');
+    }, 1500);
   };
 
   /* Save password */
@@ -408,7 +487,12 @@ export default function CustomerProfilePage() {
       setOldPass("");
       setNewPass("");
       setConfPass("");
-      showAlert("success", "Password changed successfully!");
+      // FIX 2: Force logout — backend invalidates tokens on password change
+      showAlert("success", "Password updated. Please log in again.");
+      setTimeout(async () => {
+        await logout();
+        navigate('/auth');
+      }, 1500);
     } catch (err) {
       showAlert(
         "error",
@@ -421,6 +505,7 @@ export default function CustomerProfilePage() {
 
   /* Phones */
   const handlePhoneSave = async (data) => {
+    setPhoneError('');
     try {
       if (phoneModal === "add") {
         await apiClient.post("/customers/profile/phone-numbers", data);
@@ -431,10 +516,26 @@ export default function CustomerProfilePage() {
         );
       }
       setPhoneModal(null);
+      setPhoneError('');
       fetchProfile();
       showAlert("success", "Phone number saved!");
     } catch (err) {
-      showAlert("error", "Failed to save phone number.");
+      // FIX 6: Show specific duplicate error message
+      const backendMessage = err?.response?.data?.message;
+      const status = err?.response?.status;
+      let msg;
+      if (
+        status === 409 ||
+        (typeof backendMessage === 'string' && backendMessage.toLowerCase().includes('duplicate')) ||
+        (typeof backendMessage === 'string' && backendMessage.toLowerCase().includes('already'))
+      ) {
+        msg = 'This phone number is already saved to your account.';
+      } else if (Array.isArray(backendMessage)) {
+        msg = backendMessage.join(', ');
+      } else {
+        msg = backendMessage || 'Failed to save phone number.';
+      }
+      setPhoneError(msg);
     }
   };
 
@@ -464,10 +565,11 @@ export default function CustomerProfilePage() {
   const handleAddrSave = async (data) => {
     try {
       if (addrModal === "add") {
-        await apiClient.post("/customers/profile/shipping-addresses", data);
+        // FIX 5: correct endpoint is /addresses not /shipping-addresses
+        await apiClient.post("/customers/profile/addresses", data);
       } else {
         await apiClient.patch(
-          `/customers/profile/shipping-addresses/${addrModal.id}`,
+          `/customers/profile/addresses/${addrModal.id}`,
           data,
         );
       }
@@ -475,14 +577,16 @@ export default function CustomerProfilePage() {
       fetchProfile();
       showAlert("success", "Address saved!");
     } catch (err) {
-      showAlert("error", "Failed to save address.");
+      const msg = err?.response?.data?.message;
+      showAlert("error", Array.isArray(msg) ? msg.join(', ') : (msg || "Failed to save address."));
     }
   };
 
   const deleteAddress = async (id) => {
     if (!window.confirm("Remove this address?")) return;
     try {
-      await apiClient.delete(`/customers/profile/shipping-addresses/${id}`);
+      // FIX 5: correct endpoint
+      await apiClient.delete(`/customers/profile/addresses/${id}`);
       fetchProfile();
       showAlert("success", "Address removed.");
     } catch (err) {
@@ -492,7 +596,8 @@ export default function CustomerProfilePage() {
 
   const setDefaultAddr = async (id) => {
     try {
-      await apiClient.patch(`/customers/profile/shipping-addresses/${id}`, {
+      // FIX 5: correct endpoint
+      await apiClient.patch(`/customers/profile/addresses/${id}`, {
         isPrimary: true,
       });
       fetchProfile();
@@ -862,6 +967,17 @@ export default function CustomerProfilePage() {
           </div>
         )}
 
+        {/* ── Phone error display inside Phone tab ── */}
+        {activeTab === "phones" && phoneError && (
+          <div
+            className={`${styles.alert} ${styles.alertError}`}
+            style={{ marginTop: -8, marginBottom: 8 }}
+          >
+            <AlertCircle size={16} />
+            {phoneError}
+          </div>
+        )}
+
         {/* ── Addresses Tab ── */}
         {activeTab === "addresses" && (
           <div className={styles.panel}>
@@ -929,6 +1045,74 @@ export default function CustomerProfilePage() {
                   <Plus size={16} /> Add New Address
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Photos Tab ── */}
+        {activeTab === "photos" && (
+          <div className={styles.panel}>
+            <div className={styles.panelHead}>
+              <h2 className={styles.panelTitle}>My Photos</h2>
+              <p className={styles.panelSub}>
+                Manage your profile photos (up to 5). The first photo is used as your avatar.
+              </p>
+            </div>
+            <div className={styles.panelBody}>
+              {/* Photo grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 16, marginBottom: 20 }}>
+                {profilePhotos.map((photo, idx) => (
+                  <div key={photo.id} style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: idx === 0 ? '2px solid var(--burgundy)' : '2px solid var(--ivory-dark)', aspectRatio: '1' }}>
+                    <img
+                      src={photo.s3Url}
+                      alt={`Profile photo ${idx + 1}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                    {idx === 0 && (
+                      <span style={{ position: 'absolute', top: 6, left: 6, background: 'var(--burgundy)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99 }}>
+                        Primary
+                      </span>
+                    )}
+                    <button
+                      onClick={() => handleDeletePhoto(photo.id, photo.s3Url)}
+                      style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(220,38,38,0.85)', border: 'none', borderRadius: '50%', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}
+                      title="Delete photo"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+
+                {profilePhotos.length < 5 && (
+                  <div
+                    onClick={() => !photoUploadLoading && photoInputRef.current?.click()}
+                    style={{ borderRadius: 12, border: '2px dashed var(--ivory-dark)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: photoUploadLoading ? 'wait' : 'pointer', aspectRatio: '1', gap: 8, color: 'var(--charcoal-muted)', transition: 'border-color 0.15s' }}
+                    title="Add photo"
+                  >
+                    {photoUploadLoading ? (
+                      <Loader2 size={22} className={styles.spin} />
+                    ) : (
+                      <>
+                        <Plus size={22} />
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>Add Photo</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {profilePhotos.length >= 5 && (
+                <p style={{ fontSize: 13, color: 'var(--charcoal-muted)', marginBottom: 12 }}>Maximum 5 photos reached.</p>
+              )}
+
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleTabPhotoUpload}
+                disabled={photoUploadLoading}
+              />
             </div>
           </div>
         )}

@@ -237,7 +237,7 @@ export default function CustomerHubPage() {
                         {new Date(order.createdAt).toLocaleDateString()}
                       </p>
                       <div className={styles.miniOrderPrice}>
-                        {formatPrice((order.total || 0) / 100, order.currency)}
+                        {formatPrice(order.total || 0)}
                       </div>
                     </div>
                   ))
