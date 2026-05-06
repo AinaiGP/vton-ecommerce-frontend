@@ -7,14 +7,12 @@ import {
   ChevronRight,
   ChevronLeft,
   CheckCircle2,
-  XCircle,
   ArrowUpDown,
   Paperclip,
   Send,
   X,
   AlertTriangle,
   FileText,
-  ImageIcon,
   Headphones,
   Tag,
   User,
@@ -32,6 +30,7 @@ const TICKET_TYPES = [
 ];
 
 const STATUS_CFG = {
+  PENDING: { color: "#64748b", bg: "#f1f5f9", label: "Pending" },
   OPEN: { color: "#ef4444", bg: "#fee2e2", label: "Open" },
   IN_PROGRESS: { color: "#f59e0b", bg: "#fef3c7", label: "In Progress" },
   AWAITING_RESPONSE: {
@@ -53,23 +52,48 @@ function getCategoryLabel(type) {
   return TICKET_TYPES.find((t) => t.value === type)?.label || type;
 }
 
+function isImageUrl(url) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url);
+}
+
+function extractLegacyAttachment(content) {
+  if (!content) return { text: "", urls: [] };
+  const match = content.match(/\(attachment:\s*(https?:\/\/[^\s)]+)\)/i);
+  if (!match) return { text: content, urls: [] };
+  const cleaned = content.replace(match[0], "").trim();
+  return { text: cleaned || "Attachment", urls: [match[1]] };
+}
+
 /* ─── Map a backend ticket to UI ─── */
 function mapTicket(ticket) {
   const messages = (ticket.messages || [])
     .filter((m) => !m.isSystemMessage)
-    .map((m) => ({
-      from: m.senderRole === "customer" ? "customer" : "support",
-      text: m.content,
-      time: new Date(m.createdAt).toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      attachment: m.attachments?.length
-        ? { name: m.attachments[0].split("/").pop(), type: "file" }
-        : null,
-    }));
+    .map((m) => {
+      const legacy = extractLegacyAttachment(m.content);
+      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
+        Boolean,
+      );
+      const attachments = attachmentUrls.map((url) => ({
+        url,
+        name: url.split("/").pop() || "Attachment",
+        isImage: isImageUrl(url),
+      }));
+
+      return {
+        from:
+          String(m.senderRole || "").toUpperCase() === "CUSTOMER"
+            ? "customer"
+            : "support",
+        text: legacy.text || m.content,
+        time: new Date(m.createdAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        attachments,
+      };
+    });
 
   return {
     id: ticket.id,
@@ -115,12 +139,38 @@ function StatusBadge({ status }) {
     </span>
   );
 }
-function FileAttachment({ att }) {
-  if (!att) return null;
+function AttachmentList({ attachments }) {
+  if (!attachments?.length) return null;
   return (
-    <div className={styles.attachment}>
-      {att.type === "image" ? <ImageIcon size={13} /> : <FileText size={13} />}
-      <span>{att.name}</span>
+    <div className={styles.attachmentList}>
+      {attachments.map((att) =>
+        att.isImage ? (
+          <a
+            key={att.url}
+            href={att.url}
+            target="_blank"
+            rel="noreferrer"
+            className={styles.attachmentImageLink}
+          >
+            <img
+              src={att.url}
+              alt={att.name}
+              className={styles.attachmentImage}
+            />
+          </a>
+        ) : (
+          <a
+            key={att.url}
+            href={att.url}
+            target="_blank"
+            rel="noreferrer"
+            className={styles.attachment}
+          >
+            <FileText size={13} />
+            <span>{att.name}</span>
+          </a>
+        ),
+      )}
     </div>
   );
 }
@@ -155,9 +205,20 @@ function CreateModal({ onClose, onSubmit }) {
     orderId: "",
   });
   const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const fileRef = useRef(null);
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -282,6 +343,32 @@ function CreateModal({ onClose, onSubmit }) {
                 style={{ display: "none" }}
                 onChange={(e) => setFile(e.target.files[0] || null)}
               />
+              {file && (
+                <div className={styles.attachmentPreview}>
+                  {file.type?.startsWith("image/") && previewUrl && (
+                    <img
+                      src={previewUrl}
+                      alt={file.name}
+                      className={styles.attachmentPreviewImage}
+                    />
+                  )}
+                  <div className={styles.attachmentPreviewInfo}>
+                    <span className={styles.attachmentPreviewName}>
+                      {file.name}
+                    </span>
+                    <span className={styles.attachmentPreviewMeta}>
+                      {(file.size / 1024).toFixed(1)} KB
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.attachmentPreviewRemove}
+                    onClick={() => setFile(null)}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
             </div>
             {error && <p style={{ color: "#dc2626", fontSize: 12 }}>{error}</p>}
             {form.priority === "HIGH" || form.priority === "URGENT" ? (
@@ -315,13 +402,12 @@ function CreateModal({ onClose, onSubmit }) {
 }
 
 /* ─── Ticket Detail (Chat) ─── */
-function TicketDetail({ ticket, onBack, onReply, onClose, onCancel }) {
+function TicketDetail({ ticket, onBack, onReply, onCancel }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const [sending, setSending] = useState(false);
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
-  const [confirmClose, setConfirmClose] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -344,6 +430,9 @@ function TicketDetail({ ticket, onBack, onReply, onClose, onCancel }) {
     ticket.status === "CLOSED" ||
     ticket.status === "RESOLVED" ||
     ticket.status === "CANCELED";
+  const canCancel = ["PENDING", "OPEN", "AWAITING_RESPONSE"].includes(
+    ticket.status,
+  );
 
   return (
     <div className={styles.detailShell}>
@@ -362,7 +451,7 @@ function TicketDetail({ ticket, onBack, onReply, onClose, onCancel }) {
           </span>
           <StatusBadge status={ticket.status} />
         </div>
-        {!isClosed && (
+        {!isClosed && canCancel && (
           <div style={{ display: "flex", gap: "8px" }}>
             <button
               className={`${styles.btn} ${styles.btnOutline} ${styles.btnSm}`}
@@ -375,12 +464,6 @@ function TicketDetail({ ticket, onBack, onReply, onClose, onCancel }) {
               }}
             >
               Cancel
-            </button>
-            <button
-              className={`${styles.btn} ${styles.btnDanger} ${styles.btnSm}`}
-              onClick={() => setConfirmClose(true)}
-            >
-              <CheckCircle2 size={13} /> Close
             </button>
           </div>
         )}
@@ -409,7 +492,7 @@ function TicketDetail({ ticket, onBack, onReply, onClose, onCancel }) {
                 className={`${styles.bubble} ${isMe ? styles.bubbleCustomer : styles.bubbleSupport}`}
               >
                 <p className={styles.bubbleText}>{msg.text}</p>
-                <FileAttachment att={msg.attachment} />
+                <AttachmentList attachments={msg.attachments} />
                 <span className={styles.bubbleTime}>{msg.time}</span>
               </div>
               {isMe && (
@@ -491,48 +574,6 @@ function TicketDetail({ ticket, onBack, onReply, onClose, onCancel }) {
           {getStatusLabel(ticket.status).toLowerCase()}.
         </div>
       )}
-
-      {confirmClose && (
-        <div className={styles.backdrop} onClick={() => setConfirmClose(false)}>
-          <div className={styles.modalSm} onClick={(e) => e.stopPropagation()}>
-            <div style={{ textAlign: "center", padding: "28px 24px" }}>
-              <XCircle size={36} style={{ color: "#ef4444" }} />
-              <h3 style={{ marginTop: 10, fontFamily: "var(--font-serif)" }}>
-                Close Ticket?
-              </h3>
-              <p
-                style={{
-                  color: "var(--charcoal-muted)",
-                  fontSize: 14,
-                  marginBottom: 20,
-                }}
-              >
-                Are you sure your issue is resolved? You can always open a new
-                ticket if needed.
-              </p>
-              <div
-                style={{ display: "flex", gap: 10, justifyContent: "center" }}
-              >
-                <button
-                  className={`${styles.btn} ${styles.btnOutline}`}
-                  onClick={() => setConfirmClose(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className={`${styles.btn} ${styles.btnDanger}`}
-                  onClick={() => {
-                    onClose(ticket.id);
-                    setConfirmClose(false);
-                  }}
-                >
-                  <XCircle size={14} /> Close Ticket
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -608,12 +649,6 @@ export default function CustomerTicketsPage() {
     };
     if (form.orderId) payload.orderId = form.orderId;
 
-    let attachmentUrl = null;
-    if (form.file) {
-      // we need a ticket ID to upload an attachment for a ticket message
-      // so we might just attach it as a message after creation.
-    }
-
     const res = await apiClient.post("/customers/support/tickets", payload);
 
     if (form.file) {
@@ -624,12 +659,13 @@ export default function CustomerTicketsPage() {
           `/customers/support/tickets/${res.data.id}/messages/attachments`,
           formData,
         );
-        attachmentUrl = uploadRes.data?.url || null;
+        const attachmentUrl = uploadRes.data?.url || null;
         if (attachmentUrl) {
           await apiClient.post(
             `/customers/support/tickets/${res.data.id}/messages`,
             {
-              content: `(attachment: ${attachmentUrl})`,
+              content: "Attachment",
+              attachments: [attachmentUrl],
             },
           );
         }
@@ -668,29 +704,16 @@ export default function CustomerTicketsPage() {
       }
     }
 
-    const content = [text, attachmentUrl].filter(Boolean).join("\n") || text;
+    const content = text?.trim() || "Attachment";
     await apiClient.post(`/customers/support/tickets/${id}/messages`, {
-      content: content || "(attachment)",
+      content,
+      attachments: attachmentUrl ? [attachmentUrl] : undefined,
     });
 
     const res = await apiClient.get(`/customers/support/tickets/${id}`);
     const updated = mapTicket(res.data);
     setSelected(updated);
     setTickets((prev) => prev.map((t) => (t.id === id ? updated : t)));
-  };
-
-  /* ── Close ticket ── */
-  const handleClose = async (id) => {
-    try {
-      await apiClient.patch(`/customers/support/tickets/${id}/close`);
-      addToast("Ticket closed.");
-      const res = await apiClient.get(`/customers/support/tickets/${id}`);
-      const updated = mapTicket(res.data);
-      setSelected(updated);
-      setTickets((prev) => prev.map((t) => (t.id === id ? updated : t)));
-    } catch {
-      addToast("Failed to close ticket.", "error");
-    }
   };
 
   /* ── Cancel ticket ── */
@@ -796,7 +819,6 @@ export default function CustomerTicketsPage() {
             ticket={selected}
             onBack={() => setView("list")}
             onReply={handleReply}
-            onClose={handleClose}
             onCancel={handleCancel}
           />
         </div>

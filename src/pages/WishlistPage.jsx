@@ -6,7 +6,7 @@ import Footer from "../components/common/Footer";
 import styles from "../styles/WishlistPage.module.css";
 import apiClient from "../utils/apiClient";
 import { useCart } from "../context/CartContext";
-import { formatPrice } from "../utils/productHelpers";
+import { formatPrice, getVariantImage } from "../utils/productHelpers";
 
 export default function WishlistPage() {
   const [items, setItems] = useState([]);
@@ -27,10 +27,7 @@ export default function WishlistPage() {
         productId: w.productId,
         name: w.product?.name || "Product",
         price: w.variant?.price || w.product?.basePrice || 0,
-        image:
-          w.variant?.images?.[0]?.s3Url ||
-          w.product?.images?.[0]?.s3Url ||
-          "/placeholder.png",
+        image: getVariantImage(w.variant, w.product) || "/placeholder.png",
         category: w.product?.category?.name || "Category",
         badge: w.product?.tags?.[0] || "",
       }));

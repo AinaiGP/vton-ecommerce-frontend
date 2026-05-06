@@ -4,7 +4,6 @@ import {
   MessageSquare,
   ChevronRight,
   ChevronLeft,
-  CheckCircle2,
   Paperclip,
   Send,
   X,
@@ -29,6 +28,7 @@ const TICKET_TYPES = [
 ];
 
 const STATUS_CFG = {
+  PENDING: { color: "#64748b", bg: "#f1f5f9", label: "Pending" },
   OPEN: { color: "#dc2626", bg: "#fee2e2", label: "Open" },
   IN_PROGRESS: { color: "#f59e0b", bg: "#fef3c7", label: "In Progress" },
   AWAITING_RESPONSE: {
@@ -50,21 +50,41 @@ function getCategoryLabel(type) {
   return TICKET_TYPES.find((t) => t.value === type)?.label || type;
 }
 
+function isImageUrl(url) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url);
+}
+
+function extractLegacyAttachment(content) {
+  if (!content) return { text: "", urls: [] };
+  const match = content.match(/\(attachment:\s*(https?:\/\/[^\s)]+)\)/i);
+  if (!match) return { text: content, urls: [] };
+  const cleaned = content.replace(match[0], "").trim();
+  return { text: cleaned || "Attachment", urls: [match[1]] };
+}
+
 function mapTicket(ticket) {
-  const messages = (ticket.messages || [])
-    .map((m) => ({
+  const messages = (ticket.messages || []).map((m) => {
+    const legacy = extractLegacyAttachment(m.content);
+    const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
+      Boolean,
+    );
+
+    return {
       from: m.senderRole === "VENDOR" ? "me" : "support",
-      text: m.content,
+      text: legacy.text || m.content,
       time: new Date(m.createdAt).toLocaleString("en-US", {
         month: "short",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
       }),
-      attachment: m.attachments?.length
-        ? { name: m.attachments[0].split("/").pop(), url: m.attachments[0] }
-        : null,
-    }));
+      attachments: attachmentUrls.map((url) => ({
+        url,
+        name: url.split("/").pop() || "Attachment",
+        isImage: isImageUrl(url),
+      })),
+    };
+  });
 
   return {
     id: ticket.id,
@@ -96,10 +116,12 @@ export default function VendorTicketsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [replyFile, setReplyFile] = useState(null);
+  const [createFile, setCreateFile] = useState(null);
+  const [createPreviewUrl, setCreatePreviewUrl] = useState(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
-  
+
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
 
@@ -113,6 +135,16 @@ export default function VendorTicketsPage() {
     }
   }, [selected?.messages, view]);
 
+  useEffect(() => {
+    if (!createFile) {
+      setCreatePreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(createFile);
+    setCreatePreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [createFile]);
+
   const fetchTickets = async () => {
     setLoading(true);
     try {
@@ -125,12 +157,18 @@ export default function VendorTicketsPage() {
     }
   };
 
+  const closeCreateModal = () => {
+    setShowCreate(false);
+    setCreateFile(null);
+    setCreatePreviewUrl(null);
+  };
+
   const handleCreateTicket = async (e) => {
     e.preventDefault();
     const subject = e.target.subject.value;
     const type = e.target.type.value;
     const description = e.target.description.value;
-    const file = e.target.file.files[0];
+    const file = createFile;
 
     setSending(true);
     setError(null);
@@ -146,20 +184,28 @@ export default function VendorTicketsPage() {
         formData.append("file", file);
         const uploadRes = await multipartClient.post(
           `/vendors/support/tickets/${res.data.id}/messages/attachments`,
-          formData
+          formData,
         );
         const url = uploadRes.data?.url;
         if (url) {
-          await apiClient.post(`/vendors/support/tickets/${res.data.id}/messages`, {
-            content: `(Attachment: ${url})`,
-          });
+          await apiClient.post(
+            `/vendors/support/tickets/${res.data.id}/messages`,
+            {
+              content: "Attachment",
+              attachments: [url],
+            },
+          );
         }
       }
 
       setShowCreate(false);
+      setCreateFile(null);
+      setCreatePreviewUrl(null);
       await fetchTickets();
       // Open the new ticket
-      const newTkRes = await apiClient.get(`/vendors/support/tickets/${res.data.id}`);
+      const newTkRes = await apiClient.get(
+        `/vendors/support/tickets/${res.data.id}`,
+      );
       setSelected(mapTicket(newTkRes.data));
       setView("detail");
     } catch (err) {
@@ -181,38 +227,41 @@ export default function VendorTicketsPage() {
         formData.append("file", replyFile);
         const uploadRes = await multipartClient.post(
           `/vendors/support/tickets/${selected.id}/messages/attachments`,
-          formData
+          formData,
         );
         const url = uploadRes.data?.url;
         if (url) {
-          content = content ? `${content}\n(Attachment: ${url})` : `(Attachment: ${url})`;
+          content = content || "Attachment";
+          await apiClient.post(
+            `/vendors/support/tickets/${selected.id}/messages`,
+            {
+              content,
+              attachments: [url],
+            },
+          );
+          content = null;
         }
       }
 
-      await apiClient.post(`/vendors/support/tickets/${selected.id}/messages`, {
-        content: content || "Message sent",
-      });
+      if (content !== null) {
+        await apiClient.post(
+          `/vendors/support/tickets/${selected.id}/messages`,
+          {
+            content: content || "Message sent",
+          },
+        );
+      }
 
       setReplyText("");
       setReplyFile(null);
-      const updatedRes = await apiClient.get(`/vendors/support/tickets/${selected.id}`);
+      const updatedRes = await apiClient.get(
+        `/vendors/support/tickets/${selected.id}`,
+      );
       setSelected(mapTicket(updatedRes.data));
     } catch (err) {
       console.error("Failed to reply", err);
     } finally {
       setSending(false);
-    }
-  };
-
-  const handleCloseTicket = async (id) => {
-    if (!window.confirm("Are you sure you want to close this ticket?")) return;
-    try {
-      await apiClient.patch(`/vendors/support/tickets/${id}/close`);
-      const updatedRes = await apiClient.get(`/vendors/support/tickets/${id}`);
-      setSelected(mapTicket(updatedRes.data));
-      setTickets(prev => prev.map(t => t.id === id ? mapTicket(updatedRes.data) : t));
-    } catch (err) {
-      console.error("Failed to close ticket", err);
     }
   };
 
@@ -222,15 +271,18 @@ export default function VendorTicketsPage() {
       await apiClient.patch(`/vendors/support/tickets/${id}/cancel`);
       const updatedRes = await apiClient.get(`/vendors/support/tickets/${id}`);
       setSelected(mapTicket(updatedRes.data));
-      setTickets(prev => prev.map(t => t.id === id ? mapTicket(updatedRes.data) : t));
+      setTickets((prev) =>
+        prev.map((t) => (t.id === id ? mapTicket(updatedRes.data) : t)),
+      );
     } catch (err) {
       console.error("Failed to cancel ticket", err);
     }
   };
 
-  const filteredTickets = tickets.filter(t => 
-    t.subject.toLowerCase().includes(search.toLowerCase()) ||
-    t.id.toLowerCase().includes(search.toLowerCase())
+  const filteredTickets = tickets.filter(
+    (t) =>
+      t.subject.toLowerCase().includes(search.toLowerCase()) ||
+      t.id.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -239,28 +291,53 @@ export default function VendorTicketsPage() {
       pageSubtitle="Get help from our technical and business support teams."
       breadcrumb="Support"
     >
-      <div className={p.settingsPanel} style={{ padding: 0, overflow: "hidden", minHeight: 600 }}>
+      <div
+        className={p.settingsPanel}
+        style={{ padding: 0, overflow: "hidden", minHeight: 600 }}
+      >
         {view === "list" ? (
           <div style={{ padding: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 24,
+              }}
+            >
               <div>
                 <h3 style={{ margin: 0, fontSize: 18 }}>Support Tickets</h3>
-                <p style={{ margin: 0, fontSize: 13, color: "var(--vdr-text-muted)" }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 13,
+                    color: "var(--vdr-text-muted)",
+                  }}
+                >
                   You have {tickets.length} total tickets.
                 </p>
               </div>
               <div style={{ display: "flex", gap: 12 }}>
                 <div style={{ position: "relative" }}>
-                   <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--vdr-text-muted)" }} />
-                   <input 
-                    className={p.input} 
-                    style={{ paddingLeft: 32, width: 240, height: 38 }} 
-                    placeholder="Search tickets..." 
+                  <Search
+                    size={14}
+                    style={{
+                      position: "absolute",
+                      left: 10,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "var(--vdr-text-muted)",
+                    }}
+                  />
+                  <input
+                    className={p.input}
+                    style={{ paddingLeft: 32, width: 240, height: 38 }}
+                    placeholder="Search tickets..."
                     value={search}
-                    onChange={e => setSearch(e.target.value)}
-                   />
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
                 </div>
-                <button 
+                <button
                   className={`${p.btn} ${p.btnPrimary}`}
                   onClick={() => setShowCreate(true)}
                 >
@@ -271,21 +348,44 @@ export default function VendorTicketsPage() {
 
             {loading ? (
               <div style={{ padding: "80px 0", textAlign: "center" }}>
-                <div className={p.spin} style={{ border: "2px solid #ddd", borderTopColor: "var(--vdr-accent)", width: 32, height: 32, borderRadius: "50%", margin: "0 auto" }} />
+                <div
+                  className={p.spin}
+                  style={{
+                    border: "2px solid #ddd",
+                    borderTopColor: "var(--vdr-accent)",
+                    width: 32,
+                    height: 32,
+                    borderRadius: "50%",
+                    margin: "0 auto",
+                  }}
+                />
               </div>
             ) : filteredTickets.length === 0 ? (
               <div style={{ textAlign: "center", padding: "80px 20px" }}>
-                <MessageSquare size={48} style={{ color: "var(--vdr-border)", marginBottom: 16 }} />
+                <MessageSquare
+                  size={48}
+                  style={{ color: "var(--vdr-border)", marginBottom: 16 }}
+                />
                 <h4 style={{ margin: "0 0 8px" }}>No tickets found</h4>
-                <p style={{ color: "var(--vdr-text-muted)", margin: 0, fontSize: 14 }}>
-                  {search ? "Try a different search term." : "Need help? Create a ticket and our team will assist you."}
+                <p
+                  style={{
+                    color: "var(--vdr-text-muted)",
+                    margin: 0,
+                    fontSize: 14,
+                  }}
+                >
+                  {search
+                    ? "Try a different search term."
+                    : "Need help? Create a ticket and our team will assist you."}
                 </p>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {filteredTickets.map(tk => (
-                  <div 
-                    key={tk.id} 
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 12 }}
+              >
+                {filteredTickets.map((tk) => (
+                  <div
+                    key={tk.id}
                     className={p.ticketCard}
                     style={{
                       padding: 18,
@@ -296,56 +396,112 @@ export default function VendorTicketsPage() {
                       justifyContent: "space-between",
                       alignItems: "center",
                       transition: "all 0.2s",
-                      background: "white"
+                      background: "white",
                     }}
                     onClick={() => {
                       setSelected(tk);
                       setView("detail");
                     }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = "var(--vdr-accent)"}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = "var(--vdr-border)"}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.borderColor = "var(--vdr-accent)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.borderColor = "var(--vdr-border)")
+                    }
                   >
-                    <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-                      <div style={{ 
-                        width: 42, 
-                        height: 42, 
-                        borderRadius: 12, 
-                        background: STATUS_CFG[tk.status]?.bg, 
-                        color: STATUS_CFG[tk.status]?.color,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center"
-                      }}>
+                    <div
+                      style={{ display: "flex", gap: 16, alignItems: "center" }}
+                    >
+                      <div
+                        style={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: 12,
+                          background: STATUS_CFG[tk.status]?.bg,
+                          color: STATUS_CFG[tk.status]?.color,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
                         <MessageSquare size={20} />
                       </div>
                       <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, color: "var(--vdr-text-muted)", fontWeight: 600 }}>#{tk.id.slice(0, 8)}</span>
-                          <span style={{ 
-                            fontSize: 10, 
-                            padding: "2px 8px", 
-                            borderRadius: 20, 
-                            background: STATUS_CFG[tk.status]?.bg,
-                            color: STATUS_CFG[tk.status]?.color,
-                            fontWeight: 700,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px"
-                          }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            marginBottom: 4,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: "var(--vdr-text-muted)",
+                              fontWeight: 600,
+                            }}
+                          >
+                            #{tk.id.slice(0, 8)}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              padding: "2px 8px",
+                              borderRadius: 20,
+                              background: STATUS_CFG[tk.status]?.bg,
+                              color: STATUS_CFG[tk.status]?.color,
+                              fontWeight: 700,
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                            }}
+                          >
                             {getStatusLabel(tk.status)}
                           </span>
                         </div>
-                        <h4 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600 }}>{tk.subject}</h4>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12, color: "var(--vdr-text-muted)" }}>
-                          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <h4
+                          style={{
+                            margin: "0 0 4px",
+                            fontSize: 15,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {tk.subject}
+                        </h4>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 12,
+                            fontSize: 12,
+                            color: "var(--vdr-text-muted)",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
                             <Tag size={12} /> {tk.category}
                           </span>
-                          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
                             <Clock size={12} /> {tk.updated}
                           </span>
                         </div>
                       </div>
                     </div>
-                    <ChevronRight size={18} style={{ color: "var(--vdr-text-muted)" }} />
+                    <ChevronRight
+                      size={18}
+                      style={{ color: "var(--vdr-text-muted)" }}
+                    />
                   </div>
                 ))}
               </div>
@@ -353,53 +509,90 @@ export default function VendorTicketsPage() {
           </div>
         ) : (
           /* Ticket Detail View */
-          <div style={{ height: 700, display: "flex", flexDirection: "column" }}>
-            <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--vdr-border)", display: "flex", alignItems: "center", gap: 16, background: "white" }}>
-              <button 
-                onClick={() => setView("list")} 
-                style={{ background: "#f1f5f9", border: "none", cursor: "pointer", padding: 8, borderRadius: 10, display: "flex" }}
+          <div
+            style={{ height: 700, display: "flex", flexDirection: "column" }}
+          >
+            <div
+              style={{
+                padding: "16px 24px",
+                borderBottom: "1px solid var(--vdr-border)",
+                display: "flex",
+                alignItems: "center",
+                gap: 16,
+                background: "white",
+              }}
+            >
+              <button
+                onClick={() => setView("list")}
+                style={{
+                  background: "#f1f5f9",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 8,
+                  borderRadius: 10,
+                  display: "flex",
+                }}
               >
                 <ChevronLeft size={18} />
               </button>
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                   <h4 style={{ margin: 0, fontSize: 16 }}>{selected.subject}</h4>
-                   <span style={{ 
-                      fontSize: 10, 
-                      padding: "2px 8px", 
-                      borderRadius: 20, 
+                  <h4 style={{ margin: 0, fontSize: 16 }}>
+                    {selected.subject}
+                  </h4>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      padding: "2px 8px",
+                      borderRadius: 20,
                       background: STATUS_CFG[selected.status]?.bg,
                       color: STATUS_CFG[selected.status]?.color,
-                      fontWeight: 700
-                    }}>
-                      {getStatusLabel(selected.status)}
-                    </span>
+                      fontWeight: 700,
+                    }}
+                  >
+                    {getStatusLabel(selected.status)}
+                  </span>
                 </div>
-                <span style={{ fontSize: 12, color: "var(--vdr-text-muted)" }}>Ticket ID: {selected.id}</span>
+                <span style={{ fontSize: 12, color: "var(--vdr-text-muted)" }}>
+                  Ticket ID: {selected.id}
+                </span>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                {selected.status !== "CLOSED" && selected.status !== "CANCELED" && (
-                   <button 
+                {["PENDING", "OPEN", "AWAITING_RESPONSE"].includes(
+                  selected.status,
+                ) && (
+                  <button
                     className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
                     onClick={() => handleCancelTicket(selected.id)}
                   >
                     Cancel Ticket
                   </button>
                 )}
-                {selected.status === "RESOLVED" && (
-                  <button 
-                    className={`${p.btn} ${p.btnPrimary} ${p.btnSm}`}
-                    onClick={() => handleCloseTicket(selected.id)}
-                  >
-                    Accept & Close
-                  </button>
-                )}
               </div>
             </div>
-            
-            <div style={{ flex: 1, overflowY: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 20, background: "#f8fafc" }}>
+
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                padding: 24,
+                display: "flex",
+                flexDirection: "column",
+                gap: 20,
+                background: "#f8fafc",
+              }}
+            >
               <div style={{ textAlign: "center", margin: "10px 0" }}>
-                <span style={{ fontSize: 11, color: "var(--vdr-text-muted)", background: "white", padding: "4px 12px", borderRadius: 20, border: "1px solid var(--vdr-border)" }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "var(--vdr-text-muted)",
+                    background: "white",
+                    padding: "4px 12px",
+                    borderRadius: 20,
+                    border: "1px solid var(--vdr-border)",
+                  }}
+                >
                   Ticket created on {selected.created}
                 </span>
               </div>
@@ -407,47 +600,82 @@ export default function VendorTicketsPage() {
               {selected.messages?.map((msg, idx) => {
                 const isMe = msg.from === "me";
                 return (
-                  <div key={idx} style={{ 
-                    alignSelf: isMe ? "flex-end" : "flex-start",
-                    maxWidth: "75%",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: isMe ? "flex-end" : "flex-start"
-                  }}>
-                    <div style={{ 
-                      padding: "12px 16px",
-                      borderRadius: isMe ? "18px 18px 2px 18px" : "18px 18px 18px 2px",
-                      background: isMe ? "var(--vdr-accent)" : "white",
-                      color: isMe ? "white" : "var(--vdr-text)",
-                      boxShadow: "0 2px 4px rgba(0,0,0,0.04)",
-                      border: isMe ? "none" : "1px solid var(--vdr-border)",
-                      position: "relative"
-                    }}>
-                      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{msg.text}</p>
-                      {msg.attachment && (
-                        <a 
-                          href={msg.attachment.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          style={{ 
-                            display: "flex", 
-                            alignItems: "center", 
-                            gap: 8, 
-                            marginTop: 8, 
-                            padding: 8, 
-                            background: isMe ? "rgba(255,255,255,0.15)" : "#f1f5f9", 
-                            borderRadius: 8,
-                            textDecoration: "none",
-                            color: "inherit",
-                            fontSize: 12
-                          }}
-                        >
-                          <FileText size={14} />
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{msg.attachment.name}</span>
-                        </a>
+                  <div
+                    key={idx}
+                    style={{
+                      alignSelf: isMe ? "flex-end" : "flex-start",
+                      maxWidth: "75%",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: isMe ? "flex-end" : "flex-start",
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "12px 16px",
+                        borderRadius: isMe
+                          ? "18px 18px 2px 18px"
+                          : "18px 18px 18px 2px",
+                        background: isMe ? "var(--vdr-accent)" : "white",
+                        color: isMe ? "white" : "var(--vdr-text)",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.04)",
+                        border: isMe ? "none" : "1px solid var(--vdr-border)",
+                        position: "relative",
+                      }}
+                    >
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 14,
+                          lineHeight: 1.5,
+                          whiteSpace: "pre-wrap",
+                        }}
+                      >
+                        {msg.text}
+                      </p>
+                      {msg.attachments?.length > 0 && (
+                        <div className={p.ticketAttachmentList}>
+                          {msg.attachments.map((att) =>
+                            att.isImage ? (
+                              <a
+                                key={att.url}
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={p.ticketAttachmentImageLink}
+                              >
+                                <img
+                                  src={att.url}
+                                  alt={att.name}
+                                  className={p.ticketAttachmentImage}
+                                />
+                              </a>
+                            ) : (
+                              <a
+                                key={att.url}
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={p.ticketAttachmentFile}
+                              >
+                                <FileText size={14} />
+                                <span className={p.ticketAttachmentName}>
+                                  {att.name}
+                                </span>
+                              </a>
+                            ),
+                          )}
+                        </div>
                       )}
                     </div>
-                    <span style={{ fontSize: 10, color: "var(--vdr-text-muted)", marginTop: 6, padding: "0 4px" }}>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: "var(--vdr-text-muted)",
+                        marginTop: 6,
+                        padding: "0 4px",
+                      }}
+                    >
                       {isMe ? "You" : "Support Agent"} • {msg.time}
                     </span>
                   </div>
@@ -457,49 +685,115 @@ export default function VendorTicketsPage() {
             </div>
 
             {selected.status !== "CLOSED" && selected.status !== "CANCELED" && (
-              <div style={{ padding: 20, borderTop: "1px solid var(--vdr-border)", background: "white" }}>
+              <div
+                style={{
+                  padding: 20,
+                  borderTop: "1px solid var(--vdr-border)",
+                  background: "white",
+                }}
+              >
                 {replyFile && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "#f1f5f9", borderRadius: 8, width: "fit-content", marginBottom: 10, fontSize: 12 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "6px 12px",
+                      background: "#f1f5f9",
+                      borderRadius: 8,
+                      width: "fit-content",
+                      marginBottom: 10,
+                      fontSize: 12,
+                    }}
+                  >
                     <Paperclip size={12} />
                     <span>{replyFile.name}</span>
-                    <button onClick={() => setReplyFile(null)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex" }}>
+                    <button
+                      onClick={() => setReplyFile(null)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        display: "flex",
+                      }}
+                    >
                       <X size={12} />
                     </button>
                   </div>
                 )}
-                <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
+                <div
+                  style={{ display: "flex", gap: 12, alignItems: "flex-end" }}
+                >
                   <div style={{ flex: 1, position: "relative" }}>
-                    <textarea 
-                      className={p.textarea} 
-                      style={{ minHeight: 48, maxHeight: 120, paddingRight: 40, paddingTop: 12 }}
-                      placeholder="Write your response..." 
+                    <textarea
+                      className={p.textarea}
+                      style={{
+                        minHeight: 48,
+                        maxHeight: 120,
+                        paddingRight: 40,
+                        paddingTop: 12,
+                      }}
+                      placeholder="Write your response..."
                       value={replyText}
-                      onChange={e => setReplyText(e.target.value)}
-                      onKeyDown={e => {
+                      onChange={(e) => setReplyText(e.target.value)}
+                      onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
                           handleReply(e);
                         }
                       }}
                     />
-                    <button 
+                    <button
                       onClick={() => fileRef.current?.click()}
-                      style={{ position: "absolute", right: 12, top: 12, background: "none", border: "none", cursor: "pointer", color: "var(--vdr-text-muted)" }}
+                      style={{
+                        position: "absolute",
+                        right: 12,
+                        top: 12,
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "var(--vdr-text-muted)",
+                      }}
                     >
                       <Paperclip size={18} />
                     </button>
-                    <input type="file" ref={fileRef} style={{ display: "none" }} onChange={e => setReplyFile(e.target.files[0])} />
+                    <input
+                      type="file"
+                      ref={fileRef}
+                      style={{ display: "none" }}
+                      onChange={(e) => setReplyFile(e.target.files[0])}
+                    />
                   </div>
-                  <button 
-                    className={`${p.btn} ${p.btnPrimary}`} 
-                    style={{ height: 48, width: 48, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                  <button
+                    className={`${p.btn} ${p.btnPrimary}`}
+                    style={{
+                      height: 48,
+                      width: 48,
+                      padding: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
                     onClick={handleReply}
                     disabled={(!replyText.trim() && !replyFile) || sending}
                   >
-                    {sending ? <div className={p.spin} style={{ width: 16, height: 16 }} /> : <Send size={18} />}
+                    {sending ? (
+                      <div
+                        className={p.spin}
+                        style={{ width: 16, height: 16 }}
+                      />
+                    ) : (
+                      <Send size={18} />
+                    )}
                   </button>
                 </div>
-                <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--vdr-text-muted)" }}>
+                <p
+                  style={{
+                    margin: "8px 0 0",
+                    fontSize: 11,
+                    color: "var(--vdr-text-muted)",
+                  }}
+                >
                   Press Enter to send, Shift+Enter for new line.
                 </p>
               </div>
@@ -509,58 +803,149 @@ export default function VendorTicketsPage() {
       </div>
 
       {showCreate && (
-        <div className={p.modalBackdrop} onClick={() => setShowCreate(false)}>
-          <div className={p.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 540 }}>
+        <div className={p.modalBackdrop} onClick={closeCreateModal}>
+          <div
+            className={p.modal}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 540 }}
+          >
             <div className={p.modalHead}>
               <h2 className={p.modalTitle}>New Support Ticket</h2>
-              <button className={p.modalClose} onClick={() => setShowCreate(false)}><X size={18} /></button>
+              <button className={p.modalClose} onClick={closeCreateModal}>
+                <X size={18} />
+              </button>
             </div>
             <form onSubmit={handleCreateTicket}>
               <div className={p.modalBody}>
                 {error && (
-                  <div style={{ padding: 12, background: "#fee2e2", color: "#dc2626", borderRadius: 8, fontSize: 13, marginBottom: 16, display: "flex", gap: 8, alignItems: "center" }}>
+                  <div
+                    style={{
+                      padding: 12,
+                      background: "#fee2e2",
+                      color: "#dc2626",
+                      borderRadius: 8,
+                      fontSize: 13,
+                      marginBottom: 16,
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                    }}
+                  >
                     <AlertTriangle size={16} /> {error}
                   </div>
                 )}
                 <div className={p.formGroup}>
                   <label className={p.label}>Subject</label>
-                  <input name="subject" className={p.input} placeholder="Briefly summarize the issue" required />
+                  <input
+                    name="subject"
+                    className={p.input}
+                    placeholder="Briefly summarize the issue"
+                    required
+                  />
                 </div>
                 <div className={p.formRow}>
                   <div className={p.formGroup}>
                     <label className={p.label}>Category</label>
                     <select name="type" className={p.select}>
-                      {TICKET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      {TICKET_TYPES.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
                 <div className={p.formGroup}>
                   <label className={p.label}>Description</label>
-                  <textarea name="description" className={p.textarea} rows={4} placeholder="Provide details about your problem..." required />
+                  <textarea
+                    name="description"
+                    className={p.textarea}
+                    rows={4}
+                    placeholder="Provide details about your problem..."
+                    required
+                  />
                 </div>
                 <div className={p.formGroup}>
                   <label className={p.label}>Attachment (Optional)</label>
-                  <div 
-                    onClick={() => document.getElementById('new-tkt-file').click()}
-                    style={{ 
-                      border: "2px dashed var(--vdr-border)", 
-                      borderRadius: 12, 
-                      padding: 20, 
-                      textAlign: "center", 
+                  <div
+                    onClick={() =>
+                      document.getElementById("new-tkt-file").click()
+                    }
+                    style={{
+                      border: "2px dashed var(--vdr-border)",
+                      borderRadius: 12,
+                      padding: 20,
+                      textAlign: "center",
                       cursor: "pointer",
-                      background: "#f8fafc"
+                      background: "#f8fafc",
                     }}
                   >
-                    <Paperclip size={24} style={{ color: "var(--vdr-accent)", marginBottom: 8 }} />
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 500 }}>Click to upload a file</p>
-                    <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--vdr-text-muted)" }}>JPG, PNG or PDF up to 5MB</p>
-                    <input id="new-tkt-file" name="file" type="file" style={{ display: "none" }} />
+                    <Paperclip
+                      size={24}
+                      style={{ color: "var(--vdr-accent)", marginBottom: 8 }}
+                    />
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 500 }}>
+                      Click to upload a file
+                    </p>
+                    <p
+                      style={{
+                        margin: "4px 0 0",
+                        fontSize: 12,
+                        color: "var(--vdr-text-muted)",
+                      }}
+                    >
+                      JPG, PNG or PDF up to 5MB
+                    </p>
+                    <input
+                      id="new-tkt-file"
+                      name="file"
+                      type="file"
+                      style={{ display: "none" }}
+                      onChange={(e) => setCreateFile(e.target.files[0] || null)}
+                    />
                   </div>
+                  {createFile && (
+                    <div className={p.ticketAttachmentPreview}>
+                      {createFile.type?.startsWith("image/") &&
+                        createPreviewUrl && (
+                          <img
+                            src={createPreviewUrl}
+                            alt={createFile.name}
+                            className={p.ticketAttachmentPreviewImage}
+                          />
+                        )}
+                      <div className={p.ticketAttachmentPreviewInfo}>
+                        <span className={p.ticketAttachmentPreviewName}>
+                          {createFile.name}
+                        </span>
+                        <span className={p.ticketAttachmentPreviewMeta}>
+                          {(createFile.size / 1024).toFixed(1)} KB
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className={p.ticketAttachmentPreviewRemove}
+                        onClick={() => setCreateFile(null)}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className={p.modalFoot}>
-                <button type="button" className={`${p.btn} ${p.btnOutline}`} onClick={() => setShowCreate(false)}>Cancel</button>
-                <button type="submit" className={`${p.btn} ${p.btnPrimary}`} disabled={sending}>
+                <button
+                  type="button"
+                  className={`${p.btn} ${p.btnOutline}`}
+                  onClick={closeCreateModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={`${p.btn} ${p.btnPrimary}`}
+                  disabled={sending}
+                >
                   {sending ? "Creating..." : "Create Ticket"}
                 </button>
               </div>

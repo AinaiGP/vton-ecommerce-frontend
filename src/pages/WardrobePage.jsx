@@ -92,11 +92,22 @@ export default function WardrobePage() {
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadLabel, setUploadLabel] = useState("");
   const [uploadCategory, setUploadCategory] = useState("tops");
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState(null);
 
   /* ── Sync outfits to local storage ── */
   useEffect(() => {
     localStorage.setItem("ainai_outfits", JSON.stringify(outfits));
   }, [outfits]);
+
+  useEffect(() => {
+    if (!uploadFile) {
+      setUploadPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(uploadFile);
+    setUploadPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [uploadFile]);
 
   /* ── Fetch Categories ── */
   useEffect(() => {
@@ -108,39 +119,34 @@ export default function WardrobePage() {
       .catch(console.error);
   }, []);
 
+  const fetchWardrobe = useCallback(async () => {
+    setLoadingItems(true);
+    try {
+      const res = await apiClient.get("/customers/wardrobe", {
+        params: { limit: 100, page: 1 },
+      });
+      const raw = res.data?.data || res.data || [];
+      setItems(
+        raw.map((item) => ({
+          id: item.id,
+          name: item.label || "Unnamed Item",
+          category: item.category || "all",
+          color: "#e2e8f0",
+          url: item.imageUrl,
+          _raw: item,
+        })),
+      );
+    } catch (err) {
+      setItems([]);
+    } finally {
+      setLoadingItems(false);
+    }
+  }, []);
+
   /* ── Fetch Wardrobe Items ── */
   useEffect(() => {
-    let cancelled = false;
-    async function fetchWardrobe() {
-      setLoadingItems(true);
-      try {
-        const res = await apiClient.get("/customers/wardrobe", {
-          params: { limit: 100, page: 1 },
-        });
-        if (!cancelled) {
-          const raw = res.data?.data || res.data || [];
-          setItems(
-            raw.map((item) => ({
-              id: item.id,
-              name: item.label || "Unnamed Item",
-              category: item.category || "all",
-              color: "#e2e8f0",
-              url: item.imageUrl,
-              _raw: item,
-            })),
-          );
-        }
-      } catch (err) {
-        if (!cancelled) setItems([]);
-      } finally {
-        if (!cancelled) setLoadingItems(false);
-      }
-    }
     fetchWardrobe();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [fetchWardrobe]);
 
   /* helpers */
   const showToast = (msg, type = "success") => {
@@ -192,24 +198,11 @@ export default function WardrobePage() {
       formData.append("label", uploadLabel);
       formData.append("category", uploadCategory);
 
-      const res = await multipartClient.post("/customers/wardrobe", formData);
+      await multipartClient.post("/customers/wardrobe", formData);
 
-      const newItem = res.data;
-      if (newItem) {
-        setItems((prev) => [
-          {
-            id: newItem.id,
-            name: newItem.label || "Unnamed Item",
-            category: newItem.category || "all",
-            color: "#a8b5a0",
-            url: newItem.imageUrl,
-            isCustom: true,
-          },
-          ...prev,
-        ]);
-      }
       showToast("Item added to wardrobe!");
       setUploadModalOpen(false);
+      await fetchWardrobe();
     } catch (err) {
       showToast("Failed to upload item", "error");
     } finally {
@@ -341,27 +334,12 @@ export default function WardrobePage() {
               </button>
             </div>
             <form className={styles.modalBody} onSubmit={handleUploadSubmit}>
-              {uploadFile && (
-                <div
-                  style={{
-                    marginBottom: "16px",
-                    borderRadius: "8px",
-                    overflow: "hidden",
-                    aspectRatio: "1",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background: "var(--ivory-dark)",
-                  }}
-                >
+              {uploadFile && uploadPreviewUrl && (
+                <div className={styles.modalPreview}>
                   <img
-                    src={URL.createObjectURL(uploadFile)}
+                    src={uploadPreviewUrl}
                     alt="Preview"
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                    }}
+                    className={styles.modalPreviewImage}
                   />
                 </div>
               )}

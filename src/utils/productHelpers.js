@@ -7,6 +7,20 @@ export function getProductImage(product) {
   return null;
 }
 
+export function getVariantImage(variant, product) {
+  const variantImage = variant?.variantImageLinks?.find(
+    (link) => link?.image?.s3Url,
+  )?.image?.s3Url;
+  if (variantImage) return variantImage;
+  return getProductImage(product);
+}
+
+export function getVariantImageForColor(product, colorId) {
+  if (!product?.variants?.length || !colorId) return getProductImage(product);
+  const variant = product.variants.find((item) => item?.color?.id === colorId);
+  return getVariantImage(variant, product);
+}
+
 export function getPrimaryVariantForColor(product, colorId) {
   if (!product?.variants?.length || !colorId) return null;
   return (

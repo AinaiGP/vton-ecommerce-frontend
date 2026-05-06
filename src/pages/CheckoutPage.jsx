@@ -31,16 +31,16 @@ import { formatPrice } from "../utils/formatPrice";
 import styles from "../styles/CheckoutPage.module.css";
 
 // Initialize Stripe
-const stripePromise = loadStripe(
-  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "pk_test_placeholder",
-  {
-    developerTools: {
-      assistant: {
-        enabled: false,
+const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = stripeKey
+  ? loadStripe(stripeKey, {
+      developerTools: {
+        assistant: {
+          enabled: false,
+        },
       },
-    },
-  },
-);
+    })
+  : null;
 
 /**
  * Stripe Payment Form Component
@@ -156,6 +156,7 @@ export default function CheckoutPage() {
 
   const [paymentMethod, setPaymentMethod] = useState("card"); // card or cod
   const [clientSecret, setClientSecret] = useState(null);
+  const [paymentError, setPaymentError] = useState(null);
 
   // 1. Initial Load: Fetch Profile and Session
   useEffect(() => {
@@ -209,6 +210,13 @@ export default function CheckoutPage() {
     init();
   }, [isAuthenticated, navigate]);
 
+  useEffect(() => {
+    setPaymentError(null);
+    if (paymentMethod !== "card") {
+      setClientSecret(null);
+    }
+  }, [paymentMethod]);
+
   const handleNextToPayment = async () => {
     if (!selectedAddressId) {
       alert("Please select a shipping address.");
@@ -240,15 +248,22 @@ export default function CheckoutPage() {
   const handleNextToReview = async () => {
     if (paymentMethod === "card") {
       setProcessing(true);
+      setPaymentError(null);
       try {
         const res = await apiClient.post(
           `/checkout/sessions/${session.id}/confirm`,
         );
+        if (!res.data?.clientSecret) {
+          setPaymentError("Payment initialization failed. Please try again.");
+          return;
+        }
         setClientSecret(res.data.clientSecret);
         setStep(2);
       } catch (err) {
         console.error("Payment initiation failed:", err);
-        alert(err?.response?.data?.message || "Payment initiation failed.");
+        setPaymentError(
+          err?.response?.data?.message || "Payment initiation failed.",
+        );
       } finally {
         setProcessing(false);
       }
@@ -673,7 +688,7 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {paymentMethod === "card" && clientSecret ? (
+                {paymentMethod === "card" && clientSecret && stripePromise ? (
                   <Elements
                     stripe={stripePromise}
                     options={{
@@ -694,8 +709,19 @@ export default function CheckoutPage() {
                   </Elements>
                 ) : paymentMethod === "card" ? (
                   <div className={styles.emptyState}>
-                    <Loader2 size={24} className={styles.spin} />
-                    <p>Initializing secure payment...</p>
+                    {paymentError ? (
+                      <p className={styles.errorText}>{paymentError}</p>
+                    ) : !stripePromise ? (
+                      <p className={styles.errorText}>
+                        Stripe publishable key is missing. Please configure
+                        `VITE_STRIPE_PUBLISHABLE_KEY`.
+                      </p>
+                    ) : (
+                      <>
+                        <Loader2 size={24} className={styles.spin} />
+                        <p>Initializing secure payment...</p>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div className={styles.stepActionsStack}>

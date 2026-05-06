@@ -78,7 +78,7 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
       items: [
         {
           icon: LayoutDashboard,
-          label: t("admin.dashboard"),
+          label: t("Dashboard"),
           to: "/admin/dashboard",
         },
         { icon: Users, label: t("admin.users"), to: "/admin/users" },
@@ -262,10 +262,14 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
 
         {/* User pill */}
         <div className={styles.userPill}>
-          <div className={styles.userAvatar}>{(user?.firstName?.[0] || user?.email?.[0] || "A").toUpperCase()}</div>
+          <div className={styles.userAvatar}>
+            {(user?.firstName?.[0] || user?.email?.[0] || "A").toUpperCase()}
+          </div>
           {!collapsed && (
             <div className={styles.userInfo}>
-              <span className={styles.userName}>{user?.firstName} {user?.lastName}</span>
+              <span className={styles.userName}>
+                {user?.firstName} {user?.lastName}
+              </span>
               <span className={styles.userRole}>{user?.email}</span>
             </div>
           )}
@@ -452,8 +456,12 @@ function AdminHeader({ onMenuToggle, dark, onDarkToggle }) {
               setNotifOpen(false);
             }}
           >
-            <div className={styles.profileAvat}>{(user?.firstName?.[0] || user?.email?.[0] || "A").toUpperCase()}</div>
-            <span className={styles.profileName}>{user?.firstName} {user?.lastName}</span>
+            <div className={styles.profileAvat}>
+              {(user?.firstName?.[0] || user?.email?.[0] || "A").toUpperCase()}
+            </div>
+            <span className={styles.profileName}>
+              {user?.firstName} {user?.lastName}
+            </span>
             <ChevronDown
               size={14}
               className={[
@@ -466,7 +474,9 @@ function AdminHeader({ onMenuToggle, dark, onDarkToggle }) {
           {profileOpen && (
             <div className={styles.profileMenu}>
               <div className={styles.profileMenuInfo}>
-                <span className={styles.profileMenuName}>{user?.firstName} {user?.lastName}</span>
+                <span className={styles.profileMenuName}>
+                  {user?.firstName} {user?.lastName}
+                </span>
                 <span className={styles.profileMenuRole}>{user?.email}</span>
               </div>
               <ul className={styles.profileMenuList}>

@@ -5,6 +5,7 @@ import styles from "../../styles/ProductCard.module.css";
 import {
   formatPrice,
   getProductImage,
+  getVariantImageForColor,
   getUniqueColors,
   getSizeRange,
 } from "../../utils/productHelpers";
@@ -41,10 +42,7 @@ export default function ProductCard({ product }) {
   // Image changes based on selected color
   let imageUrl = defaultImageUrl;
   if (activeColorId) {
-    const colorImg = product.images?.find(
-      (i) => i.colorId === activeColorId,
-    )?.s3Url;
-    if (colorImg) imageUrl = colorImg;
+    imageUrl = getVariantImageForColor(product, activeColorId) || imageUrl;
   }
 
   const maxVisibleColors = 4;
@@ -87,7 +85,10 @@ export default function ProductCard({ product }) {
       <div className={styles.productInfo}>
         {/* Brand */}
         {product.vendor?.brandName && (
-          <Link to={`/vendor/${product.vendor.id}`} className={styles.brandLink}>
+          <Link
+            to={`/vendor/${product.vendor.id}`}
+            className={styles.brandLink}
+          >
             <p className={styles.brandName}>{product.vendor.brandName}</p>
           </Link>
         )}
