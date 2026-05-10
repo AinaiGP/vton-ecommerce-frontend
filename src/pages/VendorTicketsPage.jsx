@@ -35,7 +35,7 @@ const STATUS_CFG = {
   AWAITING_RESPONSE: {
     color: "#8b5cf6",
     bg: "#f5f3ff",
-    label: "Waiting for Support",
+    label: "Awaiting Response",
   },
   ESCALATED: { color: "#dc2626", bg: "#fff1f2", label: "Escalated" },
   RESOLVED: { color: "#16a34a", bg: "#dcfce7", label: "Resolved" },
@@ -192,6 +192,7 @@ export default function VendorTicketsPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
   const [cancelingId, setCancelingId] = useState(null); // id of ticket to confirm cancel
   const [fullscreenImage, setFullscreenImage] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -391,11 +392,36 @@ export default function VendorTicketsPage() {
     }
   };
 
-  const filteredTickets = tickets.filter(
-    (t) =>
+  const counts = {};
+  tickets.forEach((t) => {
+    let stat = "Pending";
+    if (t.status === "RESOLVED") stat = "Resolved";
+    else if (t.status === "CLOSED") stat = "Closed";
+    else if (t.status === "CANCELED") stat = "Canceled";
+    else if (t.status === "IN_PROGRESS" || t.status === "AWAITING_RESPONSE" || t.status === "ESCALATED") {
+      stat = "In Progress";
+    } else {
+      stat = "Pending"; // PENDING or OPEN
+    }
+    counts[stat] = (counts[stat] || 0) + 1;
+  });
+
+  const filteredTickets = tickets.filter((t) => {
+    const ms =
       t.subject.toLowerCase().includes(search.toLowerCase()) ||
-      t.id.toLowerCase().includes(search.toLowerCase()),
-  );
+      t.id.toLowerCase().includes(search.toLowerCase());
+    
+    const st = t.status;
+    const mv =
+      statusFilter === "All" ||
+      (statusFilter === "Pending" && (st === "PENDING" || st === "OPEN")) ||
+      (statusFilter === "In Progress" && (st === "IN_PROGRESS" || st === "AWAITING_RESPONSE" || st === "ESCALATED")) ||
+      (statusFilter === "Resolved" && st === "RESOLVED") ||
+      (statusFilter === "Closed" && st === "CLOSED") ||
+      (statusFilter === "Canceled" && st === "CANCELED");
+
+    return ms && mv;
+  });
 
   return (
     <VendorLayout
@@ -509,6 +535,61 @@ export default function VendorTicketsPage() {
       >
         {view === "list" ? (
           <div style={{ padding: 24 }}>
+            {/* Stats Summary */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(5, 1fr)",
+                gap: 12,
+                marginBottom: 24,
+              }}
+            >
+              {[
+                { label: "Pending", color: "#64748b", bg: "#f1f5f9" },
+                { label: "In Progress", color: "#f59e0b", bg: "#fef3c7" },
+                { label: "Resolved", color: "#16a34a", bg: "#dcfce7" },
+                { label: "Closed", color: "#94a3b8", bg: "#f1f5f9" },
+                { label: "Canceled", color: "#94a3b8", bg: "#f1f5f9" },
+              ].map(({ label, color, bg }) => (
+                <div
+                  key={label}
+                  onClick={() =>
+                    setStatusFilter((p) => (p === label ? "All" : label))
+                  }
+                  style={{
+                    background: statusFilter === label ? bg : "white",
+                    border: `2px solid ${statusFilter === label ? color : "var(--vdr-border)"}`,
+                    borderRadius: 16,
+                    padding: "16px 20px",
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "block",
+                      fontSize: 24,
+                      fontWeight: 800,
+                      color: color,
+                      lineHeight: 1,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {counts[label] || 0}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "var(--vdr-text-muted)",
+                    }}
+                  >
+                    {label}
+                  </span>
+                </div>
+              ))}
+            </div>
+
             <div
               style={{
                 display: "flex",
@@ -543,12 +624,34 @@ export default function VendorTicketsPage() {
                   />
                   <input
                     className={p.input}
-                    style={{ paddingLeft: 32, width: 240, height: 38 }}
+                    style={{ paddingLeft: 32, width: 200, height: 38 }}
                     placeholder="Search tickets..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </div>
+                <select
+                  className={p.select}
+                  style={{ height: 38, padding: "0 12px", borderRadius: 10 }}
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="All">All Status</option>
+                  {[
+                    "Pending",
+                    "Open",
+                    "In Progress",
+                    "Waiting for Support",
+                    "Escalated",
+                    "Resolved",
+                    "Closed",
+                    "Canceled",
+                  ].map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
                 <button
                   className={`${p.btn} ${p.btnPrimary}`}
                   onClick={() => setShowCreate(true)}

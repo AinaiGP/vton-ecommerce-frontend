@@ -410,10 +410,12 @@ function CreateReturnModal({ onClose, onSubmit, myOrders }) {
 }
 
 /* ─── Return Detail (chat) ─── */
-function ReturnDetail({ ret, onBack, onReply, onImageClick }) {
+function ReturnDetail({ ret, onBack, onReply, onCancel, onImageClick }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const [sending, setSending] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const fileRef = useRef(null);
   const isClosed =
     ret.status === "RESOLVED" ||
@@ -455,6 +457,54 @@ function ReturnDetail({ ret, onBack, onReply, onImageClick }) {
           </p>
         </div>
         <StatusBadge status={ret.status} />
+        {!isClosed && (ret.status === "OPEN" || ret.status === "AWAITING_RESPONSE") && (
+          <button
+            className={`${styles.btn} ${styles.btnOutline} ${styles.btnSm}`}
+            onClick={() => setShowCancelModal(true)}
+            style={{ marginLeft: 12 }}
+          >
+            Cancel Request
+          </button>
+        )}
+        {showCancelModal && (
+          <div className={styles.backdrop} onClick={() => setShowCancelModal(false)}>
+            <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+              <div className={styles.modalHead}>
+                <h2 className={styles.modalTitle}>Cancel Return</h2>
+                <button className={styles.modalClose} onClick={() => setShowCancelModal(false)}>
+                  <X size={17} />
+                </button>
+              </div>
+              <div className={styles.modalBody}>
+                <p style={{ margin: 0, fontSize: 14, color: "var(--charcoal-muted)" }}>
+                  Are you sure you want to cancel this return request? This action cannot be undone.
+                </p>
+              </div>
+              <div className={styles.modalFoot}>
+                <button
+                  className={`${styles.btn} ${styles.btnOutline}`}
+                  onClick={() => setShowCancelModal(false)}
+                  disabled={canceling}
+                >
+                  Keep Request
+                </button>
+                <button
+                  className={`${styles.btn} ${styles.btnPrimary}`}
+                  style={{ background: "#dc2626", borderColor: "#dc2626" }}
+                  onClick={async () => {
+                    setCanceling(true);
+                    await onCancel(ret.id);
+                    setCanceling(false);
+                    setShowCancelModal(false);
+                  }}
+                  disabled={canceling}
+                >
+                  {canceling ? "Canceling…" : "Yes, Cancel It"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className={styles.chatArea} style={{ marginTop: 16 }}>
@@ -722,6 +772,16 @@ export default function CustomerReturnsPage() {
             ret={selected}
             onBack={() => setView("list")}
             onReply={handleReply}
+            onCancel={async (id) => {
+              try {
+                await apiClient.patch(`/customers/support/tickets/${id}/cancel`);
+                await refetchReturns();
+                const res = await apiClient.get(`/customers/support/tickets/${id}`);
+                setSelected(mapReturnTicket(res.data));
+              } catch (err) {
+                console.error("Failed to cancel return:", err);
+              }
+            }}
             onImageClick={(url) => setFullscreenImage(url)}
           />
         </div>

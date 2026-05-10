@@ -36,10 +36,10 @@ const STATUS_CFG = {
   AWAITING_RESPONSE: {
     color: "#8b5cf6",
     bg: "#f5f3ff",
-    label: "Waiting for Customer",
+    label: "Awaiting Response",
   },
-  ESCALATED: { color: "#dc2626", bg: "#fff1f2", label: "Escalated to Admin" },
-  RESOLVED: { color: "#16a34a", bg: "#dcfce7", label: "Solved" },
+  ESCALATED: { color: "#dc2626", bg: "#fff1f2", label: "Escalated" },
+  RESOLVED: { color: "#16a34a", bg: "#dcfce7", label: "Resolved" },
   CLOSED: { color: "#94a3b8", bg: "#f1f5f9", label: "Closed" },
   CANCELED: { color: "#94a3b8", bg: "#f1f5f9", label: "Canceled" },
 };
@@ -816,8 +816,16 @@ export default function CustomerTicketsPage() {
 
   const counts = {};
   tickets.forEach((t) => {
-    const label = getStatusLabel(t.status);
-    counts[label] = (counts[label] || 0) + 1;
+    let stat = "Pending";
+    if (t.status === "RESOLVED") stat = "Resolved";
+    else if (t.status === "CLOSED") stat = "Closed";
+    else if (t.status === "CANCELED") stat = "Canceled";
+    else if (t.status === "IN_PROGRESS" || t.status === "AWAITING_RESPONSE" || t.status === "ESCALATED") {
+      stat = "In Progress";
+    } else {
+      stat = "Pending"; // PENDING or OPEN
+    }
+    counts[stat] = (counts[stat] || 0) + 1;
   });
 
   const filtered = tickets
@@ -825,8 +833,16 @@ export default function CustomerTicketsPage() {
       const ms =
         t.subject.toLowerCase().includes(search.toLowerCase()) ||
         t.id.toLowerCase().includes(search.toLowerCase());
+      
+      const st = t.status;
       const mv =
-        statusFilter === "All" || getStatusLabel(t.status) === statusFilter;
+        statusFilter === "All" ||
+        (statusFilter === "Pending" && (st === "PENDING" || st === "OPEN")) ||
+        (statusFilter === "In Progress" && (st === "IN_PROGRESS" || st === "AWAITING_RESPONSE" || st === "ESCALATED")) ||
+        (statusFilter === "Resolved" && st === "RESOLVED") ||
+        (statusFilter === "Closed" && st === "CLOSED") ||
+        (statusFilter === "Canceled" && st === "CANCELED");
+      
       return ms && mv;
     })
     .sort((a, b) =>
@@ -1048,10 +1064,11 @@ export default function CustomerTicketsPage() {
         {/* Summary cards */}
         <div className={styles.summaryRow}>
           {[
-            { label: "Open", color: "#ef4444", bg: "#fee2e2" },
+            { label: "Pending", color: "#64748b", bg: "#f1f5f9" },
             { label: "In Progress", color: "#f59e0b", bg: "#fef3c7" },
-            { label: "Solved", color: "#16a34a", bg: "#dcfce7" },
+            { label: "Resolved", color: "#16a34a", bg: "#dcfce7" },
             { label: "Closed", color: "#94a3b8", bg: "#f1f5f9" },
+            { label: "Canceled", color: "#94a3b8", bg: "#f1f5f9" },
           ].map(({ label, color, bg }) => (
             <button
               key={label}
