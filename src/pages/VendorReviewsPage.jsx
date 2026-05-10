@@ -61,7 +61,7 @@ export default function VendorReviewsPage() {
             <div key={d.stars} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b", width: 24, flexShrink: 0 }}>{"★".repeat(d.stars)}</span>
               <div style={{ flex: 1, height: 8, background: "var(--vdr-border)", borderRadius: 4, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${(d.count / reviews.length) * 100}%`, background: "linear-gradient(90deg, var(--vdr-accent), #a78bfa)", borderRadius: 4, transition: "width 0.6s ease" }} />
+                <div style={{ height: "100%", width: `${reviews.length > 0 ? (d.count / reviews.length) * 100 : 0}%`, background: "linear-gradient(90deg, var(--vdr-accent), #a78bfa)", borderRadius: 4, transition: "width 0.6s ease" }} />
               </div>
               <span style={{ fontSize: 12, color: "var(--vdr-text-muted)", width: 20, textAlign: "right", flexShrink: 0 }}>{d.count}</span>
             </div>

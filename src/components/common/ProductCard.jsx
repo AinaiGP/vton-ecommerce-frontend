@@ -36,8 +36,8 @@ export default function ProductCard({ product }) {
   const defaultImageUrl = getProductImage(product);
   const colors = getUniqueColors(product);
   const sizeRange = getSizeRange(product);
-  const rating = product.rating ?? 0;
-  const reviews = product.reviewCount ?? 0;
+  const rating = parseFloat(product.averageRating) || 0;
+  const reviews = product.totalReviews ?? 0;
 
   // Image changes based on selected color
   let imageUrl = defaultImageUrl;
@@ -101,12 +101,17 @@ export default function ProductCard({ product }) {
 
         {/* Rating row */}
         <div className={styles.ratingRow}>
-          <Stars value={Math.round(rating)} />
-          {rating > 0 && (
-            <span className={styles.ratingValue}>{rating.toFixed(1)}</span>
-          )}
-          {reviews > 0 && (
-            <span className={styles.reviewCount}>({reviews})</span>
+          {reviews > 0 ? (
+            <>
+              <Stars value={Math.round(rating)} />
+              <span className={styles.ratingValue}>{rating.toFixed(1)}</span>
+              <span className={styles.reviewCount}>({reviews})</span>
+            </>
+          ) : (
+            <div className={styles.noReviews}>
+              <Stars value={0} />
+              <span className={styles.noReviewsText}>? (0)</span>
+            </div>
           )}
         </div>
 

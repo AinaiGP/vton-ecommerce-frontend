@@ -229,6 +229,8 @@ export const en = {
   "browse.sort_price_desc": "Price: High to Low",
   "browse.sort_name_asc": "Name: A to Z",
   "browse.sort_name_desc": "Name: Z to A",
+  "browse.sort_rating_desc": "Rating: High to Low",
+  "browse.sort_rating_asc": "Rating: Low to High",
   "browse.previous": "Previous",
   "browse.next": "Next",
   "browse.recently_viewed": "Recently Viewed",

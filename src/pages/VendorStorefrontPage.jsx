@@ -97,8 +97,8 @@ export default function VendorStorefrontPage() {
       : products.filter((p) => p.categoryName === activeCategory);
   const bannerSrc = store?.bannerUrl;
   const storeName = store?.brandName || store?.storeName || "Store";
-  const storeRating = store?.rating ?? 5.0;
-  const reviewCount = store?.reviewCount ?? 0;
+  const storeRating = store?.averageRating ? parseFloat(store.averageRating) : 5.0;
+  const reviewCount = store?.totalRatings ?? 0;
 
   const addToCart = (productId) => {
     setCartAdded((prev) => ({ ...prev, [productId]: true }));

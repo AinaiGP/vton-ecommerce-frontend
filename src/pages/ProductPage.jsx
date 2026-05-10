@@ -74,7 +74,7 @@ export default function ProductPage() {
 
   const [reviews, setReviews] = useState([]);
   const [reviewsTotal, setReviewsTotal] = useState(0);
-  const [averageRating, setAverageRating] = useState(5.0);
+  const [averageRating, setAverageRating] = useState(null);
 
 
   useEffect(() => {
@@ -97,7 +97,7 @@ export default function ProductPage() {
           const reviewsRes = await apiClient.get(`/products/${id}/reviews`);
           const rData = reviewsRes.data;
           setReviewsTotal(rData.totalReviews || 0);
-          setAverageRating(rData.averageRating || 5.0);
+          setAverageRating(rData.averageRating ? parseFloat(rData.averageRating) : null);
           setReviews(
             (rData.data || []).map((r) => ({
               id: r.id,
@@ -374,8 +374,8 @@ export default function ProductPage() {
             <h1 className={styles.productName}>{product.name}</h1>
             {reviewsTotal > 0 ? (
               <div className={styles.productRatingSummary}>
-                <StarRow value={Math.round(averageRating)} size={16} />
-                <span className={styles.ratingNumber}>{averageRating.toFixed(1)}</span>
+                <StarRow value={Math.round(averageRating || 0)} size={16} />
+                <span className={styles.ratingNumber}>{(averageRating || 0).toFixed(1)}</span>
                 <span className={styles.reviewCount}>({reviewsTotal} reviews)</span>
               </div>
             ) : (
@@ -539,8 +539,8 @@ export default function ProductPage() {
                   <MessageSquare size={20} /> Customer Reviews
                 </h4>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <StarRow value={Math.round(averageRating)} size={18} />
-                  <strong>{averageRating.toFixed(1)}</strong>
+                  <StarRow value={Math.round(averageRating || 0)} size={18} />
+                  <strong>{(averageRating || 0).toFixed(1)}</strong>
                   <span style={{ color: "var(--charcoal-muted)", fontSize: 14 }}>
                     ({reviewsTotal} reviews)
                   </span>

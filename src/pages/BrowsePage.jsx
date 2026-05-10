@@ -28,6 +28,8 @@ export default function BrowsePage() {
     { value: "PRICE_DESC", label: t("browse.sort_price_desc") },
     { value: "NAME_ASC", label: t("browse.sort_name_asc") },
     { value: "NAME_DESC", label: t("browse.sort_name_desc") },
+    { value: "RATING_DESC", label: t("browse.sort_rating_desc") },
+    { value: "RATING_ASC", label: t("browse.sort_rating_asc") },
   ];
 
   const currentPage = Number(searchParams.get("page") ?? "1");

@@ -223,6 +223,8 @@ export const ar = {
   "browse.sort_price_desc": "السعر: من الأعلى للأقل",
   "browse.sort_name_asc": "الاسم: أ-ي",
   "browse.sort_name_desc": "الاسم: ي-أ",
+  "browse.sort_rating_desc": "التقييم: من الأعلى للأقل",
+  "browse.sort_rating_asc": "التقييم: من الأقل للأعلى",
   "browse.previous": "السابق",
   "browse.next": "التالي",
   "browse.recently_viewed": "شوهد مؤخراً",
