@@ -97,7 +97,7 @@ export default function ProductPage() {
           const reviewsRes = await apiClient.get(`/products/${id}/reviews`);
           const rData = reviewsRes.data;
           setReviewsTotal(rData.totalReviews || 0);
-          setAverageRating(rData.averageRating ? parseFloat(rData.averageRating) : null);
+          setAverageRating(rData?.averageRating != null ? parseFloat(rData.averageRating) : null);
           setReviews(
             (rData.data || []).map((r) => ({
               id: r.id,
@@ -561,7 +561,7 @@ export default function ProductPage() {
                             <img src={review.avatar} alt={review.author} style={{ width: 40, height: 40, borderRadius: "50%" }} />
                           ) : (
                             <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--charcoal)", color: "var(--ivory)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>
-                              {review.author[0]}
+                              {(review.author || "C")[0]}
                             </div>
                           )}
                           <div>

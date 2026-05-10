@@ -53,10 +53,12 @@ export default function Header() {
   const profileRef = useRef(null); // ref for click-outside
   const fileInputRef = useRef(null); // unused here but kept for consistency
 
+  const [imgError, setImgError] = useState(false);
+
   // Read profile photo reactively from context
-  const profilePhoto = userRole === "vendor" 
+  const profilePhoto = !imgError ? (userRole === "vendor" 
     ? user?.logoUrl 
-    : (user?.primaryPhotoUrl || user?.photoUrl || null);
+    : (user?.primaryPhotoUrl || user?.photoUrl || null)) : null;
 
   // Dark mode
   useEffect(() => {
@@ -179,7 +181,7 @@ export default function Header() {
   ];
 
   const handleImgError = () => {
-    setProfilePhoto(null);
+    setImgError(true);
     if (typeof window !== "undefined")
       localStorage.removeItem("ainai_profile_photo");
   };

@@ -46,20 +46,44 @@ function getStatusLabel(status) {
   return STATUS_CFG[status]?.label || status;
 }
 
+function extractLegacyAttachment(content) {
+  if (!content) return { text: "", urls: [] };
+  const match = content.match(/\(attachment:\s*(https?:\/\/[^\s)]+)\)/i);
+  if (!match) return { text: content, urls: [] };
+  const cleaned = content.replace(match[0], "").trim();
+  return { text: cleaned || "Attachment", urls: [match[1]] };
+}
+
 /* ─── Map a RETURN_REQUEST ticket to the shape the JSX expects ─── */
 function mapReturnTicket(ticket) {
   const messages = (ticket.messages || [])
     .filter((m) => !m.isSystemMessage)
-    .map((m) => ({
-      from: m.senderRole === "customer" ? "customer" : "vendor",
-      text: m.content,
-      time: new Date(m.createdAt).toLocaleString("en-US", {
-        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-      }),
-      attachment: m.attachments?.length
-        ? { name: m.attachments[0].split("/").pop(), type: "image" }
-        : null,
-    }));
+    .map((m) => {
+      const legacy = extractLegacyAttachment(m.content);
+      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
+        Boolean,
+      );
+      const attachments = attachmentUrls.map((url) => ({
+        url,
+        name: url.split("/").pop() || "Attachment",
+        isImage: isImageUrl(url),
+      }));
+
+      return {
+        from:
+          String(m.senderRole || "").toLowerCase() === "customer"
+            ? "customer"
+            : "vendor",
+        text: legacy.text || m.content,
+        time: new Date(m.createdAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        attachments,
+      };
+    });
 
   return {
     id:         ticket.id,
@@ -114,13 +138,41 @@ function StatusBadge({ status }) {
   );
 }
 
-/* ─── File Attachment ─── */
-function FileAtt({ att }) {
-  if (!att) return null;
+function isImageUrl(url) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url);
+}
+
+function AttachmentList({ attachments, onImageClick }) {
+  if (!attachments?.length) return null;
   return (
-    <div className={styles.attachment}>
-      {att.type === "image" ? <ImageIcon size={13} /> : <FileText size={13} />}
-      <span>{att.name}</span>
+    <div className={styles.attachmentList}>
+      {attachments.map((att) =>
+        att.isImage ? (
+          <div
+            key={att.url}
+            className={styles.attachmentImageLink}
+            onClick={() => onImageClick(att.url)}
+            style={{ cursor: "zoom-in" }}
+          >
+            <img
+              src={att.url}
+              alt={att.name}
+              className={styles.attachmentImage}
+            />
+          </div>
+        ) : (
+          <a
+            key={att.url}
+            href={att.url}
+            target="_blank"
+            rel="noreferrer"
+            className={styles.attachment}
+          >
+            <FileText size={13} />
+            <span>{att.name}</span>
+          </a>
+        ),
+      )}
     </div>
   );
 }
@@ -151,9 +203,20 @@ function CreateReturnModal({ onClose, onSubmit, myOrders }) {
   const [reason, setReason] = useState(RETURN_REASONS[0]);
   const [desc, setDesc] = useState("");
   const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const fileRef = useRef(null);
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const selectedOrder = myOrders.find((o) => o.id === selectedOrderId);
 
@@ -264,12 +327,12 @@ function CreateReturnModal({ onClose, onSubmit, myOrders }) {
                 <Paperclip size={20} style={{ color: "var(--burgundy)" }} />
                 <div>
                   <p className={styles.attachTitle}>
-                    {file ? file.name : "Click to upload image or file"}
+                    {file ? file.name : "Click to attach proof or item photo"}
                   </p>
                   <p className={styles.attachSub}>
                     {file
                       ? `${(file.size / 1024).toFixed(1)} KB`
-                      : "PNG, JPG, PDF — Max 10 MB"}
+                      : "JPG, PNG, WebP — Max 5 MB"}
                   </p>
                 </div>
                 {file && (
@@ -288,10 +351,36 @@ function CreateReturnModal({ onClose, onSubmit, myOrders }) {
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*,.pdf"
+                accept="image/jpeg,image/png,image/webp,image/gif"
                 style={{ display: "none" }}
                 onChange={(e) => setFile(e.target.files[0] || null)}
               />
+              {file && (
+                <div className={styles.attachmentPreview}>
+                  {file.type?.startsWith("image/") && previewUrl && (
+                    <img
+                      src={previewUrl}
+                      alt={file.name}
+                      className={styles.attachmentPreviewImage}
+                    />
+                  )}
+                  <div className={styles.attachmentPreviewInfo}>
+                    <span className={styles.attachmentPreviewName}>
+                      {file.name}
+                    </span>
+                    <span className={styles.attachmentPreviewMeta}>
+                      {(file.size / 1024).toFixed(1)} KB
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.attachmentPreviewRemove}
+                    onClick={() => setFile(null)}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
             </div>
             {error && (
               <p style={{ color: "#dc2626", fontSize: 12 }}>{error}</p>
@@ -321,7 +410,7 @@ function CreateReturnModal({ onClose, onSubmit, myOrders }) {
 }
 
 /* ─── Return Detail (chat) ─── */
-function ReturnDetail({ ret, onBack, onReply }) {
+function ReturnDetail({ ret, onBack, onReply, onImageClick }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const [sending, setSending] = useState(false);
@@ -391,7 +480,7 @@ function ReturnDetail({ ret, onBack, onReply }) {
                 className={`${styles.bubble} ${isMe ? styles.bubbleCustomer : styles.bubbleSupport}`}
               >
                 <p className={styles.bubbleText}>{msg.text}</p>
-                <FileAtt att={msg.attachment} />
+                <AttachmentList attachments={msg.attachments} onImageClick={onImageClick} />
                 <span className={styles.bubbleTime}>{msg.time}</span>
               </div>
               {isMe && (
@@ -474,6 +563,7 @@ export default function CustomerReturnsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [fullscreenImage, setFullscreenImage] = useState(null);
 
   /* ── Fetch return requests (RETURN_REQUEST tickets) on mount ── */
   useEffect(() => {
@@ -538,7 +628,7 @@ export default function CustomerReturnsPage() {
   });
 
   /* ── Create return ── */
-  const handleCreate = async ({ orderId, itemId, reason, desc }) => {
+  const handleCreate = async ({ orderId, itemId, reason, desc, file }) => {
     // POST to the order return endpoint — returns a ticket
     const res = await apiClient.post(`/customers/orders/${orderId}/return`, {
       orderItemId: itemId,
@@ -546,15 +636,45 @@ export default function CustomerReturnsPage() {
       reason: reason,
       ...(desc ? { note: desc } : {}),
     });
+
+    if (file) {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadRes = await multipartClient.post(
+          `/customers/support/tickets/${res.data.id}/messages/attachments`,
+          formData,
+        );
+        const attachmentUrl = uploadRes.data?.url || null;
+        if (attachmentUrl) {
+          await apiClient.post(
+            `/customers/support/tickets/${res.data.id}/messages`,
+            {
+              content: "Attachment",
+              attachments: [attachmentUrl],
+            },
+          );
+        }
+      } catch (err) {
+        console.error("Failed to upload return attachment:", err);
+      }
+    }
+
     setShowCreate(false);
     await refetchReturns();
-    // Open the newly created ticket
+    // Open the newly created ticket with full detail (messages)
     const newTicketId = res.data?.id;
     if (newTicketId) {
-      const newReturn = returns.find((r) => r.id === newTicketId) ||
-        mapReturnTicket(res.data);
-      setSelected(newReturn);
-      setView("detail");
+      try {
+        setLoading(true);
+        const detailRes = await apiClient.get(`/customers/support/tickets/${newTicketId}`);
+        setSelected(mapReturnTicket(detailRes.data));
+        setView("detail");
+      } catch (err) {
+        console.error("Failed to fetch new return detail:", err);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -572,14 +692,16 @@ export default function CustomerReturnsPage() {
           formData,
         );
         attachmentUrl = uploadRes.data?.url || null;
-      } catch {
-        // continue without attachment
+      } catch (err) {
+        console.error("Failed to upload return message attachment:", err);
+        throw err;
       }
     }
 
-    const content = [text, attachmentUrl].filter(Boolean).join("\n") || text;
+    const content = text?.trim() || "Attachment";
     await apiClient.post(`/customers/support/tickets/${ticketId}/messages`, {
-      content: content || "(attachment)",
+      content,
+      attachments: attachmentUrl ? [attachmentUrl] : undefined,
     });
 
     // Refetch the ticket to get updated messages
@@ -600,8 +722,19 @@ export default function CustomerReturnsPage() {
             ret={selected}
             onBack={() => setView("list")}
             onReply={handleReply}
+            onImageClick={(url) => setFullscreenImage(url)}
           />
         </div>
+        {fullscreenImage && (
+          <div className={styles.fullscreenOverlay} onClick={() => setFullscreenImage(null)}>
+            <div className={styles.fullscreenContent}>
+              <img src={fullscreenImage} alt="Preview" className={styles.fullscreenImg} />
+              <button className={styles.fullscreenClose} onClick={() => setFullscreenImage(null)}>
+                <X size={24} />
+              </button>
+            </div>
+          </div>
+        )}
         <Footer />
       </div>
     );
@@ -676,9 +809,17 @@ export default function CustomerReturnsPage() {
               <article
                 key={ret.id}
                 className={styles.ticketCard}
-                onClick={() => {
-                  setSelected(ret);
-                  setView("detail");
+                onClick={async () => {
+                  try {
+                    setLoading(true);
+                    const res = await apiClient.get(`/customers/support/tickets/${ret.id}`);
+                    setSelected(mapReturnTicket(res.data));
+                    setView("detail");
+                  } catch (err) {
+                    console.error("Failed to fetch return detail:", err);
+                  } finally {
+                    setLoading(false);
+                  }
                 }}
               >
                 <div className={styles.cardMain}>
