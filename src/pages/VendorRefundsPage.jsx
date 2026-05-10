@@ -19,21 +19,23 @@ import p from "../styles/VendorPage.module.css";
 import apiClient, { multipartClient } from "../utils/apiClient";
 
 const STATUS_BADGE = {
-  PENDING: p.badgePending,
-  OPEN: p.badgePending,
-  IN_PROGRESS: p.badgeDelivered,
-  RESOLVED: p.badgeDelivered,
-  CLOSED: p.badgeDelivered,
-  CANCELED: p.badgeCancelled,
+  REQUESTED: p.badgePending,
+  VENDOR_APPROVED: p.badgeShipped,
+  VENDOR_REJECTED: p.badgeCancelled,
+  ITEM_IN_TRANSIT: p.badgePending,
+  ITEM_RECEIVED: p.badgeDelivered,
+  REFUND_PENDING: p.badgeDelivered,
+  COMPLETED: p.badgeDelivered,
 };
 
 const STATUS_LABELS = {
-  PENDING: "Pending",
-  OPEN: "Open",
-  IN_PROGRESS: "In Progress",
-  RESOLVED: "Approved",
-  CLOSED: "Closed",
-  CANCELED: "Rejected",
+  REQUESTED: "Return Requested",
+  VENDOR_APPROVED: "Approved",
+  VENDOR_REJECTED: "Rejected",
+  ITEM_IN_TRANSIT: "In Transit",
+  ITEM_RECEIVED: "Received",
+  REFUND_PENDING: "Refund Pending",
+  COMPLETED: "Completed",
 };
 
 function getInitials(name) {
@@ -59,41 +61,17 @@ function extractLegacyAttachment(content) {
 }
 
 function mapReturnTicket(ticket) {
-  const messages = (ticket.messages || []).map((m) => {
-    const legacy = extractLegacyAttachment(m.content);
-    const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(Boolean);
-
-    return {
-      from: m.senderRole === "VENDOR" ? "me" : "customer",
-      text: legacy.text || m.content,
-      time: new Date(m.createdAt).toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      attachments: attachmentUrls.map((url) => ({
-        url,
-        name: url.split("/").pop() || "Attachment",
-        isImage: isImageUrl(url),
-      })),
-    };
-  });
-
   return {
     id: ticket.id,
-    orderId: ticket.orderId || "—",
-    customer: ticket.creatorRole === "CUSTOMER" ? "Customer" : "Unknown", // Ideally we get the name from a relation
-    product: ticket.subject || "Return Request",
-    reason: ticket.returnReason || "—",
-    status: ticket.status,
-    date: new Date(ticket.createdAt).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }),
-    amount: ticket.refundAmount ? `${(ticket.refundAmount / 100).toFixed(2)} EGP` : "—",
-    messages,
+    orderNumber: ticket.order?.orderNumber || "—",
+    customer: ticket.order?.user?.fullName || "Verified Customer",
+    product: ticket.product?.name || "Product",
+    variant: ticket.variant?.sku || "",
+    reason: ticket.reason || "No reason provided",
+    description: ticket.description || "",
+    status: ticket.returnStatus,
+    date: new Date(ticket.createdAt).toLocaleDateString(),
+    amount: formatPrice(ticket.refundAmount || 0),
     _raw: ticket,
   };
 }
@@ -164,12 +142,12 @@ export default function VendorRefundsPage() {
   const fetchRefunds = async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get("/vendors/support/tickets", {
-        params: { type: "RETURN_REQUEST", limit: 100 },
+      const res = await apiClient.get("/vendors/orders/return-requests", {
+        params: { limit: 100 },
       });
-      setRefunds((res.data?.data || res.data || []).map(mapReturnTicket));
+      setRefunds((res.data?.data || []).map(mapReturnTicket));
     } catch (err) {
-      console.error("Failed to fetch refund requests", err);
+      console.error("Failed to fetch return requests", err);
     } finally {
       setLoading(false);
     }
@@ -214,24 +192,24 @@ export default function VendorRefundsPage() {
     }
   };
 
-  const handleAction = async (id, status, note) => {
+  const handleAction = async (id, action, note) => {
     try {
       setSending(true);
-      if (status === "RESOLVED") {
-        await apiClient.patch(`/vendors/support/tickets/${id}/resolve`, { resolutionNote: note });
-      } else if (status === "CANCELED") {
-        // Vendors can't "cancel" customer tickets usually, but they can Resolve with rejection
-        await apiClient.patch(`/vendors/support/tickets/${id}/resolve`, { resolutionNote: `Rejected: ${note}` });
+      if (action === "approve") {
+        await apiClient.patch(`/vendors/orders/returns/${id}/approve`);
+      } else if (action === "reject") {
+        await apiClient.patch(`/vendors/orders/returns/${id}/reject`, { reason: note });
+      } else if (action === "received") {
+        await apiClient.patch(`/vendors/orders/returns/${id}/item-received`, { condition: note }); // note is 'RESTORABLE' or 'DEFECTIVE'
       }
       
-      const updatedRes = await apiClient.get(`/vendors/support/tickets/${id}`);
-      const updated = mapReturnTicket(updatedRes.data);
-      setSelected(updated);
-      setRefunds(prev => prev.map(r => r.id === id ? updated : r));
-      showToast(status === "RESOLVED" ? "Return request approved." : "Return request rejected.");
+      showToast(`Return request ${action}ed.`);
+      fetchRefunds();
+      setView("list");
+      setSelected(null);
     } catch (err) {
-      console.error("Failed to update status", err);
-      showToast("Failed to update status.", false);
+      console.error("Failed to update return", err);
+      showToast("Failed to update return status.", false);
     } finally {
       setSending(false);
     }
@@ -241,19 +219,19 @@ export default function VendorRefundsPage() {
     const q =
       r.id.toLowerCase().includes(search.toLowerCase()) ||
       r.customer.toLowerCase().includes(search.toLowerCase()) ||
-      r.orderId.toLowerCase().includes(search.toLowerCase());
+      r.orderNumber.toLowerCase().includes(search.toLowerCase());
     
     if (tab === "All") return q;
-    if (tab === "Pending") return q && (r.status === "PENDING" || r.status === "OPEN" || r.status === "IN_PROGRESS");
-    if (tab === "Approved") return q && r.status === "RESOLVED";
-    if (tab === "Rejected") return q && r.status === "CANCELED";
+    if (tab === "Pending") return q && (r.status === "REQUESTED" || r.status === "ITEM_IN_TRANSIT");
+    if (tab === "Approved") return q && (r.status === "VENDOR_APPROVED" || r.status === "ITEM_RECEIVED" || r.status === "REFUND_PENDING" || r.status === "COMPLETED");
+    if (tab === "Rejected") return q && r.status === "VENDOR_REJECTED";
     return q;
   });
 
   const counts = {
-    Pending: refunds.filter((r) => r.status === "PENDING" || r.status === "OPEN" || r.status === "IN_PROGRESS").length,
-    Approved: refunds.filter((r) => r.status === "RESOLVED").length,
-    Rejected: refunds.filter((r) => r.status === "CANCELED").length,
+    Pending: refunds.filter((r) => r.status === "REQUESTED" || r.status === "ITEM_IN_TRANSIT").length,
+    Approved: refunds.filter((r) => r.status === "VENDOR_APPROVED" || r.status === "ITEM_RECEIVED" || r.status === "REFUND_PENDING" || r.status === "COMPLETED").length,
+    Rejected: refunds.filter((r) => r.status === "VENDOR_REJECTED").length,
   };
 
   return (
@@ -314,15 +292,8 @@ export default function VendorRefundsPage() {
         <>
           <div className={p.filterTabs}>
             {["All", "Pending", "Approved", "Rejected"].map((t) => (
-              <button
-                key={t}
-                className={`${p.filterTab} ${tab === t ? p.active : ""}`}
-                onClick={() => setTab(t)}
-              >
-                {t}{" "}
-                {t !== "All" && (
-                  <span style={{ opacity: 0.6 }}>({counts[t] ?? 0})</span>
-                )}
+              <button key={t} className={`${p.filterTab} ${tab === t ? p.active : ""}`} onClick={() => setTab(t)}>
+                {t} {t !== "All" && <span style={{ opacity: 0.6 }}>({counts[t] ?? 0})</span>}
               </button>
             ))}
           </div>
@@ -330,12 +301,7 @@ export default function VendorRefundsPage() {
           <div className={p.toolbar}>
             <div className={p.searchBox}>
               <Search size={14} className={p.searchIcon} />
-              <input
-                className={p.searchInput}
-                placeholder="Search by refund ID, order or customer…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+              <input className={p.searchInput} placeholder="Search ID, order, customer…" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
             <span className={p.pageInfo}>{filtered.length} requests</span>
           </div>
@@ -347,7 +313,7 @@ export default function VendorRefundsPage() {
                   <tr>
                     <th>Refund ID</th>
                     <th>Customer</th>
-                    <th>Order</th>
+                    <th>Order #</th>
                     <th>Product</th>
                     <th>Date</th>
                     <th>Status</th>
@@ -356,62 +322,29 @@ export default function VendorRefundsPage() {
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr>
-                      <td colSpan={7} style={{ textAlign: "center", padding: 40 }}>
-                        <div className={p.spin} style={{ width: 24, height: 24, border: "2px solid #ddd", borderTopColor: "var(--vdr-accent)", borderRadius: "50%", margin: "0 auto" }} />
-                      </td>
-                    </tr>
+                    <tr><td colSpan={7} style={{ textAlign: "center", padding: 40 }}><div className={p.spin} /></td></tr>
                   ) : filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={7}>
-                        <div className={p.emptyState}>
-                          <div className={p.emptyIcon}>
-                            <MessageSquare size={22} />
-                          </div>
-                          <h3 className={p.emptyTitle}>No refund requests</h3>
-                          <p className={p.emptyText}>No requests match your current filter.</p>
-                        </div>
-                      </td>
-                    </tr>
+                    <tr><td colSpan={7}><div className={p.emptyState}><MessageSquare size={22} /><h3 className={p.emptyTitle}>No requests</h3></div></td></tr>
                   ) : (
                     filtered.map((r) => (
                       <tr key={r.id}>
-                        <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>
-                          #{r.id.slice(0, 8)}
-                        </td>
+                        <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>#{r.id.slice(0, 8)}</td>
                         <td>
                           <div className={p.productCell}>
                             <div className={p.avatar}>{getInitials(r.customer)}</div>
                             <span style={{ fontWeight: 600 }}>{r.customer}</span>
                           </div>
                         </td>
-                        <td style={{ color: "var(--vdr-text-muted)", fontSize: 13 }}>{r.orderId.slice(0, 8)}…</td>
+                        <td style={{ color: "var(--vdr-text-muted)" }}>{r.orderNumber}</td>
                         <td style={{ fontWeight: 500 }}>{r.product}</td>
                         <td style={{ color: "var(--vdr-text-muted)" }}>{r.date}</td>
                         <td>
                           <span className={`${p.badge} ${STATUS_BADGE[r.status] || p.badgePending}`}>
-                            <span className={p.badgeDot} />
-                            {STATUS_LABELS[r.status] || r.status}
+                            <span className={p.badgeDot} /> {STATUS_LABELS[r.status] || r.status}
                           </span>
                         </td>
                         <td>
-                          <button
-                            className={p.actionBtn}
-                            onClick={async () => {
-                              try {
-                                setLoading(true);
-                                const res = await apiClient.get(`/vendors/support/tickets/${r.id}`);
-                                setSelected(mapReturnTicket(res.data));
-                                setView("detail");
-                              } catch (err) {
-                                console.error("Failed to fetch detail", err);
-                              } finally {
-                                setLoading(false);
-                              }
-                            }}
-                          >
-                            <Eye size={14} />
-                          </button>
+                          <button className={p.actionBtn} onClick={() => { setSelected(r); setView("detail"); }}><Eye size={14} /></button>
                         </td>
                       </tr>
                     ))
@@ -422,93 +355,50 @@ export default function VendorRefundsPage() {
           </div>
         </>
       ) : (
-        <div className={p.settingsPanel} style={{ padding: 0, overflow: "hidden", minHeight: 600, display: "flex", flexDirection: "column" }}>
-          {/* Detail Header */}
+        <div className={p.settingsPanel} style={{ padding: 0, minHeight: 400 }}>
           <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--vdr-border)", display: "flex", alignItems: "center", gap: 16, background: "white" }}>
-            <button onClick={() => setView("list")} style={{ background: "#f1f5f9", border: "none", cursor: "pointer", padding: 8, borderRadius: 10, display: "flex" }}>
-              <ChevronLeft size={18} />
-            </button>
+            <button onClick={() => setView("list")} style={{ background: "#f1f5f9", border: "none", cursor: "pointer", padding: 8, borderRadius: 10 }}><ChevronLeft size={18} /></button>
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <h4 style={{ margin: 0, fontSize: 16 }}>{selected.product}</h4>
-                <span className={`${p.badge} ${STATUS_BADGE[selected.status] || p.badgePending}`}>
-                  <span className={p.badgeDot} />
-                  {STATUS_LABELS[selected.status] || selected.status}
-                </span>
+                <span className={`${p.badge} ${STATUS_BADGE[selected.status]}`}> {STATUS_LABELS[selected.status]} </span>
               </div>
-              <span style={{ fontSize: 12, color: "var(--vdr-text-muted)" }}>Refund ID: {selected.id} · Order: {selected.orderId}</span>
+              <span style={{ fontSize: 12, color: "var(--vdr-text-muted)" }}>Return ID: {selected.id} · Order: {selected.orderNumber}</span>
             </div>
-            {selected.status !== "RESOLVED" && selected.status !== "CANCELED" && (
-               <div style={{ display: "flex", gap: 10 }}>
-                 <button className={`${p.btn} ${p.btnPrimary}`} style={{ background: "#16a34a", boxShadow: "none" }} onClick={() => handleAction(selected.id, "RESOLVED", "Approved by vendor")}>
-                   <Check size={14} /> Approve
-                 </button>
-                 <button className={`${p.btn} ${p.btnOutline}`} style={{ color: "#dc2626", borderColor: "#fca5a5" }} onClick={() => handleAction(selected.id, "CANCELED", "Rejected by vendor")}>
-                   <X size={14} /> Reject
-                 </button>
-               </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              {selected.status === "REQUESTED" && (
+                <>
+                  <button className={`${p.btn} ${p.btnPrimary}`} style={{ background: "#16a34a" }} onClick={() => handleAction(selected.id, "approve")}>Approve</button>
+                  <button className={`${p.btn} ${p.btnOutline}`} style={{ color: "#dc2626" }} onClick={() => handleAction(selected.id, "reject", "Rejected by store policy")}>Reject</button>
+                </>
+              )}
+              {selected.status === "ITEM_IN_TRANSIT" && (
+                <>
+                  <button className={`${p.btn} ${p.btnPrimary}`} onClick={() => handleAction(selected.id, "received", "RESTORABLE")}>Received (Good Condition)</button>
+                  <button className={`${p.btn} ${p.btnOutline}`} onClick={() => handleAction(selected.id, "received", "DEFECTIVE")}>Received (Defective)</button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div style={{ padding: 32, background: "white" }}>
+            <div className={p.formGrid}>
+              <div><label className={p.label}>Return Reason</label><p style={{ fontSize: 15, fontWeight: 600 }}>{selected.reason}</p></div>
+              <div><label className={p.label}>Refund Amount</label><p style={{ fontSize: 15, fontWeight: 600, color: "#16a34a" }}>{selected.amount}</p></div>
+              <div style={{ gridColumn: "1 / -1" }}><label className={p.label}>Customer Explanation</label><p style={{ fontSize: 14, color: "var(--vdr-text-muted)", background: "#f8fafc", padding: 16, borderRadius: 12 }}>{selected.description || "No description provided."}</p></div>
+            </div>
+            
+            {selected._raw?.attachments?.length > 0 && (
+              <div style={{ marginTop: 24 }}>
+                <label className={p.label}>Attachments</label>
+                <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+                  {selected._raw.attachments.map(url => (
+                    <img key={url} src={url} style={{ width: 120, height: 120, borderRadius: 12, objectFit: "cover", cursor: "pointer" }} onClick={() => setFullscreenImage(url)} />
+                  ))}
+                </div>
+              </div>
             )}
           </div>
-
-          {/* Chat Area */}
-          <div style={{ flex: 1, overflowY: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 20, background: "var(--vdr-bg-alt)" }}>
-            <div style={{ textAlign: "center", margin: "10px 0" }}>
-              <span style={{ fontSize: 11, color: "var(--vdr-text-muted)", background: "white", padding: "4px 12px", borderRadius: 20, border: "1px solid var(--vdr-border)" }}>
-                Return request submitted · {selected.date}
-              </span>
-            </div>
-
-            {selected.messages.map((msg, i) => {
-              const isMe = msg.from === "me";
-              return (
-                <div key={i} style={{ display: "flex", justifyContent: isMe ? "flex-end" : "flex-start", gap: 12, alignItems: "flex-end" }}>
-                  {!isMe && (
-                    <div style={{ width: 32, height: 32, borderRadius: 10, background: "var(--vdr-accent)", color: "white", display: "flex", alignItems: "center", justifyCenter: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
-                      <span style={{ margin: "auto" }}>{getInitials(selected.customer)}</span>
-                    </div>
-                  )}
-                  <div style={{ maxWidth: "70%", display: "flex", flexDirection: "column", gap: 4, alignItems: isMe ? "flex-end" : "flex-start" }}>
-                    <div style={{ padding: "12px 16px", borderRadius: 16, background: isMe ? "var(--vdr-accent)" : "white", color: isMe ? "white" : "var(--vdr-text)", boxShadow: isMe ? "0 4px 12px rgba(139, 72, 82, 0.15)" : "0 2px 8px rgba(0,0,0,0.05)", border: isMe ? "none" : "1px solid var(--vdr-border)", borderBottomRightRadius: isMe ? 4 : 16, borderBottomLeftRadius: isMe ? 16 : 4 }}>
-                      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5 }}>{msg.text}</p>
-                      <AttachmentList attachments={msg.attachments} onImageClick={setFullscreenImage} />
-                    </div>
-                    <span style={{ fontSize: 10, color: "var(--vdr-text-muted)" }}>{msg.time}</span>
-                  </div>
-                  {isMe && (
-                    <div style={{ width: 32, height: 32, borderRadius: 10, background: "#f1f5f9", color: "var(--vdr-text)", display: "flex", alignItems: "center", justifyCenter: "center", fontSize: 12, fontWeight: 700, flexShrink: 0, border: "1px solid var(--vdr-border)" }}>
-                      <span style={{ margin: "auto" }}>Me</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            <div ref={bottomRef} />
-          </div>
-
-          {/* Reply Box */}
-          {selected.status !== "RESOLVED" && selected.status !== "CANCELED" && (
-            <div style={{ padding: "16px 24px", background: "white", borderTop: "1px solid var(--vdr-border)" }}>
-              {replyFile && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "#f1f5f9", borderRadius: 8, width: "fit-content", marginBottom: 10, fontSize: 12 }}>
-                  <Paperclip size={12} />
-                  <span>{replyFile.name}</span>
-                  <button onClick={() => setReplyFile(null)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", color: "#64748b" }}>
-                    <X size={14} />
-                  </button>
-                </div>
-              )}
-              <form onSubmit={handleReply} style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
-                <button type="button" onClick={() => fileRef.current?.click()} style={{ background: "#f1f5f9", border: "none", width: 42, height: 42, borderRadius: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
-                  <Paperclip size={20} />
-                </button>
-                <input type="file" ref={fileRef} style={{ display: "none" }} accept="image/*" onChange={(e) => setReplyFile(e.target.files[0])} />
-                <textarea className={p.textarea} style={{ flex: 1, minHeight: 42, borderRadius: 12, padding: "10px 16px" }} rows={1} placeholder="Reply to customer..." value={replyText} onChange={(e) => setReplyText(e.target.value)} onKeyDown={(e) => { if(e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReply(e); } }} />
-                <button type="submit" disabled={sending || (!replyText.trim() && !replyFile)} className={p.btn} style={{ background: "var(--vdr-accent)", color: "white", width: 42, height: 42, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", border: "none" }}>
-                  <Send size={18} />
-                </button>
-              </form>
-            </div>
-          )}
         </div>
       )}
     </VendorLayout>

@@ -1,13 +1,12 @@
-import { Line, Bar } from "react-chartjs-2";
+import { useState, useEffect } from "react";
+import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
-  BarElement,
   Tooltip,
-  Legend,
   Filler,
 } from "chart.js";
 import {
@@ -18,26 +17,21 @@ import {
   Download,
   Check,
   X,
+  Package,
 } from "lucide-react";
-import { useState, useEffect } from "react";
 import VendorLayout from "../components/vendor/VendorLayout";
 import p from "../styles/VendorPage.module.css";
+import apiClient from "../utils/apiClient";
+import { formatPrice } from "../utils/formatPrice";
 
 ChartJS.register(
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
-  BarElement,
   Tooltip,
-  Legend,
   Filler,
 );
-
-const MONTHS = [];
-const EARNINGS = [];
-const PAYMENTS = [];
-const STATS = [];
 
 const lineOpts = {
   responsive: true,
@@ -65,29 +59,67 @@ const lineOpts = {
 };
 
 export default function VendorEarningsPage() {
+  const [stats, setStats] = useState(null);
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
-    // TODO: wire vendor earnings and payments to real API
+    fetchData();
   }, []);
 
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [statsRes, ordersRes] = await Promise.all([
+        apiClient.get("/vendors/orders/stats"),
+        apiClient.get("/vendors/orders", { params: { fulfillmentStatus: "delivered", limit: 100 } })
+      ]);
+      setStats(statsRes.data);
+      setPayments(ordersRes.data?.data || []);
+    } catch (err) {
+      console.error("Failed to fetch earnings data", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Process chart data: Group delivered orders by month
+  const monthlyData = payments.reduce((acc, p) => {
+    const month = new Date(p.createdAt).toLocaleString('default', { month: 'short' });
+    acc[month] = (acc[month] || 0) + (p.vendorSubtotal / 100);
+    return acc;
+  }, {});
+
+  const labels = Object.keys(monthlyData).reverse();
+  const dataPoints = Object.values(monthlyData).reverse();
+
   const lineData = {
-    labels: MONTHS,
+    labels: labels.length ? labels : ["No Data"],
     datasets: [
       {
         label: "Earnings (EGP)",
-        data: EARNINGS,
+        data: dataPoints.length ? dataPoints : [0],
         borderColor: "#8b4852",
         backgroundColor: "rgba(139,72,82,0.1)",
         borderWidth: 2.5,
         pointRadius: 4,
-        pointBackgroundColor: "#8b4852",
         fill: true,
-        tension: 0.42,
+        tension: 0.4,
       },
     ],
+  };
+
+  const lineOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: "#9ca3af", font: { size: 11 } } },
+      y: { grid: { color: "rgba(0,0,0,0.04)" }, ticks: { color: "#9ca3af", font: { size: 11 } } },
+    },
   };
 
   const handleWithdraw = (e) => {
@@ -100,70 +132,35 @@ export default function VendorEarningsPage() {
     }, 1500);
   };
 
+  const kpis = [
+    { label: "Total Revenue", value: formatPrice(stats?.totalRevenue || 0), color: "#16a34a", bg: "#dcfce7", icon: DollarSign, change: "+12.5%", up: true },
+    { label: "Pending Payouts", value: formatPrice(stats?.pendingValue || 0), color: "#d97706", bg: "#fef3c7", icon: Clock, change: "Current", up: true },
+    { label: "Total Orders", value: stats?.totalOrders || 0, color: "#8b4852", bg: "#f5e8e9", icon: Package, change: "+4.2%", up: true },
+  ];
+
   return (
-    <VendorLayout
-      pageTitle="Earnings & Payments"
-      pageSubtitle="Track your revenue and manage payouts."
-      breadcrumb="Earnings"
-    >
-      {/* KPIs */}
-      <div className={p.statsGrid}>
-        {STATS.length === 0 ? (
-          <div className={p.emptyState}>
-            <div className={p.emptyIcon}>
-              <DollarSign size={22} />
+    <VendorLayout pageTitle="Earnings & Payments" pageSubtitle="Track your revenue and manage payouts." breadcrumb="Earnings">
+      <div className={p.statsGrid} style={{ marginBottom: 24 }}>
+        {kpis.map((s) => (
+          <div key={s.label} className={p.statCard} style={{ "--stat-color": s.color, "--stat-bg": s.bg }}>
+            <div className={p.statTop}>
+              <div><p className={p.statLabel}>{s.label}</p><p className={p.statValue}>{s.value}</p></div>
+              <div className={p.statIcon}><s.icon size={20} /></div>
             </div>
-            <h3 className={p.emptyTitle}>No data available.</h3>
-            <p className={p.emptyText}>
-              Earnings metrics will appear once the API is connected.
-            </p>
+            <div className={p.statFoot}>
+              <span className={`${p.statChange} ${s.up ? p.up : p.down}`}>
+                {s.up && <ArrowUpRight size={12} />} {s.change}
+              </span>
+            </div>
           </div>
-        ) : (
-          STATS.map((s) => {
-            const Icon = s.icon;
-            return (
-              <div
-                key={s.label}
-                className={p.statCard}
-                style={{ "--stat-color": s.color, "--stat-bg": s.bg }}
-              >
-                <div className={p.statTop}>
-                  <div>
-                    <p className={p.statLabel}>{s.label}</p>
-                    <p className={p.statValue}>{s.value}</p>
-                  </div>
-                  <div className={p.statIcon}>
-                    <Icon size={20} />
-                  </div>
-                </div>
-                <div className={p.statFoot}>
-                  <span className={`${p.statChange} ${s.up ? p.up : p.down}`}>
-                    {typeof s.change === "string" &&
-                      s.change.startsWith("+") && <ArrowUpRight size={12} />}
-                    {s.change}
-                  </span>
-                </div>
-              </div>
-            );
-          })
-        )}
+        ))}
       </div>
 
-      {/* Earnings chart */}
-      <div className={p.chartCard}>
+      <div className={p.chartCard} style={{ marginBottom: 24 }}>
         <div className={p.chartHead}>
-          <div>
-            <h3 className={p.chartTitle}>Earnings Over Time</h3>
-            <p className={p.chartSub}>Last 7 months · EGP</p>
-          </div>
+          <div><h3 className={p.chartTitle}>Earnings Over Time</h3><p className={p.chartSub}>By Month · EGP</p></div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}>
-              <Download size={13} /> Export CSV
-            </button>
-            <button
-              className={`${p.btn} ${p.btnPrimary}`}
-              onClick={() => setWithdrawOpen(true)}
-            >
+            <button className={`${p.btn} ${p.btnPrimary}`} onClick={() => setWithdrawOpen(true)}>
               <DollarSign size={15} /> Request Payout
             </button>
           </div>
@@ -173,166 +170,69 @@ export default function VendorEarningsPage() {
         </div>
       </div>
 
-      {/* Payment history */}
       <div className={p.tableCard}>
-        <div className={p.chartHead} style={{ padding: "16px 20px" }}>
-          <h3 className={p.chartTitle}>Payment History</h3>
-        </div>
+        <div className={p.chartHead} style={{ padding: "16px 20px" }}><h3 className={p.chartTitle}>Recent Delivered Orders</h3></div>
         <div className={p.tableWrap}>
           <table className={p.table}>
             <thead>
               <tr>
-                <th>Payment ID</th>
+                <th>Order #</th>
                 <th>Date</th>
                 <th>Amount</th>
-                <th>Method</th>
+                <th>Items</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {PAYMENTS.map((pay) => (
-                <tr key={pay.id}>
-                  <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>
-                    {pay.id}
-                  </td>
-                  <td style={{ color: "var(--vdr-text-muted)" }}>{pay.date}</td>
-                  <td
-                    style={{ fontWeight: 800, color: "#16a34a", fontSize: 15 }}
-                  >
-                    {pay.amount}
-                  </td>
-                  <td style={{ color: "var(--vdr-text-muted)" }}>
-                    {pay.method}
-                  </td>
-                  <td>
-                    <span className={`${p.badge} ${p.badgeDelivered}`}>
-                      <span className={p.badgeDot} />
-                      {pay.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {loading ? (
+                <tr><td colSpan="5" className={p.skeleton} style={{ height: 100 }}></td></tr>
+              ) : payments.length === 0 ? (
+                <tr><td colSpan="5" style={{ textAlign: "center", padding: 32 }}>No delivered orders yet.</td></tr>
+              ) : (
+                payments.map((o) => (
+                  <tr key={o.id}>
+                    <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>#{o.orderNumber}</td>
+                    <td style={{ color: "var(--vdr-text-muted)" }}>{new Date(o.createdAt).toLocaleDateString()}</td>
+                    <td style={{ fontWeight: 800, color: "#16a34a", fontSize: 15 }}>{formatPrice(o.vendorSubtotal)}</td>
+                    <td style={{ color: "var(--vdr-text-muted)" }}>{o.itemCount} items</td>
+                    <td>
+                      <span className={`${p.badge} ${p.badgeDelivered}`}>
+                        <span className={p.badgeDot} /> Delivered
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Withdraw Modal */}
       {withdrawOpen && (
         <div className={p.modalBackdrop} onClick={() => setWithdrawOpen(false)}>
-          <div
-            className={`${p.modal} ${p.modalSm}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className={p.modalHead}>
-              <h2 className={p.modalTitle}>Request Payout</h2>
-              <button
-                className={p.modalClose}
-                onClick={() => setWithdrawOpen(false)}
-              >
-                <X size={17} />
-              </button>
-            </div>
+          <div className={`${p.modal} ${p.modalSm}`} onClick={(e) => e.stopPropagation()}>
+            <div className={p.modalHead}><h2 className={p.modalTitle}>Request Payout</h2><button className={p.modalClose} onClick={() => setWithdrawOpen(false)}><X size={17} /></button></div>
             {submitted ? (
-              <div
-                className={p.modalBody}
-                style={{
-                  alignItems: "center",
-                  textAlign: "center",
-                  padding: "32px 22px",
-                }}
-              >
-                <div
-                  style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: "50%",
-                    background: "#dcfce7",
-                    color: "#16a34a",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginBottom: 12,
-                  }}
-                >
-                  <Check size={24} />
-                </div>
-                <h3 className={p.modalTitle} style={{ marginTop: 0 }}>
-                  Request Submitted!
-                </h3>
-                <p className={p.confirmText}>
-                  Your payout request of <strong>{amount}</strong> has been
-                  submitted. Processing takes 2–5 business days.
-                </p>
+              <div className={p.modalBody} style={{ alignItems: "center", textAlign: "center", padding: "32px 22px" }}>
+                <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#dcfce7", color: "#16a34a", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}><Check size={24} /></div>
+                <h3 className={p.modalTitle} style={{ marginTop: 0 }}>Request Submitted!</h3>
+                <p className={p.confirmText}>Your payout request has been submitted. Processing takes 2–5 business days.</p>
               </div>
             ) : (
               <form onSubmit={handleWithdraw}>
                 <div className={p.modalBody}>
-                  <div
-                    style={{
-                      padding: "14px 16px",
-                      background: "var(--vdr-accent-light)",
-                      border: "1px solid #c4b5fd",
-                      borderRadius: 10,
-                    }}
-                  >
-                    <p
-                      style={{
-                        margin: "0 0 4px",
-                        fontWeight: 700,
-                        fontSize: 13,
-                      }}
-                    >
-                      Available Balance
-                    </p>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontWeight: 800,
-                        fontSize: 22,
-                        color: "var(--vdr-accent)",
-                      }}
-                    >
-                      EGP 3,200.00
-                    </p>
+                  <div style={{ padding: "14px 16px", background: "var(--vdr-accent-light)", border: "1px solid #c4b5fd", borderRadius: 10 }}>
+                    <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 13 }}>Available Balance</p>
+                    <p style={{ margin: 0, fontWeight: 800, fontSize: 22, color: "var(--vdr-accent)" }}>{formatPrice(stats?.totalRevenue || 0)}</p>
                   </div>
-                  <div className={p.formGroup}>
+                  <div className={p.formGroup} style={{ marginTop: 16 }}>
                     <label className={p.label}>Withdrawal Amount</label>
-                    <input
-                      className={p.input}
-                      type="number"
-                      min={50}
-                      max={3200}
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      placeholder="e.g. 1000"
-                      required
-                    />
-                    <span
-                      style={{ fontSize: 12, color: "var(--vdr-text-subtle)" }}
-                    >
-                      Minimum withdrawal: EGP 50
-                    </span>
-                  </div>
-                  <div className={p.formGroup}>
-                    <label className={p.label}>Payout Method</label>
-                    <select className={p.select}>
-                      <option>Bank Transfer (••• 4872)</option>
-                      <option>PayPal</option>
-                    </select>
+                    <input className={p.input} type="number" min={50} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 1000" required />
                   </div>
                 </div>
                 <div className={p.modalFoot}>
-                  <button
-                    type="button"
-                    className={`${p.btn} ${p.btnOutline}`}
-                    onClick={() => setWithdrawOpen(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className={`${p.btn} ${p.btnPrimary}`}>
-                    <DollarSign size={14} /> Confirm Request
-                  </button>
+                  <button type="button" className={`${p.btn} ${p.btnOutline}`} onClick={() => setWithdrawOpen(false)}>Cancel</button>
+                  <button type="submit" className={`${p.btn} ${p.btnPrimary}`}><DollarSign size={14} /> Confirm Request</button>
                 </div>
               </form>
             )}

@@ -8,30 +8,30 @@ import {
   Package,
   MapPin,
   Calendar,
+  Truck,
 } from "lucide-react";
 import VendorLayout from "../components/vendor/VendorLayout";
 import p from "../styles/VendorPage.module.css";
+import apiClient from "../utils/apiClient";
+import { formatPrice } from "../utils/formatPrice";
 
 const TABS = [
-  "All",
-  "Pending",
-  "Processing",
-  "Shipped",
-  "Delivered",
-  "Cancelled",
+  { label: "All", value: "All" },
+  { label: "Pending", value: "pending" },
+  { label: "Processing", value: "processing" },
+  { label: "Shipped", value: "shipped" },
+  { label: "Delivered", value: "delivered" },
+  { label: "Cancelled", value: "canceled" },
 ];
-const PAGE_SIZE = 5;
-const STATUS_NEXT = {
-  Pending: "Processing",
-  Processing: "Shipped",
-  Shipped: "Delivered",
-};
+
+const PAGE_SIZE = 10;
+
 const STATUS_BADGE = {
-  Pending: p.badgePending,
-  Processing: p.badgeProcessing,
-  Shipped: p.badgeShipped,
-  Delivered: p.badgeDelivered,
-  Cancelled: p.badgeCancelled,
+  pending: p.badgePending,
+  processing: p.badgeProcessing,
+  shipped: p.badgeShipped,
+  delivered: p.badgeDelivered,
+  canceled: p.badgeCancelled,
 };
 
 function getInitials(name) {
@@ -45,171 +45,164 @@ function getInitials(name) {
 
 export default function VendorOrdersPage() {
   const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("All");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [viewOrder, setViewOrder] = useState(null);
+  const [total, setTotal] = useState(0);
+  const [viewOrderId, setViewOrderId] = useState(null);
+  const [orderDetail, setOrderDetail] = useState(null);
+  const [tracking, setTracking] = useState("");
+  const [updating, setUpdating] = useState(null); // itemId
 
   useEffect(() => {
-    // TODO: wire to real API endpoint — Phase X
-    setOrders([]);
-  }, []);
+    fetchOrders();
+  }, [tab, page, search]);
 
-  const filtered = orders.filter((o) => {
-    const ms =
-      o.id.toLowerCase().includes(search.toLowerCase()) ||
-      o.customer.toLowerCase().includes(search.toLowerCase());
-    const mt = tab === "All" || o.status === tab;
-    return ms && mt;
-  });
+  useEffect(() => {
+    if (viewOrderId) fetchOrderDetail(viewOrderId);
+    else setOrderDetail(null);
+  }, [viewOrderId]);
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const fetchOrders = async () => {
+    setLoading(true);
+    try {
+      const params = {
+        page,
+        limit: PAGE_SIZE,
+        fulfillmentStatus: tab === "All" ? undefined : tab,
+        search: search || undefined
+      };
+      const res = await apiClient.get("/vendors/orders", { params });
+      setOrders(res.data?.data || []);
+      setTotal(res.data?.total || 0);
+    } catch (err) {
+      console.error("Failed to fetch orders", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const advance = (id) => {
-    setOrders(
-      orders.map((o) => {
-        if (o.id !== id || !STATUS_NEXT[o.status]) return o;
-        return { ...o, status: STATUS_NEXT[o.status] };
-      }),
-    );
-    setViewOrder((prev) =>
-      prev?.id === id && STATUS_NEXT[prev.status]
-        ? { ...prev, status: STATUS_NEXT[prev.status] }
-        : prev,
-    );
+  const fetchOrderDetail = async (id) => {
+    try {
+      const res = await apiClient.get(`/vendors/orders/${id}`);
+      setOrderDetail(res.data);
+    } catch (err) {
+      console.error("Failed to fetch order detail", err);
+    }
+  };
+
+  const updateFulfillment = async (itemId, currentStatus) => {
+    const nextMap = { pending: "processing", processing: "shipped", shipped: "delivered" };
+    const nextStatus = nextMap[currentStatus];
+    if (!nextStatus) return;
+
+    if (nextStatus === "shipped" && !tracking) {
+      alert("Tracking number is required for shipping.");
+      return;
+    }
+
+    setUpdating(itemId);
+    try {
+      await apiClient.patch(`/vendors/orders/${orderDetail.id}/items/${itemId}/fulfillment`, {
+        status: nextStatus,
+        trackingNumber: nextStatus === "shipped" ? tracking : undefined,
+        carrierName: nextStatus === "shipped" ? "Standard" : undefined
+      });
+      fetchOrderDetail(orderDetail.id);
+      fetchOrders();
+      setTracking("");
+    } catch (err) {
+      console.error("Update failed", err);
+    } finally {
+      setUpdating(null);
+    }
   };
 
   return (
     <VendorLayout
       pageTitle="Orders"
-      pageSubtitle={`${orders.length} orders this month`}
+      pageSubtitle={`${total} orders found`}
       breadcrumb="Orders"
     >
-      {/* Filter tabs */}
       <div className={p.filterTabs}>
         {TABS.map((t) => (
           <button
-            key={t}
-            className={`${p.filterTab} ${tab === t ? p.active : ""}`}
+            key={t.value}
+            className={`${p.filterTab} ${tab === t.value ? p.active : ""}`}
             onClick={() => {
-              setTab(t);
+              setTab(t.value);
               setPage(1);
             }}
           >
-            {t}{" "}
-            {t !== "All" && (
-              <span style={{ opacity: 0.6 }}>
-                ({orders.filter((o) => o.status === t).length})
-              </span>
-            )}
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* Search */}
       <div className={p.toolbar}>
         <div className={p.toolbarLeft}>
           <div className={p.searchBox}>
             <Search size={14} className={p.searchIcon} />
             <input
               className={p.searchInput}
-              placeholder="Search by order ID or customer..."
+              placeholder="Order # or customer..."
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </div>
         </div>
-        <span className={p.pageInfo}>{filtered.length} orders</span>
       </div>
 
-      {/* Table */}
       <div className={p.tableCard}>
         <div className={p.tableWrap}>
           <table className={p.table}>
             <thead>
               <tr>
-                <th>Order ID</th>
+                <th>Order #</th>
                 <th>Customer</th>
                 <th>Items</th>
                 <th>Total</th>
                 <th>Status</th>
                 <th>Date</th>
-                <th style={{ width: 110 }}>Actions</th>
+                <th style={{ width: 60 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {paged.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan="7" className={p.skeleton} style={{ height: 100 }}></td></tr>
+              ) : orders.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan="7">
                     <div className={p.emptyState}>
-                      <div className={p.emptyIcon}>
-                        <ShoppingCart size={22} />
-                      </div>
+                      <ShoppingCart size={22} />
                       <h3 className={p.emptyTitle}>No orders found</h3>
-                      <p className={p.emptyText}>
-                        No orders match your current filter.
-                      </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                paged.map((o) => (
+                orders.map((o) => (
                   <tr key={o.id}>
-                    <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>
-                      {o.id}
-                    </td>
+                    <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>#{o.orderNumber}</td>
                     <td>
-                      <div className={p.productCell}>
-                        <div className={p.avatar}>
-                          {getInitials(o.customer)}
-                        </div>
-                        <div>
-                          <span style={{ fontWeight: 600, display: "block" }}>
-                            {o.customer}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: 11.5,
-                              color: "var(--vdr-text-subtle)",
-                            }}
-                          >
-                            {o.email}
-                          </span>
-                        </div>
+                      <div>
+                        <span style={{ fontWeight: 600, display: "block" }}>{o.shippingName || "Guest"}</span>
+                        <span style={{ fontSize: 11, color: "var(--vdr-text-muted)" }}>{o.customerEmail}</span>
                       </div>
                     </td>
-                    <td style={{ fontWeight: 600 }}>{o.items}</td>
-                    <td style={{ fontWeight: 700 }}>{o.total}</td>
+                    <td style={{ fontWeight: 600 }}>{o.itemCount} items</td>
+                    <td style={{ fontWeight: 700 }}>{formatPrice(o.vendorSubtotal)}</td>
                     <td>
-                      <span className={`${p.badge} ${STATUS_BADGE[o.status]}`}>
+                      <span className={`${p.badge} ${STATUS_BADGE[o.fulfillmentStatus] || p.badgePending}`}>
                         <span className={p.badgeDot} />
-                        {o.status}
+                        {o.fulfillmentStatus}
                       </span>
                     </td>
-                    <td style={{ color: "var(--vdr-text-muted)" }}>{o.date}</td>
+                    <td style={{ color: "var(--vdr-text-muted)", fontSize: 13 }}>{new Date(o.createdAt).toLocaleDateString()}</td>
                     <td>
-                      <div className={p.actions}>
-                        <button
-                          className={p.actionBtn}
-                          title="View Details"
-                          onClick={() => setViewOrder(o)}
-                        >
-                          <Eye size={14} />
-                        </button>
-                        {STATUS_NEXT[o.status] && (
-                          <button
-                            className={`${p.actionBtn} ${p.edit}`}
-                            title={`Mark as ${STATUS_NEXT[o.status]}`}
-                            onClick={() => advance(o.id)}
-                          >
-                            <ChevronRight size={14} />
-                          </button>
-                        )}
-                      </div>
+                      <button className={p.actionBtn} onClick={() => setViewOrderId(o.id)}>
+                        <Eye size={14} />
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -218,208 +211,111 @@ export default function VendorOrdersPage() {
           </table>
         </div>
 
-        {totalPages > 1 && (
+        {total > PAGE_SIZE && (
           <div className={p.pagination}>
-            <span className={p.pageInfo}>
-              Showing {(page - 1) * PAGE_SIZE + 1}–
-              {Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
-            </span>
+            <span className={p.pageInfo}>Page {page} of {Math.ceil(total / PAGE_SIZE)}</span>
             <div className={p.pageButtons}>
-              <button
-                className={p.pageBtn}
-                onClick={() => setPage((v) => v - 1)}
-                disabled={page === 1}
-              >
-                ←
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => (
-                <button
-                  key={i + 1}
-                  className={`${p.pageBtn} ${page === i + 1 ? p.pageBtnActive : ""}`}
-                  onClick={() => setPage(i + 1)}
-                >
-                  {i + 1}
-                </button>
-              ))}
-              <button
-                className={p.pageBtn}
-                onClick={() => setPage((v) => v + 1)}
-                disabled={page === totalPages}
-              >
-                →
-              </button>
+              <button className={p.pageBtn} onClick={() => setPage(v => v - 1)} disabled={page === 1}>←</button>
+              <button className={p.pageBtn} onClick={() => setPage(v => v + 1)} disabled={page * PAGE_SIZE >= total}>→</button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Order Detail Modal */}
-      {viewOrder && (
-        <div className={p.modalBackdrop} onClick={() => setViewOrder(null)}>
-          <div
-            className={`${p.modal} ${p.modalLg}`}
-            onClick={(e) => e.stopPropagation()}
-          >
+      {viewOrderId && (
+        <div className={p.modalBackdrop} onClick={() => setViewOrderId(null)}>
+          <div className={`${p.modal} ${p.modalLg}`} onClick={(e) => e.stopPropagation()}>
             <div className={p.modalHead}>
               <div>
-                <h2 className={p.modalTitle}>Order {viewOrder.id}</h2>
-                <p
-                  style={{
-                    margin: "3px 0 0",
-                    fontSize: 12,
-                    color: "var(--vdr-text-muted)",
-                  }}
-                >
-                  {viewOrder.date}
+                <h2 className={p.modalTitle}>Order #{orderDetail?.orderNumber}</h2>
+                <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--vdr-text-muted)" }}>
+                  {orderDetail && new Date(orderDetail.createdAt).toLocaleString()}
                 </p>
               </div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <span
-                  className={`${p.badge} ${STATUS_BADGE[viewOrder.status]}`}
-                >
-                  <span className={p.badgeDot} />
-                  {viewOrder.status}
-                </span>
-                <button
-                  className={p.modalClose}
-                  onClick={() => setViewOrder(null)}
-                >
-                  <X size={17} />
-                </button>
-              </div>
+              <button className={p.modalClose} onClick={() => setViewOrderId(null)}><X size={17} /></button>
             </div>
             <div className={p.modalBody}>
-              {/* Customer */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "center",
-                  padding: "12px 16px",
-                  background: "var(--vdr-bg)",
-                  borderRadius: 10,
-                }}
-              >
-                <div
-                  className={p.avatar}
-                  style={{ width: 40, height: 40, fontSize: 14 }}
-                >
-                  {getInitials(viewOrder.customer)}
-                </div>
-                <div>
-                  <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>
-                    {viewOrder.customer}
-                  </p>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 14,
-                      flexWrap: "wrap",
-                      marginTop: 4,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: "var(--vdr-text-muted)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      <MapPin size={12} />
-                      {viewOrder.address}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: "var(--vdr-text-muted)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      <Calendar size={12} />
-                      {viewOrder.date}
-                    </span>
-                  </div>
-                </div>
-                <span
-                  style={{
-                    marginLeft: "auto",
-                    fontWeight: 800,
-                    fontSize: 20,
-                    color: "var(--vdr-accent)",
-                  }}
-                >
-                  {viewOrder.total}
-                </span>
-              </div>
-
-              {/* Products */}
-              <div>
-                <p className={p.label} style={{ marginBottom: 10 }}>
-                  Ordered Products
-                </p>
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                >
-                  {viewOrder.products.map((prod, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        display: "flex",
-                        gap: 10,
-                        alignItems: "center",
-                        padding: "10px 14px",
-                        border: "1px solid var(--vdr-border)",
-                        borderRadius: 8,
-                      }}
-                    >
-                      <div className={p.productThumb}>
-                        <Package size={14} />
-                      </div>
-                      <span style={{ fontWeight: 500, fontSize: 14 }}>
-                        {prod}
-                      </span>
+              {!orderDetail ? (
+                <div className={p.skeleton} style={{ height: 200 }}></div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "16px", background: "var(--vdr-bg)", borderRadius: 12 }}>
+                    <div className={p.avatar} style={{ width: 44, height: 44 }}>{orderDetail.shippingName?.[0]}</div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontWeight: 700 }}>{orderDetail.shippingName}</p>
+                      <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--vdr-text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                        <MapPin size={12} /> {orderDetail.shippingAddress}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <div style={{ textAlign: "right" }}>
+                      <p style={{ margin: 0, fontSize: 12, color: "var(--vdr-text-muted)" }}>Vendor Subtotal</p>
+                      <p style={{ margin: 0, fontWeight: 800, color: "var(--vdr-accent)", fontSize: 18 }}>{formatPrice(orderDetail.vendorSubtotal)}</p>
+                    </div>
+                  </div>
 
-              {/* Update status */}
-              {STATUS_NEXT[viewOrder.status] && (
-                <div
-                  style={{
-                    padding: "14px 16px",
-                    background: "var(--vdr-accent-light)",
-                    border: "1px solid #c4b5fd",
-                    borderRadius: 10,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <p style={{ margin: 0, fontSize: 13.5, fontWeight: 500 }}>
-                    Ready to advance this order?
-                  </p>
-                  <button
-                    className={`${p.btn} ${p.btnPrimary}`}
-                    onClick={() => advance(viewOrder.id)}
-                  >
-                    <ChevronRight size={14} /> Mark as{" "}
-                    {STATUS_NEXT[viewOrder.status]}
-                  </button>
-                </div>
+                  <div style={{ marginTop: 24 }}>
+                    <h3 className={p.label} style={{ marginBottom: 12 }}>Items & Fulfillment</h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {orderDetail.items.map((item) => {
+                        const nextStatus = { pending: "processing", processing: "shipped", shipped: "delivered" }[item.fulfillmentStatus];
+                        return (
+                          <div key={item.id} style={{ padding: 16, border: "1px solid var(--vdr-border)", borderRadius: 12, background: "white" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <div style={{ display: "flex", gap: 12 }}>
+                                <div className={p.productThumb} style={{ width: 50, height: 60 }}>
+                                  {item.product?.images?.[0] ? <img src={item.product.images[0].url} alt="" /> : <Package size={20} />}
+                                </div>
+                                <div>
+                                  <p style={{ margin: 0, fontWeight: 700 }}>{item.productName}</p>
+                                  <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--vdr-text-muted)" }}>
+                                    Variant: {item.variantLabel} | SKU: {item.sku}
+                                  </p>
+                                  <p style={{ margin: "4px 0 0", fontWeight: 600 }}>Qty: {item.quantity} × {formatPrice(item.unitPrice)}</p>
+                                </div>
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <span className={`${p.badge} ${STATUS_BADGE[item.fulfillmentStatus] || p.badgePending}`} style={{ marginBottom: 8 }}>
+                                  {item.fulfillmentStatus}
+                                </span>
+                                {item.trackingNumber && (
+                                  <p style={{ margin: 0, fontSize: 11, color: "var(--vdr-accent)", fontWeight: 700 }}>
+                                    <Truck size={10} /> {item.trackingNumber}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {nextStatus && (
+                              <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed var(--vdr-border)", display: "flex", gap: 12, alignItems: "center" }}>
+                                {nextStatus === "shipped" && (
+                                  <input
+                                    className={p.input}
+                                    style={{ flex: 1, fontSize: 13, height: 36 }}
+                                    placeholder="Enter Tracking Number..."
+                                    value={tracking}
+                                    onChange={(e) => setTracking(e.target.value)}
+                                  />
+                                )}
+                                <button
+                                  className={`${p.btn} ${p.btnPrimary}`}
+                                  style={{ height: 36, padding: "0 16px", marginLeft: "auto" }}
+                                  disabled={updating === item.id}
+                                  onClick={() => updateFulfillment(item.id, item.fulfillmentStatus)}
+                                >
+                                  {updating === item.id ? "Updating..." : `Mark as ${nextStatus}`}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
             <div className={p.modalFoot}>
-              <button
-                className={`${p.btn} ${p.btnOutline}`}
-                onClick={() => setViewOrder(null)}
-              >
-                Close
-              </button>
+              <button className={`${p.btn} ${p.btnOutline}`} onClick={() => setViewOrderId(null)}>Close</button>
             </div>
           </div>
         </div>
