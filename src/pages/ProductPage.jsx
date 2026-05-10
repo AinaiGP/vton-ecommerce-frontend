@@ -10,6 +10,8 @@ import {
   Shield,
   Plus,
   Minus,
+  MessageSquare,
+  Star,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
@@ -35,6 +37,21 @@ function getInitials(name) {
     .toUpperCase();
 }
 
+function StarRow({ value, size = 16 }) {
+  return (
+    <span className={styles.starRow}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          size={size}
+          fill={value >= n ? "var(--gold)" : "none"}
+          stroke={value >= n ? "var(--gold)" : "#ccc"}
+        />
+      ))}
+    </span>
+  );
+}
+
 export default function ProductPage() {
   const { id } = useParams();
   const location = useLocation();
@@ -55,6 +72,10 @@ export default function ProductPage() {
   const [addingToCart, setAddingToCart] = useState(false);
   const [cartMessage, setCartMessage] = useState("");
   const [quantity, setQuantity] = useState(1);
+
+  const [reviews, setReviews] = useState([]);
+  const [reviewsTotal, setReviewsTotal] = useState(0);
+  const [averageRating, setAverageRating] = useState(5.0);
 
   useEffect(() => {
     if (location.state?.autoTriggerTryOn === true) {
@@ -78,6 +99,25 @@ export default function ProductPage() {
         setSelectedSize("");
         setSelectedImage(0);
         setQuantity(1);
+
+        try {
+          const reviewsRes = await apiClient.get(`/products/${id}/reviews`);
+          const rData = reviewsRes.data;
+          setReviewsTotal(rData.totalReviews || 0);
+          setAverageRating(rData.averageRating || 5.0);
+          setReviews(
+            (rData.data || []).map((r) => ({
+              id: r.id,
+              author: r.customerName || "Customer",
+              avatar: null,
+              date: new Date(r.createdAt).toLocaleDateString(),
+              rating: Number(r.rating) || 5,
+              comment: r.comment || "",
+            }))
+          );
+        } catch (rErr) {
+          console.error("Failed to fetch product reviews:", rErr);
+        }
       } catch (err) {
         setError(err?.response?.status === 404 ? "not_found" : "error");
       } finally {
@@ -333,7 +373,15 @@ export default function ProductPage() {
             </Link>
 
             <h1 className={styles.productName}>{product.name}</h1>
-            <p className={styles.reviewHint}>Be the first to review</p>
+            {reviewsTotal > 0 ? (
+              <div className={styles.productRatingSummary}>
+                <StarRow value={Math.round(averageRating)} size={16} />
+                <span className={styles.ratingNumber}>{averageRating.toFixed(1)}</span>
+                <span className={styles.reviewCount}>({reviewsTotal} reviews)</span>
+              </div>
+            ) : (
+              <p className={styles.reviewHint}>Be the first to review</p>
+            )}
 
             <p className={styles.price}>
               {formatPrice(product.basePrice, product.currency)}
@@ -496,6 +544,52 @@ export default function ProductPage() {
                 <li>Gender: {product.gender || "N/A"}</li>
                 {selectedVariant?.sku && <li>SKU: {selectedVariant.sku}</li>}
               </ul>
+            </div>
+            
+            {/* Reviews Section */}
+            <div className={styles.detailsSection} style={{ marginTop: 40 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <h4 className={styles.detailsTitle} style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                  <MessageSquare size={20} /> Customer Reviews
+                </h4>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <StarRow value={Math.round(averageRating)} size={18} />
+                  <strong>{averageRating.toFixed(1)}</strong>
+                  <span style={{ color: "var(--charcoal-muted)", fontSize: 14 }}>
+                    ({reviewsTotal} reviews)
+                  </span>
+                </div>
+              </div>
+              {reviews.length === 0 ? (
+                <div style={{ padding: "30px 0", textAlign: "center", color: "var(--charcoal-muted)" }}>
+                  <MessageSquare size={24} style={{ marginBottom: 12, opacity: 0.5 }} />
+                  <p>No reviews yet.</p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  {reviews.map((review) => (
+                    <div key={review.id} style={{ padding: 16, background: "var(--ivory)", borderRadius: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          {review.avatar ? (
+                            <img src={review.avatar} alt={review.author} style={{ width: 40, height: 40, borderRadius: "50%" }} />
+                          ) : (
+                            <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--charcoal)", color: "var(--ivory)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>
+                              {review.author[0]}
+                            </div>
+                          )}
+                          <div>
+                            <p style={{ margin: 0, fontWeight: "600", color: "var(--charcoal)" }}>{review.author}</p>
+                            <p style={{ margin: 0, fontSize: 12, color: "var(--charcoal-muted)" }}>{review.date}</p>
+                          </div>
+                        </div>
+                        <StarRow value={review.rating} />
+                      </div>
+                      <p style={{ margin: 0, color: "var(--charcoal-muted)", lineHeight: 1.5, fontSize: 14 }}>{review.comment}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

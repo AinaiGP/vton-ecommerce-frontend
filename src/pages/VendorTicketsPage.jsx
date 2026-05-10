@@ -108,6 +108,76 @@ function mapTicket(ticket) {
   };
 }
 
+/* ─── Confirm Cancel Modal ─── */
+function ConfirmCancelModal({ onConfirm, onClose, loading }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.45)",
+        backdropFilter: "blur(2px)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: "white",
+          borderRadius: 16,
+          width: "100%",
+          maxWidth: 400,
+          padding: 28,
+          boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 style={{ margin: "0 0 12px", fontSize: 17 }}>Cancel Ticket</h3>
+        <p style={{ margin: "0 0 24px", fontSize: 14, color: "var(--vdr-text-muted)" }}>
+          Are you sure you want to cancel this ticket? This action cannot be undone.
+        </p>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            onClick={onClose}
+            disabled={loading}
+            style={{
+              padding: "10px 18px",
+              borderRadius: 10,
+              border: "1px solid var(--vdr-border)",
+              background: "transparent",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            Keep Ticket
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            style={{
+              padding: "10px 18px",
+              borderRadius: 10,
+              border: "none",
+              background: "#dc2626",
+              color: "white",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            {loading ? "Canceling…" : "Yes, Cancel It"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function VendorTicketsPage() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -121,6 +191,7 @@ export default function VendorTicketsPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
+  const [cancelingId, setCancelingId] = useState(null); // id of ticket to confirm cancel
 
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
@@ -180,21 +251,36 @@ export default function VendorTicketsPage() {
       });
 
       if (file) {
-        const formData = new FormData();
-        formData.append("file", file);
-        const uploadRes = await multipartClient.post(
-          `/vendors/support/tickets/${res.data.id}/messages/attachments`,
-          formData,
-        );
-        const url = uploadRes.data?.url;
-        if (url) {
-          await apiClient.post(
-            `/vendors/support/tickets/${res.data.id}/messages`,
-            {
-              content: "Attachment",
-              attachments: [url],
-            },
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
+          const uploadRes = await multipartClient.post(
+            `/vendors/support/tickets/${res.data.id}/messages/attachments`,
+            formData,
           );
+          const url = uploadRes.data?.url;
+          if (url) {
+            await apiClient.post(
+              `/vendors/support/tickets/${res.data.id}/messages`,
+              {
+                content: "Attachment",
+                attachments: [url],
+              },
+            );
+          }
+        } catch (err) {
+          setError("Ticket created, but attachment failed (must be image < 5MB).");
+          setShowCreate(false);
+          setCreateFile(null);
+          setCreatePreviewUrl(null);
+          await fetchTickets();
+          const newTkRes = await apiClient.get(
+            `/vendors/support/tickets/${res.data.id}`,
+          );
+          setSelected(mapTicket(newTkRes.data));
+          setView("detail");
+          setSending(false);
+          return;
         }
       }
 
@@ -223,23 +309,28 @@ export default function VendorTicketsPage() {
     try {
       let content = replyText;
       if (replyFile) {
-        const formData = new FormData();
-        formData.append("file", replyFile);
-        const uploadRes = await multipartClient.post(
-          `/vendors/support/tickets/${selected.id}/messages/attachments`,
-          formData,
-        );
-        const url = uploadRes.data?.url;
-        if (url) {
-          content = content || "Attachment";
-          await apiClient.post(
-            `/vendors/support/tickets/${selected.id}/messages`,
-            {
-              content,
-              attachments: [url],
-            },
+        try {
+          const formData = new FormData();
+          formData.append("file", replyFile);
+          const uploadRes = await multipartClient.post(
+            `/vendors/support/tickets/${selected.id}/messages/attachments`,
+            formData,
           );
-          content = null;
+          const url = uploadRes.data?.url;
+          if (url) {
+            content = content || "Attachment";
+            await apiClient.post(
+              `/vendors/support/tickets/${selected.id}/messages`,
+              {
+                content,
+                attachments: [url],
+              },
+            );
+            content = null;
+          }
+        } catch (err) {
+          alert("Failed to upload attachment. It must be an image under 5MB.");
+          throw err;
         }
       }
 
@@ -266,7 +357,11 @@ export default function VendorTicketsPage() {
   };
 
   const handleCancelTicket = async (id) => {
-    if (!window.confirm("Are you sure you want to cancel this ticket?")) return;
+    setCancelingId(id);
+  };
+
+  const confirmCancel = async () => {
+    const id = cancelingId;
     try {
       await apiClient.patch(`/vendors/support/tickets/${id}/cancel`);
       const updatedRes = await apiClient.get(`/vendors/support/tickets/${id}`);
@@ -276,6 +371,8 @@ export default function VendorTicketsPage() {
       );
     } catch (err) {
       console.error("Failed to cancel ticket", err);
+    } finally {
+      setCancelingId(null);
     }
   };
 
@@ -568,8 +665,15 @@ export default function VendorTicketsPage() {
                     Cancel Ticket
                   </button>
                 )}
-              </div>
             </div>
+          </div>
+          {cancelingId && (
+            <ConfirmCancelModal
+              loading={false}
+              onClose={() => setCancelingId(null)}
+              onConfirm={confirmCancel}
+            />
+          )}
 
             <div
               style={{
@@ -761,6 +865,7 @@ export default function VendorTicketsPage() {
                       type="file"
                       ref={fileRef}
                       style={{ display: "none" }}
+                      accept="image/jpeg,image/png,image/webp,image/gif"
                       onChange={(e) => setReplyFile(e.target.files[0])}
                     />
                   </div>
@@ -894,13 +999,14 @@ export default function VendorTicketsPage() {
                         color: "var(--vdr-text-muted)",
                       }}
                     >
-                      JPG, PNG or PDF up to 5MB
+                      JPG, PNG or WEBP up to 5MB
                     </p>
                     <input
                       id="new-tkt-file"
                       name="file"
                       type="file"
                       style={{ display: "none" }}
+                      accept="image/jpeg,image/png,image/webp,image/gif"
                       onChange={(e) => setCreateFile(e.target.files[0] || null)}
                     />
                   </div>

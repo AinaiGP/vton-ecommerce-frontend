@@ -59,21 +59,15 @@ function LoadingSpinner() {
 
 /* ─── Component ─────────────────────────────────────── */
 export default function WardrobePage() {
-  const [tab, setTab] = useState("wardrobe"); // wardrobe | builder | outfits | ai
+  const [tab, setTab] = useState("wardrobe"); // wardrobe | builder | outfits
   const [activeCategory, setActiveCategory] = useState("all");
   const [items, setItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(true);
   const [allCategories, setAllCategories] = useState([]);
 
-  // Try to load outfits from local storage
-  const [outfits, setOutfits] = useState(() => {
-    try {
-      const saved = localStorage.getItem("ainai_outfits");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Outfits — persisted to backend
+  const [outfits, setOutfits] = useState([]);
+  const [outfitsLoading, setOutfitsLoading] = useState(false);
 
   const [selectedForOutfit, setSelectedForOutfit] = useState([]);
   const [outfitName, setOutfitName] = useState("");
@@ -94,10 +88,30 @@ export default function WardrobePage() {
   const [uploadCategory, setUploadCategory] = useState("tops");
   const [uploadPreviewUrl, setUploadPreviewUrl] = useState(null);
 
-  /* ── Sync outfits to local storage ── */
+  /* ── Fetch outfits from backend ── */
+  const fetchOutfits = useCallback(async () => {
+    setOutfitsLoading(true);
+    try {
+      const res = await apiClient.get("/customers/wardrobe/outfits");
+      const raw = res.data || [];
+      setOutfits(
+        raw.map((o) => ({
+          id: o.id,
+          name: o.name,
+          items: o.itemIds,
+          cover: o.coverUrl || "",
+        }))
+      );
+    } catch {
+      // silent — outfits stay empty
+    } finally {
+      setOutfitsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    localStorage.setItem("ainai_outfits", JSON.stringify(outfits));
-  }, [outfits]);
+    fetchOutfits();
+  }, [fetchOutfits]);
 
   useEffect(() => {
     if (!uploadFile) {
@@ -250,33 +264,38 @@ export default function WardrobePage() {
     );
   };
 
-  const saveOutfit = () => {
+  const saveOutfit = async () => {
     if (selectedForOutfit.length === 0) {
       showToast("Select at least one item.", "error");
       return;
     }
     const name = outfitName.trim() || `Outfit ${outfits.length + 1}`;
     const coverItem = items.find((i) => i.id === selectedForOutfit[0]);
-
-    setOutfits((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
+    try {
+      await apiClient.post("/customers/wardrobe/outfits", {
         name,
-        items: [...selectedForOutfit],
-        cover: coverItem?.url || "",
-      },
-    ]);
-    setSelectedForOutfit([]);
-    setOutfitName("");
-    showToast(`"${name}" saved!`);
-    setTab("outfits");
+        itemIds: selectedForOutfit,
+        coverUrl: coverItem?.url || null,
+      });
+      setSelectedForOutfit([]);
+      setOutfitName("");
+      showToast(`"${name}" saved!`);
+      setTab("outfits");
+      await fetchOutfits();
+    } catch {
+      showToast("Failed to save outfit.", "error");
+    }
   };
 
   /* ── Delete outfit ── */
-  const deleteOutfit = (id) => {
-    setOutfits((prev) => prev.filter((o) => o.id !== id));
-    showToast("Outfit deleted.", "info");
+  const deleteOutfit = async (id) => {
+    try {
+      await apiClient.delete(`/customers/wardrobe/outfits/${id}`);
+      setOutfits((prev) => prev.filter((o) => o.id !== id));
+      showToast("Outfit deleted.", "info");
+    } catch {
+      showToast("Failed to delete outfit.", "error");
+    }
   };
 
   /* ── Rename outfit ── */
@@ -284,12 +303,23 @@ export default function WardrobePage() {
     setEditingOutfitId(outfit.id);
     setEditingOutfitName(outfit.name);
   };
-  const saveRenameOutfit = (id) => {
-    setOutfits((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, name: editingOutfitName } : o)),
-    );
-    setEditingOutfitId(null);
-    showToast("Outfit renamed.");
+  const saveRenameOutfit = async (id) => {
+    const outfit = outfits.find((o) => o.id === id);
+    if (!outfit) return;
+    try {
+      await apiClient.put(`/customers/wardrobe/outfits/${id}`, {
+        name: editingOutfitName,
+        itemIds: outfit.items,
+        coverUrl: outfit.cover || null,
+      });
+      setOutfits((prev) =>
+        prev.map((o) => (o.id === id ? { ...o, name: editingOutfitName } : o))
+      );
+      setEditingOutfitId(null);
+      showToast("Outfit renamed.");
+    } catch {
+      showToast("Failed to rename outfit.", "error");
+    }
   };
 
   /* ── Wishlist rec ── */
@@ -319,10 +349,11 @@ export default function WardrobePage() {
       ═══════════════════════════════════ */}
       {uploadModalOpen && (
         <div className={styles.modalOverlay}>
-          <div className={styles.modal}>
+          <form className={styles.modal} onSubmit={handleUploadSubmit}>
             <div className={styles.modalHeader}>
               <h3 className={styles.modalTitle}>Add Wardrobe Item</h3>
               <button
+                type="button"
                 className={styles.modalClose}
                 onClick={() => {
                   setUploadModalOpen(false);
@@ -333,7 +364,7 @@ export default function WardrobePage() {
                 <X size={18} />
               </button>
             </div>
-            <form className={styles.modalBody} onSubmit={handleUploadSubmit}>
+            <div className={styles.modalBody}>
               {uploadFile && uploadPreviewUrl && (
                 <div className={styles.modalPreview}>
                   <img
@@ -361,38 +392,50 @@ export default function WardrobePage() {
                   value={uploadCategory}
                   onChange={(e) => setUploadCategory(e.target.value)}
                 >
-                  {allCategories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
+                  {allCategories.length > 0 ? (
+                    allCategories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="tops">Tops</option>
+                      <option value="bottoms">Bottoms</option>
+                      <option value="dresses">Dresses</option>
+                      <option value="shoes">Shoes</option>
+                      <option value="accessories">Accessories</option>
+                      <option value="outerwear">Outerwear</option>
+                    </>
+                  )}
                 </select>
               </div>
-              <div className={styles.modalActions}>
-                <button
-                  type="button"
-                  className={styles.modalCancel}
-                  onClick={() => {
-                    setUploadModalOpen(false);
-                    setUploadFile(null);
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
-                  disabled={uploading}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className={styles.modalSave}
-                  disabled={uploading}
-                >
-                  {uploading ? "Uploading..." : "Save Item"}
-                </button>
-              </div>
-            </form>
-          </div>
+            </div>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.modalCancel}
+                onClick={() => {
+                  setUploadModalOpen(false);
+                  setUploadFile(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                disabled={uploading}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className={styles.modalSave}
+                disabled={uploading}
+              >
+                {uploading ? "Uploading…" : "Save Item"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
+
 
       <main className={styles.main}>
         {/* ── Page Header ── */}
@@ -455,7 +498,6 @@ export default function WardrobePage() {
               label: `Saved Outfits (${outfits.length})`,
               icon: <Save size={16} />,
             },
-            { id: "ai", label: "AI Picks", icon: <Sparkles size={16} /> },
           ].map((t) => (
             <button
               key={t.id}
@@ -466,6 +508,7 @@ export default function WardrobePage() {
             </button>
           ))}
         </div>
+
 
         {/* ═══════════════════════════════════
             TAB: MY WARDROBE
@@ -858,22 +901,8 @@ export default function WardrobePage() {
           </div>
         )}
 
-        {/* ═══════════════════════════════════
-            TAB: AI RECOMMENDATIONS
-        ═══════════════════════════════════ */}
-        {tab === "ai" && (
-          <div className={styles.tabContent}>
-            <div className={styles.empty}>
-              <Sparkles
-                size={56}
-                strokeWidth={1}
-                className={styles.emptyIcon}
-              />
-              <h3>AI Picks Coming Soon</h3>
-              <p>We're building an intelligent stylist just for you.</p>
-            </div>
-          </div>
-        )}
+
+
       </main>
       <Footer />
     </div>

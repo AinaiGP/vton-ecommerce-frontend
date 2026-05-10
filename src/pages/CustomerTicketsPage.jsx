@@ -196,7 +196,45 @@ function LoadingSpinner() {
   );
 }
 
-/* ─── Create Ticket Modal ─── */
+/* ─── Confirm Cancel Modal ─── */
+function ConfirmCancelModal({ onConfirm, onClose, loading }) {
+  return (
+    <div className={styles.backdrop} onClick={onClose}>
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <div className={styles.modalHead}>
+          <h2 className={styles.modalTitle}>Cancel Ticket</h2>
+          <button className={styles.modalClose} onClick={onClose}>
+            <X size={17} />
+          </button>
+        </div>
+        <div className={styles.modalBody}>
+          <p style={{ color: "var(--charcoal-muted)", fontSize: 14, margin: 0 }}>
+            Are you sure you want to cancel this ticket? This action cannot be undone.
+          </p>
+        </div>
+        <div className={styles.modalFoot}>
+          <button
+            className={`${styles.btn} ${styles.btnOutline}`}
+            onClick={onClose}
+            disabled={loading}
+          >
+            Keep Ticket
+          </button>
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={onConfirm}
+            disabled={loading}
+            style={{ background: "#dc2626", borderColor: "#dc2626" }}
+          >
+            {loading ? "Canceling…" : "Yes, Cancel It"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function CreateModal({ onClose, onSubmit }) {
   const [form, setForm] = useState({
     subject: "",
@@ -341,6 +379,7 @@ function CreateModal({ onClose, onSubmit }) {
                 ref={fileRef}
                 type="file"
                 style={{ display: "none" }}
+                accept="image/jpeg,image/png,image/webp,image/gif"
                 onChange={(e) => setFile(e.target.files[0] || null)}
               />
               {file && (
@@ -406,6 +445,8 @@ function TicketDetail({ ticket, onBack, onReply, onCancel }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const [sending, setSending] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
 
@@ -421,6 +462,10 @@ function TicketDetail({ ticket, onBack, onReply, onCancel }) {
       await onReply(ticket.id, text, file);
       setText("");
       setFile(null);
+    } catch (err) {
+      console.error("Message send failed:", err);
+      // addToast or other UI feedback is handled inside onReply if it's an attachment issue.
+      // We just need to catch the error here so finally block runs properly.
     } finally {
       setSending(false);
     }
@@ -455,17 +500,23 @@ function TicketDetail({ ticket, onBack, onReply, onCancel }) {
           <div style={{ display: "flex", gap: "8px" }}>
             <button
               className={`${styles.btn} ${styles.btnOutline} ${styles.btnSm}`}
-              onClick={() => {
-                if (
-                  window.confirm("Are you sure you want to cancel this ticket?")
-                ) {
-                  onCancel(ticket.id);
-                }
-              }}
+              onClick={() => setShowCancelModal(true)}
             >
               Cancel
             </button>
           </div>
+        )}
+        {showCancelModal && (
+          <ConfirmCancelModal
+            loading={canceling}
+            onClose={() => setShowCancelModal(false)}
+            onConfirm={async () => {
+              setCanceling(true);
+              await onCancel(ticket.id);
+              setCanceling(false);
+              setShowCancelModal(false);
+            }}
+          />
         )}
       </div>
 
@@ -541,6 +592,7 @@ function TicketDetail({ ticket, onBack, onReply, onCancel }) {
               type="file"
               ref={fileRef}
               style={{ display: "none" }}
+              accept="image/jpeg,image/png,image/webp,image/gif"
               onChange={(e) => setFile(e.target.files[0] || null)}
             />
             <textarea
@@ -670,7 +722,17 @@ export default function CustomerTicketsPage() {
           );
         }
       } catch (err) {
-        console.error("Failed to upload attachment", err);
+        addToast("Ticket created, but attachment failed (must be image < 5MB).", "error");
+        setShowCreate(false);
+        await refetchTickets();
+        const newTk = (
+          await apiClient.get(`/customers/support/tickets/${res.data.id}`)
+        ).data;
+        if (newTk) {
+          setSelected(mapTicket(newTk));
+          setView("detail");
+        }
+        return;
       }
     }
 
@@ -699,8 +761,9 @@ export default function CustomerTicketsPage() {
           formData,
         );
         attachmentUrl = uploadRes.data?.url || null;
-      } catch {
-        // continue without attachment
+      } catch (err) {
+        addToast("Failed to upload attachment. It must be an image under 5MB.", "error");
+        throw err; // Stop reply process
       }
     }
 
@@ -720,11 +783,22 @@ export default function CustomerTicketsPage() {
   const handleCancel = async (id) => {
     try {
       await apiClient.patch(`/customers/support/tickets/${id}/cancel`);
+      // Try to refetch the updated ticket; if it fails, still update local state
+      try {
+        const res = await apiClient.get(`/customers/support/tickets/${id}`);
+        const updated = mapTicket(res.data);
+        setSelected(updated);
+        setTickets((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      } catch {
+        // GET failed — update status optimistically so UI reflects the cancel
+        setTickets((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, status: "CANCELED" } : t))
+        );
+        setSelected((prev) =>
+          prev?.id === id ? { ...prev, status: "CANCELED" } : prev
+        );
+      }
       addToast("Ticket canceled.");
-      const res = await apiClient.get(`/customers/support/tickets/${id}`);
-      const updated = mapTicket(res.data);
-      setSelected(updated);
-      setTickets((prev) => prev.map((t) => (t.id === id ? updated : t)));
     } catch {
       addToast("Failed to cancel ticket.", "error");
     }
