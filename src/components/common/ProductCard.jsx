@@ -73,6 +73,7 @@ export default function ProductCard({ product }) {
             src={imageUrl}
             alt={product.name}
             className={styles.productImage}
+            loading="lazy"
           />
         ) : (
           <div className={styles.imagePlaceholder}>
@@ -86,7 +87,7 @@ export default function ProductCard({ product }) {
         {/* Brand */}
         {product.vendor?.brandName && (
           <Link
-            to={`/vendor/${product.vendor.id}`}
+            to={`/vendors/storefront/${product.vendor.id}`}
             className={styles.brandLink}
           >
             <p className={styles.brandName}>{product.vendor.brandName}</p>

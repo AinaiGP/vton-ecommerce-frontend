@@ -16,19 +16,68 @@
 }
 .newsletterTitle { font-family: 'Playfair Display', serif; font-size: 22px; color: white; margin: 0 0 4px; }
 .newsletterSub { font-size: 14px; color: rgba(255,255,255,0.75); margin: 0; }
-.newsletterInput {
-  flex: 1; height: 46px; border: none; border-radius: 8px 0 0 8px;
-  padding: 0 16px; font-size: 14px; background: rgba(255,255,255,0.15);
-  color: white; backdrop-filter: blur(8px);
+.newsletterAction {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
-.newsletterInput::placeholder { color: rgba(255,255,255,0.6); }
-.newsletterInput:focus { outline: none; background: rgba(255,255,255,0.22); }
-.newsletterBtn {
-  width: 46px; height: 46px; background: var(--gold); border: none; border-radius: 0 8px 8px 0;
-  color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s;
+.toggleBtn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 24px;
+  background: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 50px;
+  color: white;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  white-space: nowrap;
 }
-.newsletterBtn:hover { background: var(--gold-dark); }
+
+.toggleBtn:hover {
+  background: var(--gold-dark);
+  border-color: var(--gold-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+}
+
+.toggleBtn.subscribed {
+  background: var(--charcoal-muted) !important;
+  color: var(--white) !important;
+  border-color: var(--charcoal-muted) !important;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.toggleBtn.subscribed:hover {
+  background: var(--charcoal) !important;
+  color: var(--white) !important; 
+  border-color: var(--charcoal) !important;
+}
+.newsletterStatus {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  font-size: 13px;
+  color: white;
+  font-weight: 700;
+  background: rgba(0,0,0,0.2);
+  padding: 4px 12px;
+  border-radius: 6px;
+  backdrop-filter: blur(4px);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* Main grid */
 .main {
@@ -163,14 +212,6 @@
   border-color: #1a1a1a;
   background: #fcfcfc;
 }
-.newsletterStatus {
-  position: absolute;
-  bottom: -24px;
-  left: 0;
-  font-size: 12px;
-  color: white;
-  font-weight: 600;
-}
 
 .spin {
   animation: spin 1s linear infinite;
@@ -179,12 +220,4 @@
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-.newsletterForm {
-  position: relative;
-  display: flex;
-  gap: 0;
-  width: 380px;
-  max-width: 100%;
 }

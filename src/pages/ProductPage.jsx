@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
-import VtonModal from "../components/vton/VtonModal";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
@@ -68,21 +67,15 @@ export default function ProductPage() {
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
   const [wishlistItems, setWishlistItems] = useState([]);
-  const [vtonOpen, setVtonOpen] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
   const [cartMessage, setCartMessage] = useState("");
   const [quantity, setQuantity] = useState(1);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
 
   const [reviews, setReviews] = useState([]);
   const [reviewsTotal, setReviewsTotal] = useState(0);
   const [averageRating, setAverageRating] = useState(5.0);
 
-  useEffect(() => {
-    if (location.state?.autoTriggerTryOn === true) {
-      setVtonOpen(true);
-      navigate(location.pathname, { replace: true, state: {} });
-    }
-  }, [location.pathname, location.state, navigate]);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -233,8 +226,13 @@ export default function ProductPage() {
       navigate("/auth", { state: { from: location } });
       return;
     }
-    if (!selectedVariant) return;
+    if (!selectedVariant) {
+      setCartMessage("Please select a color and size to add to your wishlist");
+      setTimeout(() => setCartMessage(""), 3000);
+      return;
+    }
 
+    setWishlistLoading(true);
     if (isWishlisted) {
       setWishlistItems((prev) =>
         prev.filter((vid) => vid !== selectedVariant.id),
@@ -257,6 +255,7 @@ export default function ProductPage() {
         ); // rollback
       }
     }
+    setWishlistLoading(false);
   };
 
   if (loading) {
@@ -337,13 +336,13 @@ export default function ProductPage() {
                   src={selectedImageUrl}
                   alt={product.name}
                   className={styles.heroImage}
+                  loading="lazy"
                 />
               ) : (
                 <div className={styles.imagePlaceholder}>
                   {getInitials(product.name)}
                 </div>
               )}
-              <span className={styles.vtonBadge}>VTON Ready</span>
             </div>
 
             {sortedImages.length > 0 && (
@@ -356,7 +355,7 @@ export default function ProductPage() {
                     }`}
                     onClick={() => setSelectedImage(index)}
                   >
-                    <img src={img.s3Url} alt={`View ${index + 1}`} />
+                    <img src={img.s3Url} alt={`View ${index + 1}`} loading="lazy" />
                   </button>
                 ))}
               </div>
@@ -364,12 +363,12 @@ export default function ProductPage() {
           </div>
 
           <div className={styles.productInfo}>
-            <p className={styles.brand}>{product.vendor?.brandName || ""}</p>
-            <Link
-              to={`/vendors/storefront/${product.vendor?.id || ""}`}
-              className={styles.vendorLink}
+            {/* Brand Link */}
+            <Link 
+              to={`/vendors/storefront/${product.vendor?.id || ""}`} 
+              className={styles.brand}
             >
-              View brand
+              {product.vendor?.brandName || ""}
             </Link>
 
             <h1 className={styles.productName}>{product.name}</h1>
@@ -485,7 +484,7 @@ export default function ProductPage() {
                 className={styles.wishlistButton}
                 onClick={handleWishlistToggle}
                 aria-label="Add to wishlist"
-                disabled={!selectedVariant}
+                disabled={wishlistLoading}
               >
                 <Heart
                   size={22}
@@ -497,30 +496,17 @@ export default function ProductPage() {
 
             {cartMessage && (
               <p
-                className={
-                  styles.cartMessage
-                    ? `${styles.cartMessage} ${cartMessage.includes("Failed") || cartMessage.includes("Error") ? styles.cartMessageError : ""}`
-                    : styles.cartMessageError
-                }
+                className={`${styles.cartMessage} ${
+                  cartMessage.includes("Failed") || 
+                  cartMessage.includes("Error") || 
+                  cartMessage.includes("select") 
+                    ? styles.cartMessageError : ""
+                }`}
               >
                 {cartMessage}
               </p>
             )}
 
-            <button
-              className={styles.tryOnButton}
-              onClick={() => {
-                if (!isAuthenticated) {
-                  navigate("/auth", { state: { from: location } });
-                  return;
-                }
-                setVtonOpen(true);
-              }}
-            >
-              <Eye size={22} />
-              <span>Virtual Try-On</span>
-              <span className={styles.tryOnTag}>AI Powered</span>
-            </button>
 
             <div className={styles.trustBadges}>
               <div className={styles.trustItem}>
@@ -596,12 +582,6 @@ export default function ProductPage() {
       </main>
 
       <Footer />
-      <VtonModal
-        isOpen={vtonOpen}
-        onClose={() => setVtonOpen(false)}
-        productMainImageUrl={selectedImageUrl}
-        productName={product.name}
-      />
     </div>
   );
 }

@@ -62,7 +62,7 @@ export default function VendorAnalyticsPage() {
       labels: vtonProducts.map((p) => p.name.split(" ").slice(0, 2).join(" ")),
       datasets: [
         {
-          label: "Try-Ons",
+          label: "Views",
           data: vtonProducts.map((p) => p.tryOns),
           backgroundColor: "rgba(139,72,82,0.8)",
           borderRadius: 6,
@@ -82,26 +82,10 @@ export default function VendorAnalyticsPage() {
 
   return (
     <VendorLayout
-      pageTitle="Try-On Analytics"
-      pageSubtitle="Virtual Try-On performance and conversion insights."
-      breadcrumb="Try-On Analytics"
+      pageTitle="Sales Analytics"
+      pageSubtitle="Monitor your store's performance and sales trends."
+      breadcrumb="Analytics"
     >
-      {/* Insight callout */}
-      <div className={p.insightCallout}>
-        <div className={p.insightCalloutIcon}>
-          <Zap size={20} />
-        </div>
-        <div>
-          <p className={p.insightCalloutTitle}>
-            ⭐ Products with VTON perform 3.2× better
-          </p>
-          <p className={p.insightCalloutText}>
-            Your VTON-enabled products have an average conversion rate of 18.7%
-            — compared to just 5.8% for non-VTON products. Enable try-on on more
-            products to boost revenue.
-          </p>
-        </div>
-      </div>
 
       {/* Metric cards */}
       {metrics.length === 0 ? (
@@ -111,7 +95,7 @@ export default function VendorAnalyticsPage() {
           </div>
           <h3 className={p.emptyTitle}>No data yet.</h3>
           <p className={p.emptyText}>
-            Analytics will appear once VTON events are available.
+            Analytics will appear once sales data is available.
           </p>
         </div>
       ) : (
@@ -154,7 +138,7 @@ export default function VendorAnalyticsPage() {
       <div className={p.chartCard}>
         <div className={p.chartHead}>
           <div>
-            <h3 className={p.chartTitle}>Try-Ons vs Purchases by Product</h3>
+            <h3 className={p.chartTitle}>Views vs Purchases by Product</h3>
             <p className={p.chartSub}>Last 30 days</p>
           </div>
         </div>
@@ -166,9 +150,9 @@ export default function VendorAnalyticsPage() {
       {/* Per-product table */}
       <div className={p.tableCard}>
         <div className={p.chartHead} style={{ padding: "16px 20px" }}>
-          <h3 className={p.chartTitle}>Product-Level VTON Metrics</h3>
+          <h3 className={p.chartTitle}>Product-Level Sales Metrics</h3>
           <span style={{ fontSize: 12, color: "var(--vdr-text-subtle)" }}>
-            Sorted by try-ons
+            Sorted by purchases
           </span>
         </div>
         <div className={p.tableWrap}>
@@ -177,7 +161,7 @@ export default function VendorAnalyticsPage() {
               <tr>
                 <th>Product</th>
                 <th>Views</th>
-                <th>Try-Ons</th>
+                <th>Orders</th>
                 <th>Purchases</th>
                 <th>Conversion</th>
                 <th>Trend</th>
@@ -194,7 +178,7 @@ export default function VendorAnalyticsPage() {
                       </div>
                       <h3 className={p.emptyTitle}>No data yet.</h3>
                       <p className={p.emptyText}>
-                        Product-level metrics will appear once VTON events are
+                        Product-level metrics will appear once sales data is
                         available.
                       </p>
                     </div>

@@ -165,18 +165,18 @@ export default function VendorDashboardPage() {
         </div>
       </div>
 
-      {/* VTON tip */}
+      {/* Sales Tip */}
       <div className={p.insightCallout}>
         <div className={p.insightCalloutIcon}>
           <Zap size={20} />
         </div>
         <div>
           <p className={p.insightCalloutTitle}>
-            💡 Boost Sales with Virtual Try-On
+            💡 Improve Your Sales Conversion
           </p>
           <p className={p.insightCalloutText}>
-            Products with VTON enabled convert 3.2× more than standard listings.
-            Enable try-on for your top products in the Products page.
+            High-quality product images and detailed descriptions can increase your conversion rate by up to 40%.
+            Keep your inventory updated for the best results.
           </p>
         </div>
       </div>

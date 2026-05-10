@@ -228,19 +228,19 @@
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
-  color: var(--charcoal-muted);
-  margin: 0;
-}
-
-.vendorLink {
-  width: fit-content;
-  font-size: var(--text-sm);
   color: var(--burgundy);
+  margin: 0;
+  text-decoration: none;
+  transition: all var(--transition-fast);
+  width: fit-content;
+  display: block;
 }
 
-.vendorLink:hover {
+.brand:hover {
   color: var(--burgundy-dark);
+  text-decoration: underline;
 }
+
 
 .productName {
   font-family: var(--font-serif);

@@ -1,14 +1,16 @@
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { Instagram, Twitter, Facebook, Youtube, ArrowRight, X, Loader2 } from "lucide-react";
+import { Instagram, Twitter, Facebook, Youtube, X, Loader2, Bell, BellOff, CheckCircle } from "lucide-react";
 import apiClient from "../../utils/apiClient";
 import AinaiLogo from "./AinaiLogo";
 import styles from "../../styles/Footer.module.css";
 import { useLanguage } from "../../context/LanguageContext";
+import { useAuth } from "../../context/AuthContext";
 import ContentModal from "./ContentModal";
 
 export default function Footer() {
   const { t, lang } = useLanguage();
+  const { isAuthenticated, user, updateUser } = useAuth();
 
   const [showContactModal, setShowContactModal] = useState(false);
   const [showSizeGuideModal, setShowSizeGuideModal] = useState(false);
@@ -19,21 +21,44 @@ export default function Footer() {
 
   const [copied, setCopied] = useState(false);
 
-  const [newsletterEmail, setNewsletterEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+  const [isHoveringToggle, setIsHoveringToggle] = useState(false);
 
-  const handleNewsletterSubmit = async (e) => {
-    e.preventDefault();
-    if (!newsletterEmail) return;
+  const isSubscribed = Boolean(user?.isSubscribedToNewsletter);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      if (isAuthenticated && user && user.isSubscribedToNewsletter === undefined) {
+        try {
+          const res = await apiClient.get("/customers/profile");
+          const userData = res.data?.data || res.data; // Depending on backend wrapper, could be res.data or res.data.data
+          if (userData) {
+            updateUser({ isSubscribedToNewsletter: userData.isSubscribedToNewsletter });
+          }
+        } catch (err) {
+          console.error("Failed to fetch newsletter status", err);
+        }
+      }
+    };
+    fetchStatus();
+  }, [isAuthenticated, user, updateUser]);
+
+  const handleNewsletterToggle = async () => {
+    if (!isAuthenticated) {
+      window.location.href = "/auth";
+      return;
+    }
     setSubmitting(true);
     try {
-      await apiClient.post("/customers/newsletter/subscribe", { email: newsletterEmail });
-      setMessage("Subscribed!");
-      setNewsletterEmail("");
+      const res = await apiClient.post("/customers/newsletter/toggle");
+      const isSubscribed = res.data?.isSubscribed;
+      // Use the value from response directly to update local state
+      updateUser({ isSubscribedToNewsletter: isSubscribed });
+      setMessage(isSubscribed ? "Subscribed!" : "Unsubscribed!");
       setTimeout(() => setMessage(""), 3000);
     } catch (err) {
-      setMessage("Error. Try again.");
+      setMessage(t("common.error"));
       setTimeout(() => setMessage(""), 3000);
     } finally {
       setSubmitting(false);
@@ -68,23 +93,36 @@ export default function Footer() {
         <div className={styles.newsletterInner}>
           <div>
             <h3 className={styles.newsletterTitle}>{t("footer.newsletter_title")}</h3>
-            <p className={styles.newsletterSub}>{t("footer.newsletter_sub")}</p>
+            <p className={styles.newsletterSub}>
+              {isSubscribed 
+                ? "You're all set! You'll receive our latest updates." 
+                : "Join our community for exclusive drops and fashion tips."}
+            </p>
           </div>
-          <form className={styles.newsletterForm} onSubmit={handleNewsletterSubmit}>
-            <input 
-              type="email" 
-              placeholder="your@email.com" 
-              className={styles.newsletterInput} 
-              value={newsletterEmail}
-              onChange={e => setNewsletterEmail(e.target.value)}
+          <div className={styles.newsletterAction}>
+            <button 
+              className={`${styles.toggleBtn} ${isSubscribed ? styles.subscribed : ""}`}
+              onClick={handleNewsletterToggle}
               disabled={submitting}
-              required
-            />
-            <button type="submit" className={styles.newsletterBtn} disabled={submitting}>
-              {submitting ? <Loader2 size={18} className="spin" /> : <ArrowRight size={18} style={{ transform: lang === "ar" ? "rotate(180deg)" : "none" }} />}
+              onMouseEnter={() => setIsHoveringToggle(true)}
+              onMouseLeave={() => setIsHoveringToggle(false)}
+            >
+              {submitting ? (
+                <Loader2 size={18} className="spin" />
+              ) : isSubscribed ? (
+                <>
+                  <BellOff size={18} />
+                  <span>Unsubscribe</span>
+                </>
+              ) : (
+                <>
+                  <Bell size={18} />
+                  <span>{isAuthenticated ? "Subscribe" : "Login to Subscribe"}</span>
+                </>
+              )}
             </button>
             {message && <span className={styles.newsletterStatus}>{message}</span>}
-          </form>
+          </div>
         </div>
       </div>
 
@@ -240,8 +278,6 @@ export default function Footer() {
       {showFAQModal && (
         <ContentModal title="Frequently Asked Questions" onClose={() => setShowFAQModal(false)}>
           <div className={styles.modalBody}>
-            <h3>How does Virtual Try-On work?</h3>
-            <p>Our AI-powered Virtual Try-On lets you upload a photo of yourself and see how any garment looks on your body before purchasing. Simply open a product, click "Try On", upload your photo, and our AI generates a realistic preview within seconds.</p>
 
             <h3>How long does shipping take?</h3>
             <p>Standard delivery within Egypt takes 3–5 business days. Express delivery options are available at checkout for 1–2 business day delivery.</p>
@@ -291,7 +327,6 @@ function PrivacyContent({ onClose }) {
           <li><strong>Personal Information:</strong> Name, email address, shipping address, and phone number.</li>
           <li><strong>Payment Information:</strong> Processed securely via Stripe; we do not store your card details.</li>
           <li><strong>Browsing Behavior:</strong> Pages viewed, products searched, and interaction data.</li>
-          <li><strong>Virtual Try-On Photos:</strong> Photos you upload for the Virtual Try-On feature.</li>
         </ul>
 
         <h3>How we use your data</h3>
@@ -300,8 +335,6 @@ function PrivacyContent({ onClose }) {
         <h3>Data storage and security</h3>
         <p>Your data is encrypted and stored securely on Amazon Web Services (AWS). We implement industry-standard security measures to prevent unauthorized access.</p>
 
-        <h3>Virtual Try-On Photos</h3>
-        <p>Photos uploaded for Virtual Try-On are processed in real-time to generate your preview. These photos are not stored permanently on our servers unless you explicitly choose to save them to your virtual wardrobe.</p>
 
         <h3>Third party services</h3>
         <p>We use Stripe for secure payment processing and Google for OAuth authentication. These services have their own privacy policies.</p>
@@ -334,8 +367,6 @@ function TermsContent({ onClose }) {
         <h3>4. Intellectual property</h3>
         <p>All content on the AINAI platform, including logos, designs, and AI technology, is the property of AINAI and is protected by intellectual property laws.</p>
 
-        <h3>5. Virtual Try-On feature</h3>
-        <p>The Virtual Try-On feature is provided for illustrative purposes. Uploaded photos are used solely for generating the try-on preview and are handled according to our Privacy Policy.</p>
 
         <h3>6. Vendor terms</h3>
         <p>Vendors are responsible for the accuracy of their product listings, including descriptions, pricing, and availability.</p>

@@ -66,47 +66,7 @@ export default function HomePage() {
 
 
 
-  const HOW_IT_WORKS = [
-    {
-      icon: <Camera size={32} />,
-      title: lang === "ar" ? "ارفع صورتك" : "Upload Your Photo",
-      desc:
-        lang === "ar"
-          ? "التقط صورة واضحة لنفسك في إضاءة جيدة."
-          : "Take a clear photo of yourself in good lighting.",
-    },
-    {
-      icon: <Shirt size={32} />,
-      title: lang === "ar" ? "اختر التصميم" : "Pick Your Style",
-      desc:
-        lang === "ar"
-          ? "تصفح آلاف القطع من أفضل المصممين."
-          : "Browse thousands of pieces from top designers.",
-    },
-    {
-      icon: <Sparkles size={32} />,
-      title: lang === "ar" ? "جرب افتراضياً" : "Virtual Try-On",
-      desc:
-        lang === "ar"
-          ? "شاهد كيف يبدو الزي عليك بدقة مذهلة."
-          : "See exactly how it looks on you with AI precision.",
-    },
-    {
-      icon: <ArrowRight size={32} />,
-      title: lang === "ar" ? "تسوق بثقة" : "Shop Confidently",
-      desc:
-        lang === "ar"
-          ? "اشترِ ما يناسبك تماماً في المرة الأولى."
-          : "Buy what fits you perfectly the first time.",
-    },
-  ];
 
-  const BADGE_COLORS = {
-    [t("badge.new")]: "#16a34a",
-    [t("badge.bestseller")]: "#d4af7a",
-    [t("badge.ainai")]: "#8b4852",
-    [t("badge.limited")]: "#7c3aed",
-  };
 
   return (
     <div className={styles.page}>
@@ -301,7 +261,7 @@ export default function HomePage() {
         <span>LUXURY</span>
         <span>ELEGANCE</span>
         <span>BOUTIQUE</span>
-        <span>VIRTUAL</span>
+        <span>STYLE</span>
       </div>
 
       {/* ── FEATURED PRODUCTS GRID ── */}

@@ -47,7 +47,6 @@ const BLANK = {
   price: "",
   stock: 0,
   status: "Active",
-  vton: false,
   image: null,
   description: "",
   sizes: [],
@@ -263,30 +262,6 @@ function ProductModal({ product, onClose, onSave }) {
               </div>
             </div>
 
-            {/* VTON toggle */}
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                cursor: "pointer",
-              }}
-            >
-              <label className={p.toggle}>
-                <input
-                  type="checkbox"
-                  className={p.toggleInput}
-                  checked={form.vton}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, vton: e.target.checked }))
-                  }
-                />
-                <span className={p.toggleSlider} />
-              </label>
-              <span style={{ fontSize: 13.5, fontWeight: 500 }}>
-                Enable Virtual Try-On (VTON)
-              </span>
-            </label>
           </div>
 
           <div className={p.modalFoot}>
@@ -413,7 +388,6 @@ export default function VendorProductsPage() {
                 <th>Price</th>
                 <th>Stock</th>
                 <th>Status</th>
-                <th>VTON</th>
                 <th style={{ width: 100 }}>Actions</th>
               </tr>
             </thead>
@@ -470,15 +444,6 @@ export default function VendorProductsPage() {
                         <span className={p.badgeDot} />
                         {pr.status}
                       </span>
-                    </td>
-                    <td>
-                      {pr.vton ? (
-                        <span className={p.vtonOn}>
-                          <Eye size={13} /> On
-                        </span>
-                      ) : (
-                        <span className={p.vtonOff}>Off</span>
-                      )}
                     </td>
                     <td>
                       <div className={p.actions}>

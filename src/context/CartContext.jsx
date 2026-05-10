@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import apiClient from '../utils/apiClient';
 
 const CartContext = createContext(null);
@@ -27,8 +27,16 @@ export const CartProvider = ({ children }) => {
     }
   }, []);
 
+  const value = useMemo(() => ({ 
+    cartCount, 
+    cartData, 
+    setCartCount, 
+    setCartData, 
+    refreshCartCount 
+  }), [cartCount, cartData, refreshCartCount]);
+
   return (
-    <CartContext.Provider value={{ cartCount, cartData, setCartCount, setCartData, refreshCartCount }}>
+    <CartContext.Provider value={value}>
       {children}
     </CartContext.Provider>
   );

@@ -147,6 +147,7 @@ export default function WardrobePage() {
           category: item.category || "all",
           color: "#e2e8f0",
           url: item.imageUrl,
+          loading: "lazy",
           _raw: item,
         })),
       );
@@ -580,6 +581,7 @@ export default function WardrobePage() {
                         src={item.url}
                         alt={item.name}
                         className={styles.cardImage}
+                        loading="lazy"
                       />
                       <span className={styles.cardCatBadge}>
                         {allCategories.find((c) => c.id === item.category)
@@ -600,13 +602,6 @@ export default function WardrobePage() {
                         >
                           <Trash2 size={14} />
                         </button>
-                        <Link
-                          className={`${styles.overlayBtn} ${styles.overlayBtnTryOn}`}
-                          title="Try on"
-                          to="/ai-try-on"
-                        >
-                          <Eye size={14} />
-                        </Link>
                       </div>
                     </div>
                     <div className={styles.cardInfo}>
@@ -765,13 +760,6 @@ export default function WardrobePage() {
                   </button>
                 </div>
 
-                <div className={styles.tryOnBanner}>
-                  <Sparkles size={16} />
-                  <span>Ready to see how it looks?</span>
-                  <Link to="/ai-try-on" className={styles.tryOnLink}>
-                    Virtual Try-On <ChevronRight size={14} />
-                  </Link>
-                </div>
               </div>
             </div>
           </div>
@@ -877,13 +865,6 @@ export default function WardrobePage() {
                           >
                             <Edit3 size={14} /> Rename
                           </button>
-                          <Link
-                            to="/ai-try-on"
-                            className={styles.outfitTryOnBtn}
-                            title="Try on"
-                          >
-                            <Eye size={14} /> Try On
-                          </Link>
                           <button
                             className={`${styles.outfitActionBtn} ${styles.outfitDeleteBtn}`}
                             onClick={() => deleteOutfit(outfit.id)}
