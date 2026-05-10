@@ -76,6 +76,7 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
       firstName: payload?.firstName,
       lastName: payload?.lastName,
       brandName: payload?.brandName,
+      vendorId: payload?.vendorId,
       isSubscribedToNewsletter: payload?.isSubscribedToNewsletter ?? false,
     };
 

@@ -26,6 +26,7 @@ export default function Footer() {
   const [isHoveringToggle, setIsHoveringToggle] = useState(false);
 
   const isSubscribed = Boolean(user?.isSubscribedToNewsletter);
+  const showNewsletter = !isAuthenticated || (isAuthenticated && String(user?.role).toLowerCase() === "customer");
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -89,42 +90,44 @@ export default function Footer() {
   return (
     <footer className={styles.footer}>
       {/* Newsletter strip */}
-      <div className={styles.newsletter}>
-        <div className={styles.newsletterInner}>
-          <div>
-            <h3 className={styles.newsletterTitle}>{t("footer.newsletter_title")}</h3>
-            <p className={styles.newsletterSub}>
-              {isSubscribed 
-                ? "You're all set! You'll receive our latest updates." 
-                : "Join our community for exclusive drops and fashion tips."}
-            </p>
-          </div>
-          <div className={styles.newsletterAction}>
-            <button 
-              className={`${styles.toggleBtn} ${isSubscribed ? styles.subscribed : ""}`}
-              onClick={handleNewsletterToggle}
-              disabled={submitting}
-              onMouseEnter={() => setIsHoveringToggle(true)}
-              onMouseLeave={() => setIsHoveringToggle(false)}
-            >
-              {submitting ? (
-                <Loader2 size={18} className="spin" />
-              ) : isSubscribed ? (
-                <>
-                  <BellOff size={18} />
-                  <span>Unsubscribe</span>
-                </>
-              ) : (
-                <>
-                  <Bell size={18} />
-                  <span>{isAuthenticated ? "Subscribe" : "Login to Subscribe"}</span>
-                </>
-              )}
-            </button>
-            {message && <span className={styles.newsletterStatus}>{message}</span>}
+      {showNewsletter && (
+        <div className={styles.newsletter}>
+          <div className={styles.newsletterInner}>
+            <div>
+              <h3 className={styles.newsletterTitle}>{t("footer.newsletter_title")}</h3>
+              <p className={styles.newsletterSub}>
+                {isSubscribed 
+                  ? "You're all set! You'll receive our latest updates." 
+                  : "Join our community for exclusive drops and fashion tips."}
+              </p>
+            </div>
+            <div className={styles.newsletterAction}>
+              <button 
+                className={`${styles.toggleBtn} ${isSubscribed ? styles.subscribed : ""}`}
+                onClick={handleNewsletterToggle}
+                disabled={submitting}
+                onMouseEnter={() => setIsHoveringToggle(true)}
+                onMouseLeave={() => setIsHoveringToggle(false)}
+              >
+                {submitting ? (
+                  <Loader2 size={18} className="spin" />
+                ) : isSubscribed ? (
+                  <>
+                    <BellOff size={18} />
+                    <span>Unsubscribe</span>
+                  </>
+                ) : (
+                  <>
+                    <Bell size={18} />
+                    <span>{isAuthenticated ? "Subscribe" : "Login to Subscribe"}</span>
+                  </>
+                )}
+              </button>
+              {message && <span className={styles.newsletterStatus}>{message}</span>}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Main footer */}
       <div className={styles.main}>
@@ -162,7 +165,6 @@ export default function Footer() {
           >
             Contact Us
           </button>
-          <Link to="/returns" className={styles.colLink}>{t("footer.returns")}</Link>
           <button
             type="button"
             className={styles.footerLinkButton}

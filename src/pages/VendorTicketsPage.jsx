@@ -15,6 +15,7 @@ import {
   Clock,
   User,
   Search,
+  CheckCircle2,
 } from "lucide-react";
 import VendorLayout from "../components/vendor/VendorLayout";
 import p from "../styles/VendorPage.module.css";
@@ -192,6 +193,17 @@ export default function VendorTicketsPage() {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
   const [cancelingId, setCancelingId] = useState(null); // id of ticket to confirm cancel
+  const [fullscreenImage, setFullscreenImage] = useState(null);
+  const [toasts, setToasts] = useState([]);
+
+  const addToast = (text, type = "success") => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, text, type }]);
+    setTimeout(
+      () => setToasts((prev) => prev.filter((t) => t.id !== id)),
+      3500,
+    );
+  };
 
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
@@ -365,12 +377,15 @@ export default function VendorTicketsPage() {
     try {
       await apiClient.patch(`/vendors/support/tickets/${id}/cancel`);
       const updatedRes = await apiClient.get(`/vendors/support/tickets/${id}`);
-      setSelected(mapTicket(updatedRes.data));
+      const updatedTk = mapTicket(updatedRes.data);
+      setSelected(updatedTk);
       setTickets((prev) =>
-        prev.map((t) => (t.id === id ? mapTicket(updatedRes.data) : t)),
+        prev.map((t) => (t.id === id ? updatedTk : t)),
       );
+      addToast("Ticket canceled successfully.");
     } catch (err) {
       console.error("Failed to cancel ticket", err);
+      addToast("Failed to cancel ticket.", "error");
     } finally {
       setCancelingId(null);
     }
@@ -388,6 +403,106 @@ export default function VendorTicketsPage() {
       pageSubtitle="Get help from our technical and business support teams."
       breadcrumb="Support"
     >
+      {/* Toasts */}
+      <div
+        style={{
+          position: "fixed",
+          top: 30,
+          right: 30,
+          zIndex: 9999,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            style={{
+              background: toast.type === "error" ? "#fee2e2" : "#dcfce7",
+              border: `1px solid ${toast.type === "error" ? "#fca5a5" : "#86efac"}`,
+              color: toast.type === "error" ? "#dc2626" : "#15803d",
+              padding: "14px 20px",
+              borderRadius: 12,
+              fontSize: 14,
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
+              animation: "vdr-toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            {toast.type === "error" ? (
+              <AlertTriangle size={18} />
+            ) : (
+              <CheckCircle2 size={18} />
+            )}{" "}
+            {toast.text}
+          </div>
+        ))}
+      </div>
+
+      {/* Fullscreen Image Modal */}
+      {fullscreenImage && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.9)",
+            zIndex: 10000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "zoom-out",
+            padding: 40,
+            animation: "vdr-fade-in 0.2s ease",
+          }}
+          onClick={() => setFullscreenImage(null)}
+        >
+          <button
+            style={{
+              position: "absolute",
+              top: 30,
+              right: 30,
+              background: "rgba(255,255,255,0.1)",
+              border: "none",
+              color: "white",
+              padding: 12,
+              borderRadius: "50%",
+              cursor: "pointer",
+              display: "flex",
+              backdropFilter: "blur(10px)",
+            }}
+            onClick={() => setFullscreenImage(null)}
+          >
+            <X size={24} />
+          </button>
+          <img
+            src={fullscreenImage}
+            alt="Fullscreen Preview"
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              objectFit: "contain",
+              borderRadius: 8,
+              boxShadow: "0 20px 80px rgba(0,0,0,0.5)",
+              animation: "vdr-zoom-in 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      <style>{`
+        @keyframes vdr-toast-in {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes vdr-fade-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes vdr-zoom-in { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+      `}</style>
+
       <div
         className={p.settingsPanel}
         style={{ padding: 0, overflow: "hidden", minHeight: 600 }}
@@ -741,19 +856,18 @@ export default function VendorTicketsPage() {
                         <div className={p.ticketAttachmentList}>
                           {msg.attachments.map((att) =>
                             att.isImage ? (
-                              <a
+                              <div
                                 key={att.url}
-                                href={att.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
                                 className={p.ticketAttachmentImageLink}
+                                onClick={() => setFullscreenImage(att.url)}
+                                style={{ cursor: "zoom-in" }}
                               >
                                 <img
                                   src={att.url}
                                   alt={att.name}
                                   className={p.ticketAttachmentImage}
                                 />
-                              </a>
+                              </div>
                             ) : (
                               <a
                                 key={att.url}
@@ -767,7 +881,7 @@ export default function VendorTicketsPage() {
                                   {att.name}
                                 </span>
                               </a>
-                            ),
+                            )
                           )}
                         </div>
                       )}

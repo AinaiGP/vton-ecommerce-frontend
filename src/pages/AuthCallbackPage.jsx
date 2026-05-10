@@ -51,6 +51,7 @@ export default function AuthCallbackPage() {
       firstName: payload?.firstName,
       lastName: payload?.lastName,
       brandName: payload?.brandName,
+      vendorId: payload?.vendorId,
     };
 
     if (!user.id || !user.email || !user.role) {

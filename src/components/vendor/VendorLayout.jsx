@@ -71,7 +71,7 @@ function Sidebar({ collapsed, onToggle, mobileOpen, onClose }) {
         {
           icon: ExternalLink,
           label: "My Storefront",
-          to: `/vendors/storefront/${user?.id}`,
+          to: `/vendors/storefront/${user?.vendorId || user?.id}`,
         },
         {
           icon: Headphones,
@@ -355,7 +355,7 @@ function Header({ onMenuToggle, dark, onDarkToggle }) {
                 </li>
                 <li>
                   <Link
-                    to="/"
+                    to={`/vendors/storefront/${user?.vendorId || user?.id}`}
                     className={s.profileMenuItem}
                     onClick={() => setProfileOpen(false)}
                   >
@@ -414,6 +414,22 @@ export default function VendorLayout({
     if (window.innerWidth <= 1024) setMobileOpen((v) => !v);
     else setCollapsed((v) => !v);
   };
+  const { user, updateUser } = useAuth();
+
+  useEffect(() => {
+    if (user && !user.vendorId && user.role === "VENDOR") {
+      apiClient
+        .get("/vendors/profile")
+        .then((res) => {
+          if (res.data?.id) {
+            updateUser({ vendorId: res.data.id });
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to fetch vendorId", err);
+        });
+    }
+  }, [user, updateUser]);
 
   return (
     <div className={s.shell}>

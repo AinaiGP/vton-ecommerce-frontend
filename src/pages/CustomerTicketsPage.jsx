@@ -139,25 +139,24 @@ function StatusBadge({ status }) {
     </span>
   );
 }
-function AttachmentList({ attachments }) {
+function AttachmentList({ attachments, onImageClick }) {
   if (!attachments?.length) return null;
   return (
     <div className={styles.attachmentList}>
       {attachments.map((att) =>
         att.isImage ? (
-          <a
+          <div
             key={att.url}
-            href={att.url}
-            target="_blank"
-            rel="noreferrer"
             className={styles.attachmentImageLink}
+            onClick={() => onImageClick(att.url)}
+            style={{ cursor: "zoom-in" }}
           >
             <img
               src={att.url}
               alt={att.name}
               className={styles.attachmentImage}
             />
-          </a>
+          </div>
         ) : (
           <a
             key={att.url}
@@ -441,7 +440,7 @@ function CreateModal({ onClose, onSubmit }) {
 }
 
 /* ─── Ticket Detail (Chat) ─── */
-function TicketDetail({ ticket, onBack, onReply, onCancel }) {
+function TicketDetail({ ticket, onBack, onReply, onCancel, onImageClick }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const [sending, setSending] = useState(false);
@@ -543,7 +542,7 @@ function TicketDetail({ ticket, onBack, onReply, onCancel }) {
                 className={`${styles.bubble} ${isMe ? styles.bubbleCustomer : styles.bubbleSupport}`}
               >
                 <p className={styles.bubbleText}>{msg.text}</p>
-                <AttachmentList attachments={msg.attachments} />
+                <AttachmentList attachments={msg.attachments} onImageClick={onImageClick} />
                 <span className={styles.bubbleTime}>{msg.time}</span>
               </div>
               {isMe && (
@@ -640,6 +639,7 @@ export default function CustomerTicketsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [sortDir, setSortDir] = useState("desc");
+  const [fullscreenImage, setFullscreenImage] = useState(null);
 
   const [toasts, setToasts] = useState([]);
   const addToast = (text, type = "success") => {
@@ -849,6 +849,59 @@ export default function CustomerTicketsPage() {
     return (
       <div style={{ minHeight: "100vh", background: "var(--ivory)" }}>
         <Header />
+        {/* Fullscreen Image Modal */}
+        {fullscreenImage && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.9)",
+              zIndex: 10000,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "zoom-out",
+              padding: 40,
+              animation: "fadeIn 0.2s ease",
+            }}
+            onClick={() => setFullscreenImage(null)}
+          >
+            <button
+              style={{
+                position: "absolute",
+                top: 30,
+                right: 30,
+                background: "rgba(255,255,255,0.1)",
+                border: "none",
+                color: "white",
+                padding: 12,
+                borderRadius: "50%",
+                cursor: "pointer",
+                display: "flex",
+                backdropFilter: "blur(10px)",
+              }}
+              onClick={() => setFullscreenImage(null)}
+            >
+              <X size={24} />
+            </button>
+            <img
+              src={fullscreenImage}
+              alt="Fullscreen Preview"
+              style={{
+                maxWidth: "100%",
+                maxHeight: "100%",
+                objectFit: "contain",
+                borderRadius: 8,
+                boxShadow: "0 20px 80px rgba(0,0,0,0.5)",
+                animation: "zoomIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <style>{`
+              @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+            `}</style>
+          </div>
+        )}
         {/* Toasts */}
         <div
           style={{
@@ -894,6 +947,7 @@ export default function CustomerTicketsPage() {
             onBack={() => setView("list")}
             onReply={handleReply}
             onCancel={handleCancel}
+            onImageClick={setFullscreenImage}
           />
         </div>
         <Footer />
