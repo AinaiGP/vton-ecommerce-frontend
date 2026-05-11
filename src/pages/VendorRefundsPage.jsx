@@ -60,21 +60,20 @@ function extractLegacyAttachment(content) {
   return { text: cleaned || "Attachment", urls: [match[1]] };
 }
 
-function mapReturnTicket(ticket) {
-  return {
-    id: ticket.id,
-    orderNumber: ticket.order?.orderNumber || "—",
-    customer: ticket.order?.user?.fullName || "Verified Customer",
-    product: ticket.product?.name || "Product",
-    variant: ticket.variant?.sku || "",
-    reason: ticket.reason || "No reason provided",
-    description: ticket.description || "",
-    status: ticket.returnStatus,
-    date: new Date(ticket.createdAt).toLocaleDateString(),
-    amount: formatPrice(ticket.refundAmount || 0),
-    _raw: ticket,
-  };
-}
+const mapReturnTicket = (item) => ({
+  id: item.ticket?.id || item.id, // Support messaging needs ticketId
+  ticketId: item.ticket?.id,
+  orderItemId: item.id,
+  orderNumber: item.order?.orderNumber || "...",
+  customer: item.order?.shippingName || "Customer",
+  product: item.productName || "Product",
+  reason: item.returnReason || item.ticket?.returnReason || "No reason provided",
+  status: item.returnStatus || item.ticket?.returnStatus || "pending",
+  date: item.returnRequestedAt || item.ticket?.createdAt || item.createdAt,
+  messages: item.ticket?.messages || [],
+  amount: (item.lineTotal / 100),
+  quantity: item.quantity,
+});
 
 function AttachmentList({ attachments, onImageClick }) {
   if (!attachments?.length) return null;

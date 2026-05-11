@@ -64,14 +64,14 @@ export default function VendorAnalyticsPage() {
     try {
       const [statsRes, prodRes] = await Promise.all([
         apiClient.get("/vendors/orders/stats"),
-        apiClient.get("/products/my/products", { params: { limit: 10 } })
+        apiClient.get("/products/my/products", { params: { limit: 20 } })
       ]);
       setStats(statsRes.data);
-      // We'll simulate some engagement metrics for now since they aren't in DB
+      // Using popularityScore as real Views and totalSold as real Purchases
       setProducts((prodRes.data?.data || []).map(p => ({
         ...p,
-        views: Math.floor(Math.random() * 1000) + 100,
-        purchases: Math.floor(Math.random() * 50) + 5, // Mocked for UI demo
+        views: p.popularityScore || 0,
+        purchases: p.totalSold || 0,
       })));
     } catch (err) {
       console.error("Failed to fetch analytics", err);

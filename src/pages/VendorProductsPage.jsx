@@ -13,8 +13,10 @@ import {
   PlusCircle,
   MinusCircle,
   ImagePlus,
+  Info,
 } from "lucide-react";
 import VendorLayout from "../components/vendor/VendorLayout";
+import ProductImageManager from "../components/vendor/ProductImageManager";
 import p from "../styles/VendorPage.module.css";
 import apiClient, { multipartClient } from "../utils/apiClient";
 import { formatPrice } from "../utils/formatPrice";
@@ -35,13 +37,14 @@ const BLANK = {
   categoryId: "",
   gender: "UNISEX",
   status: "draft",
+  mainImage: null,
   variants: [
-    { colorId: "", sizeId: "", physicalQuantity: 10, sku: "", priceOverride: "" }
+    { colorId: "", sizeId: "", physicalQuantity: 10, sku: "", priceOverride: "", image: null }
   ],
   _new: true,
 };
 
-function ProductModal({ product, options, onClose, onSave }) {
+function ProductModal({ product, options, onClose, onSave, onManageImages, onPublish, onArchive }) {
   const [form, setForm] = useState({ ...product });
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,7 +57,7 @@ function ProductModal({ product, options, onClose, onSave }) {
   const addVariant = () => {
     setForm({
       ...form,
-      variants: [...form.variants, { colorId: "", sizeId: "", physicalQuantity: 10, sku: "", priceOverride: "" }]
+      variants: [...form.variants, { colorId: "", sizeId: "", physicalQuantity: 10, sku: "", priceOverride: "", image: null }]
     });
   };
 
@@ -67,18 +70,63 @@ function ProductModal({ product, options, onClose, onSave }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      // Convert EGP strings to piasters
-      const payload = {
-        ...form,
-        basePrice: Math.round(parseFloat(form.basePrice) * 100),
-        variants: form.variants.map(v => ({
-          ...v,
+      if (form._new) {
+        const formData = new FormData();
+        formData.append("name", form.name);
+        formData.append("description", form.description || "");
+        formData.append("basePrice", Math.round(parseFloat(form.basePrice || "0") * 100));
+        if (form.categoryId) formData.append("categoryId", form.categoryId);
+        if (form.gender) formData.append("gender", form.gender);
+
+        const variants = form.variants.map(v => ({
+          colorId: v.colorId || undefined,
+          sizeId: v.sizeId || undefined,
           physicalQuantity: parseInt(v.physicalQuantity) || 0,
-          priceOverride: v.priceOverride ? Math.round(parseFloat(v.priceOverride) * 100) : null
-        }))
-      };
-      delete payload._new;
-      await onSave(payload);
+          priceOverride: v.priceOverride ? Math.round(parseFloat(v.priceOverride) * 100) : null,
+          status: v.status || "active"
+        }));
+        formData.append("variants", JSON.stringify(variants));
+
+        // Images handling
+        const images = [];
+        const variantImageMappings = {};
+
+        if (form.mainImage) {
+          images.push(form.mainImage);
+          formData.append("primaryImageIndex", "0");
+        }
+
+        form.variants.forEach((v, idx) => {
+          if (v.image) {
+            const imgIdx = images.length;
+            images.push(v.image);
+            variantImageMappings[idx] = imgIdx;
+          }
+        });
+
+        images.forEach(img => formData.append("images", img));
+        formData.append("variantImageMappings", JSON.stringify(variantImageMappings));
+
+        await onSave(formData);
+      } else {
+        // Edit flow (JSON) - Clean payload to avoid non-whitelisted field errors
+        const payload = {
+          name: form.name,
+          description: form.description,
+          basePrice: Math.round(parseFloat(form.basePrice || "0") * 100),
+          categoryId: form.categoryId || undefined,
+          gender: form.gender || undefined,
+          variants: form.variants.map(v => ({
+            id: v.id,
+            colorId: v.colorId || undefined,
+            sizeId: v.sizeId || undefined,
+            physicalQuantity: parseInt(v.physicalQuantity) || 0,
+            priceOverride: v.priceOverride ? Math.round(parseFloat(v.priceOverride) * 100) : null,
+            status: v.status || "active"
+          }))
+        };
+        await onSave(payload);
+      }
     } catch (err) {
       console.error("Save failed", err);
     } finally {
@@ -165,6 +213,34 @@ function ProductModal({ product, options, onClose, onSave }) {
               </div>
             </div>
 
+            {/* Images */}
+            <div className={p.formGroup} style={{ marginTop: 20 }}>
+              <label className={p.label}>Product Images</label>
+              <div style={{ padding: "12px", background: "#f8fafc", borderRadius: 10, border: "1px dashed #cbd5e1" }}>
+                {!form._new ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Media Manager</p>
+                      <p style={{ margin: 0, fontSize: 12, color: "var(--vdr-text-muted)" }}>Manage product gallery and color-specific images.</p>
+                    </div>
+                    <button type="button" className={p.btn} onClick={() => onManageImages(form)}>
+                      <ImagePlus size={14} /> Manage Images
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Main Product Image *</p>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => setForm({ ...form, mainImage: e.target.files[0] })}
+                    />
+                    <p style={{ margin: 0, fontSize: 12, color: "var(--vdr-text-muted)" }}>This will be the primary image for the product listing.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Variants */}
             <div className={p.formGroup} style={{ marginTop: 20 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -181,6 +257,9 @@ function ProductModal({ product, options, onClose, onSave }) {
                       <th>Size</th>
                       <th>Stock</th>
                       <th>Price Override</th>
+                      {form._new && <th>Image</th>}
+                      {!form._new && <th>Sold</th>}
+                      <th>Status</th>
                       <th style={{ width: 40 }}></th>
                     </tr>
                   </thead>
@@ -196,7 +275,7 @@ function ProductModal({ product, options, onClose, onSave }) {
                         <td>
                           <select className={p.select} value={v.sizeId} onChange={e => updateVariant(idx, "sizeId", e.target.value)} required>
                             <option value="">Size</option>
-                            {options.sizes.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                            {options.sizes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                           </select>
                         </td>
                         <td>
@@ -205,10 +284,30 @@ function ProductModal({ product, options, onClose, onSave }) {
                         <td>
                           <input className={p.input} type="number" step="0.01" placeholder="Optional" value={v.priceOverride} onChange={e => updateVariant(idx, "priceOverride", e.target.value)} />
                         </td>
+                        {form._new && (
+                          <td>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              style={{ width: 120, fontSize: 11 }}
+                              onChange={(e) => updateVariant(idx, "image", e.target.files[0])}
+                            />
+                          </td>
+                        )}
+                        {!form._new && <td style={{ textAlign: "center", fontWeight: 700 }}>{v.totalSold || 0}</td>}
                         <td>
-                          <button type="button" style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer" }} onClick={() => removeVariant(idx)}>
-                            <Trash2 size={16} />
-                          </button>
+                          <select className={p.select} value={v.status || "active"} onChange={e => updateVariant(idx, "status", e.target.value)}>
+                            <option value="active">Active</option>
+                            <option value="draft">Draft</option>
+                            <option value="archived">Archived</option>
+                          </select>
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button type="button" style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer" }} onClick={() => removeVariant(idx)}>
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -219,9 +318,35 @@ function ProductModal({ product, options, onClose, onSave }) {
           </div>
 
           <div className={p.modalFoot}>
-            <button type="button" className={`${p.btn} ${p.btnOutline}`} onClick={onClose} disabled={submitting}>Cancel</button>
+            <button type="button" className={p.btn} onClick={onClose} disabled={submitting}>Cancel</button>
+            
+            {!form._new && (
+              <>
+                {form.status !== "archived" && (
+                  <button 
+                    type="button" 
+                    className={`${p.btn} ${p.btnDanger}`} 
+                    onClick={() => onArchive(form.id)}
+                    disabled={submitting}
+                  >
+                    Archive Product
+                  </button>
+                )}
+                {form.status !== "active" && (
+                  <button 
+                    type="button" 
+                    className={`${p.btn} ${p.btnPrimary}`} 
+                    onClick={() => onPublish(form.id)}
+                    disabled={submitting}
+                  >
+                    Publish to Store
+                  </button>
+                )}
+              </>
+            )}
+
             <button type="submit" className={`${p.btn} ${p.btnPrimary}`} disabled={submitting}>
-              {submitting ? "Saving..." : (form._new ? "Add Product" : "Save Changes")}
+              {submitting ? "Saving..." : (form._new ? "Create Product" : "Save Changes")}
             </button>
           </div>
         </form>
@@ -240,6 +365,7 @@ export default function VendorProductsPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [editProduct, setEditProduct] = useState(null);
+  const [imgManager, setImgManager] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
@@ -285,20 +411,89 @@ export default function VendorProductsPage() {
     }
   };
 
-  const saveProduct = async (form) => {
+  const saveProduct = async (data) => {
     try {
-      if (form.id) {
-        await apiClient.patch(`/products/${form.id}`, form);
-        // Also update variants if needed, or backend handles it.
-        // For simplicity assuming backend handles full update or separate calls if needed.
+      if (data instanceof FormData) {
+        await multipartClient.post("/products", data);
+      } else if (data.id) {
+        // ID is usually stripped from payload in handleSubmit, but data here might still have it if passed directly
+        const { id, ...payload } = data;
+        await apiClient.patch(`/products/${data.id}`, payload);
       } else {
-        await apiClient.post("/products", form);
+        await apiClient.post("/products", data);
       }
       fetchProducts();
       setEditProduct(null);
     } catch (err) {
       console.error("Failed to save", err);
       alert("Failed to save product. Check console.");
+    }
+  };
+
+  const publishProduct = async (id) => {
+    try {
+      await apiClient.patch(`/products/${id}/publish`);
+      fetchProducts();
+      setEditProduct(null);
+    } catch (err) {
+      console.error("Failed to publish", err);
+      alert(err.response?.data?.message || "Failed to publish product.");
+    }
+  };
+
+  const archiveProduct = async (id) => {
+    if (!window.confirm("Are you sure you want to archive this product? It will be hidden from the catalog.")) return;
+    try {
+      await apiClient.patch(`/products/${id}/archive`);
+      fetchProducts();
+      setEditProduct(null);
+    } catch (err) {
+      console.error("Failed to archive", err);
+      alert("Failed to archive product.");
+    }
+  };
+
+  const saveProductImages = async (updatedImages, productId, originalImages, variants) => {
+    try {
+      setImgManager(null);
+      setLoading(true);
+
+      const originalIds = (originalImages || []).map(img => img.id);
+      const updatedIds = updatedImages.filter(img => !img.file).map(img => img.id);
+      const deletedIds = originalIds.filter(id => !updatedIds.includes(id));
+
+      for (const imageId of deletedIds) {
+        await apiClient.delete(`/products/${productId}/images/${imageId}`);
+      }
+
+      const newImages = updatedImages.filter(img => img.file);
+      for (const img of newImages) {
+        const formData = new FormData();
+        formData.append("images", img.file);
+        
+        if (img.colorId) {
+          const variant = variants.find(v => (v.colorId || v.color?.id) === img.colorId);
+          if (variant) {
+            await multipartClient.post(`/products/${productId}/variants/${variant.id}/images`, formData);
+          }
+        } else {
+          await multipartClient.post(`/products/${productId}/images`, formData);
+        }
+      }
+
+      const newPrimary = updatedImages.find(img => img.isPrimary);
+      const oldPrimary = (originalImages || []).find(img => img.isPrimary);
+      
+      if (newPrimary && newPrimary.id !== oldPrimary?.id && !newPrimary.file) {
+        await apiClient.patch(`/products/${productId}/images/${newPrimary.id}/primary`);
+      }
+
+      fetchProducts();
+    } catch (err) {
+      console.error("Failed to sync images", err);
+      alert(err.response?.data?.message || "Failed to update images.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -372,16 +567,18 @@ export default function VendorProductsPage() {
                 <th>Category</th>
                 <th>Base Price</th>
                 <th>Stock</th>
+                <th>Sold</th>
+                <th>Views</th>
                 <th>Status</th>
                 <th style={{ width: 100 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="6" className={p.skeleton} style={{ height: 100 }}></td></tr>
+                <tr><td colSpan="8" className={p.skeleton} style={{ height: 100 }}></td></tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan="6">
+                  <td colSpan="8">
                     <div className={p.emptyState}>
                       <div className={p.emptyIcon}><Package size={22} /></div>
                       <h3 className={p.emptyTitle}>No products found</h3>
@@ -402,6 +599,8 @@ export default function VendorProductsPage() {
                     <td><span className={`${p.badge} ${p.badgeDraft}`}>{pr.category?.name}</span></td>
                     <td style={{ fontWeight: 700 }}>{formatPrice(pr.basePrice)}</td>
                     <td>{pr.variants?.reduce((s, v) => s + v.physicalQuantity, 0) || 0}</td>
+                    <td style={{ fontWeight: 600, color: "var(--vdr-accent)" }}>{pr.totalSold || 0}</td>
+                    <td>{pr.popularityScore || 0}</td>
                     <td>
                       <span className={`${p.badge} ${STATUS_BADGE[pr.status] || p.badgeDraft}`}>
                         <span className={p.badgeDot} />
@@ -444,6 +643,9 @@ export default function VendorProductsPage() {
           options={options}
           onClose={() => setEditProduct(null)}
           onSave={saveProduct}
+          onManageImages={(p) => setImgManager(p)}
+          onPublish={publishProduct}
+          onArchive={archiveProduct}
         />
       )}
 
@@ -461,6 +663,14 @@ export default function VendorProductsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {imgManager && (
+        <ProductImageManager
+          product={imgManager}
+          onClose={() => setImgManager(null)}
+          onSave={(updatedImages) => saveProductImages(updatedImages, imgManager.id, imgManager.images, imgManager.variants)}
+        />
       )}
     </VendorLayout>
   );

@@ -48,8 +48,8 @@ export default function VendorReviewsPage() {
   const fetchReviews = async (productId) => {
     setLoading(true);
     try {
-      const res = await apiClient.get(`/vendors/ratings/product/${productId}`);
-      setReviews(res.data || []);
+      const res = await apiClient.get(`/products/${productId}/reviews`);
+      setReviews(res.data?.data || []);
     } catch (err) {
       console.error("Failed to fetch reviews", err);
     } finally {
@@ -57,7 +57,7 @@ export default function VendorReviewsPage() {
     }
   };
 
-  const totalRating = reviews.length > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
+  const totalRating = reviews.length > 0 ? reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length : 0;
 
   const filtered = reviews.filter(r => {
     if (filter === "5★") return r.rating === 5;
@@ -65,19 +65,6 @@ export default function VendorReviewsPage() {
     if (filter === "3★ & below") return r.rating <= 3;
     return true;
   });
-
-  const sendReply = async (e) => {
-    e.preventDefault();
-    if (!replyText.trim() || !replyTarget) return;
-    try {
-      await apiClient.patch(`/vendors/ratings/${replyTarget.id}/reply`, { reply: replyText.trim() });
-      fetchReviews(selectedProduct.id);
-      setReplyTarget(null);
-      setReplyText("");
-    } catch (err) {
-      console.error("Failed to reply", err);
-    }
-  };
 
   const dist = [5,4,3,2,1].map(r => ({ stars: r, count: reviews.filter(v => v.rating === r).length }));
 
@@ -176,16 +163,6 @@ export default function VendorReviewsPage() {
                         <StarRow rating={r.rating} />
                       </div>
                       <p className={p.reviewComment}>{r.comment}</p>
-                      {r.reply ? (
-                        <div className={p.reviewReply}>
-                          <span className={p.reviewReplyLabel}>Your Reply</span>
-                          <p className={p.reviewReplyText}>{r.reply}</p>
-                        </div>
-                      ) : (
-                        <button className={`${p.btn} ${p.btnOutline} ${p.btnSm}`} onClick={() => { setReplyTarget(r); setReplyText(""); }}>
-                          <MessageSquare size={13} /> Reply to Review
-                        </button>
-                      )}
                     </div>
                   ))
                 )}
@@ -194,36 +171,6 @@ export default function VendorReviewsPage() {
           )}
         </main>
       </div>
-
-      {replyTarget && (
-        <div className={p.modalBackdrop} onClick={() => setReplyTarget(null)}>
-          <div className={p.modal} onClick={e => e.stopPropagation()}>
-            <div className={p.modalHead}>
-              <h2 className={p.modalTitle}>Reply to Review</h2>
-              <button className={p.modalClose} onClick={() => setReplyTarget(null)}><X size={17} /></button>
-            </div>
-            <div className={p.modalBody}>
-              <div className={p.reviewCard} style={{ background: "var(--vdr-bg)", border: "none" }}>
-                <div className={p.reviewHeader}>
-                  <div className={p.avatar}>{replyTarget.user?.fullName?.[0]}</div>
-                  <div className={p.reviewMeta}><span className={p.reviewName}>{replyTarget.user?.fullName}</span><StarRow rating={replyTarget.rating} /></div>
-                </div>
-                <p className={p.reviewComment}>{replyTarget.comment}</p>
-              </div>
-              <form id="replyForm" onSubmit={sendReply}>
-                <div className={p.formGroup}>
-                  <label className={p.label}>Your Response</label>
-                  <textarea className={p.textarea} rows={4} placeholder="Type your response here..." value={replyText} onChange={e => setReplyText(e.target.value)} required />
-                </div>
-              </form>
-            </div>
-            <div className={p.modalFoot}>
-              <button className={`${p.btn} ${p.btnOutline}`} onClick={() => setReplyTarget(null)}>Cancel</button>
-              <button type="submit" form="replyForm" className={`${p.btn} ${p.btnPrimary}`}><Check size={14} /> Submit Reply</button>
-            </div>
-          </div>
-        </div>
-      )}
     </VendorLayout>
   );
 }

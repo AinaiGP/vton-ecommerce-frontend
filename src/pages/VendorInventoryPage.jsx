@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, Fragment } from "react";
 import {
   Search,
   Plus,
@@ -20,7 +20,7 @@ import p from "../styles/VendorPage.module.css";
 import apiClient from "../utils/apiClient";
 import { formatPrice } from "../utils/formatPrice";
 
-const LOW_STOCK_THRESHOLD = 5;
+const LOW_STOCK_THRESHOLD = 10;
 
 function getStockStatus(qty, archived) {
   if (archived)
@@ -138,13 +138,16 @@ export default function VendorInventoryPage() {
   };
 
   const toggleVisibility = async (product) => {
-    const newStatus = product.status === "archived" ? "active" : "archived";
+    const isCurrentlyArchived = product.status === "archived";
+    const endpoint = isCurrentlyArchived ? `/products/${product.id}/publish` : `/products/${product.id}/archive`;
+    
     try {
-      await apiClient.patch(`/products/${product.id}/status`, { status: newStatus });
-      showToast(`Product ${newStatus === "archived" ? "archived" : "restored"}.`);
+      await apiClient.patch(endpoint);
+      showToast(`Product ${isCurrentlyArchived ? "restored" : "archived"} successfully.`);
       fetchInventory();
     } catch (err) {
-      showToast("Failed to update visibility", false);
+      const msg = err.response?.data?.message || "Failed to update visibility";
+      showToast(msg, false);
     }
   };
 
@@ -215,8 +218,8 @@ export default function VendorInventoryPage() {
                 <tr><td colSpan="6"><div className={p.emptyState}><Package size={22} /><h3 className={p.emptyTitle}>No products found</h3></div></td></tr>
               ) : (
                 filtered.map((product) => (
-                  <>
-                    <tr key={product.id} style={{ background: expanded.has(product.id) ? "#f8fafc" : "transparent" }}>
+                  <Fragment key={product.id}>
+                    <tr style={{ background: expanded.has(product.id) ? "#f8fafc" : "transparent" }}>
                       <td>
                         <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--vdr-text-muted)" }} onClick={() => toggleExpand(product.id)}>
                           {expanded.has(product.id) ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
@@ -230,7 +233,7 @@ export default function VendorInventoryPage() {
                           <span style={{ fontWeight: 700 }}>{product.name}</span>
                         </div>
                       </td>
-                      <td>{product.category?.name}</td>
+                      <td>{product.category?.name || "Uncategorized"}</td>
                       <td style={{ fontWeight: 700 }}>{product.totalStock}</td>
                       <td>
                         <span className={`${p.badge} ${product.status === "active" ? p.badgeDelivered : p.badgeCancelled}`}>
@@ -247,45 +250,55 @@ export default function VendorInventoryPage() {
                     {expanded.has(product.id) && (
                       <tr key={`${product.id}-variants`} style={{ background: "#f8fafc" }}>
                         <td colSpan="6" style={{ padding: "0 24px 24px 64px" }}>
-                          <div style={{ background: "white", borderRadius: 12, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                          <div style={{ background: "white", borderRadius: 12, border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)" }}>
                             <table className={p.table} style={{ margin: 0, fontSize: 13 }}>
                               <thead style={{ background: "#f1f5f9" }}>
                                 <tr>
-                                  <th>Color</th>
-                                  <th>Size</th>
-                                  <th>SKU</th>
-                                  <th style={{ width: 160 }}>Quantity</th>
-                                  <th>Status</th>
+                                  <th style={{ padding: "10px 16px" }}>Variant (Color / Size)</th>
+                                  <th style={{ padding: "10px 16px" }}>SKU</th>
+                                  <th style={{ width: 180, padding: "10px 16px" }}>Adjust Quantity</th>
+                                  <th style={{ padding: "10px 16px" }}>Status</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {product.variants.map(v => (
                                   <tr key={v.id}>
-                                    <td>{v.color?.name}</td>
-                                    <td>{v.size?.label}</td>
-                                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{v.sku}</td>
-                                    <td>
+                                    <td style={{ padding: "12px 16px" }}>
                                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                        <button className={p.actionBtn} onClick={() => adjustStock(v.id, "SUBTRACT")} disabled={v.availableQuantity === 0}>
+                                        {v.color?.hex && (
+                                          <div style={{ width: 12, height: 12, borderRadius: "50%", background: v.color.hex, border: "1px solid #e2e8f0" }} />
+                                        )}
+                                        <span style={{ fontWeight: 600 }}>{v.color?.name || "N/A"}</span>
+                                        <span style={{ color: "#94a3b8" }}>/</span>
+                                        <span>{v.size?.label || v.size?.name || "N/A"}</span>
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: "12px 16px", fontFamily: "monospace", fontSize: 12, color: "#64748b" }}>{v.sku || "—"}</td>
+                                    <td style={{ padding: "12px 16px" }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                        <button className={p.actionBtn} onClick={() => adjustStock(v.id, "SUBTRACT")} disabled={v.availableQuantity === 0} style={{ width: 28, height: 28 }}>
                                           <Minus size={12} />
                                         </button>
                                         <input
-                                          style={{ width: 50, textAlign: "center", border: "1px solid #e2e8f0", borderRadius: 6, padding: "4px" }}
+                                          type="number"
+                                          style={{ width: 60, textAlign: "center", border: "1px solid #e2e8f0", borderRadius: 6, padding: "4px 8px", fontWeight: 700 }}
                                           defaultValue={v.availableQuantity}
                                           onBlur={(e) => setManualStock(v.id, e.target.value)}
                                         />
-                                        <button className={`${p.actionBtn} ${p.edit}`} onClick={() => adjustStock(v.id, "ADD")}>
+                                        <button className={`${p.actionBtn} ${p.edit}`} onClick={() => adjustStock(v.id, "ADD")} style={{ width: 28, height: 28 }}>
                                           <Plus size={12} />
                                         </button>
                                       </div>
                                     </td>
-                                    <td>
+                                    <td style={{ padding: "12px 16px" }}>
                                       {v.availableQuantity <= LOW_STOCK_THRESHOLD ? (
-                                        <span style={{ color: v.availableQuantity === 0 ? "#ef4444" : "#f59e0b", display: "flex", alignItems: "center", gap: 4, fontWeight: 600 }}>
-                                          <AlertTriangle size={14} /> {v.availableQuantity === 0 ? "Out" : "Low"}
+                                        <span style={{ color: v.availableQuantity === 0 ? "#ef4444" : "#f59e0b", display: "flex", alignItems: "center", gap: 4, fontWeight: 700 }}>
+                                          <AlertTriangle size={14} /> {v.availableQuantity === 0 ? "Out of Stock" : "Low Stock"}
                                         </span>
                                       ) : (
-                                        <span style={{ color: "#10b981", fontWeight: 600 }}>Healthy</span>
+                                        <span style={{ color: "#10b981", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                                          <CheckCircle size={14} /> Healthy
+                                        </span>
                                       )}
                                     </td>
                                   </tr>
@@ -296,7 +309,7 @@ export default function VendorInventoryPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))
               )}
             </tbody>

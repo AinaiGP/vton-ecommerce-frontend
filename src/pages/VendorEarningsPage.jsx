@@ -88,13 +88,16 @@ export default function VendorEarningsPage() {
 
   // Process chart data: Group delivered orders by month
   const monthlyData = payments.reduce((acc, p) => {
-    const month = new Date(p.createdAt).toLocaleString('default', { month: 'short' });
-    acc[month] = (acc[month] || 0) + (p.vendorSubtotal / 100);
+    const date = new Date(p.createdAt);
+    const month = date.toLocaleString('default', { month: 'short' });
+    const year = date.getFullYear();
+    const key = `${month} ${year}`;
+    acc[key] = (acc[key] || 0) + (p.vendorSubtotal / 100);
     return acc;
   }, {});
 
-  const labels = Object.keys(monthlyData).reverse();
-  const dataPoints = Object.values(monthlyData).reverse();
+  const labels = Object.keys(monthlyData);
+  const dataPoints = Object.values(monthlyData);
 
   const lineData = {
     labels: labels.length ? labels : ["No Data"],
@@ -112,23 +115,17 @@ export default function VendorEarningsPage() {
     ],
   };
 
-  const lineOpts = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { grid: { display: false }, ticks: { color: "#9ca3af", font: { size: 11 } } },
-      y: { grid: { color: "rgba(0,0,0,0.04)" }, ticks: { color: "#9ca3af", font: { size: 11 } } },
-    },
-  };
-
-  const handleWithdraw = (e) => {
+  const handleWithdraw = async (e) => {
     e.preventDefault();
+    if (!amount || isNaN(amount) || Number(amount) < 50) return;
+    
     setSubmitted(true);
+    // In a real system, this would call POST /vendors/payouts
     setTimeout(() => {
       setWithdrawOpen(false);
       setSubmitted(false);
       setAmount("");
+      showToast("Payout request submitted successfully.");
     }, 1500);
   };
 

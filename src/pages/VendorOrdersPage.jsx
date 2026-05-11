@@ -227,82 +227,110 @@ export default function VendorOrdersPage() {
           <div className={`${p.modal} ${p.modalLg}`} onClick={(e) => e.stopPropagation()}>
             <div className={p.modalHead}>
               <div>
-                <h2 className={p.modalTitle}>Order #{orderDetail?.orderNumber}</h2>
+                <h2 className={p.modalTitle}>Order #{orderDetail?.orderNumber || "..."}</h2>
                 <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--vdr-text-muted)" }}>
                   {orderDetail && new Date(orderDetail.createdAt).toLocaleString()}
                 </p>
               </div>
               <button className={p.modalClose} onClick={() => setViewOrderId(null)}><X size={17} /></button>
             </div>
-            <div className={p.modalBody}>
+            <div className={p.modalBody} style={{ padding: 24 }}>
               {!orderDetail ? (
-                <div className={p.skeleton} style={{ height: 200 }}></div>
+                <div className={p.skeleton} style={{ height: 300 }}></div>
               ) : (
                 <>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "16px", background: "var(--vdr-bg)", borderRadius: 12 }}>
-                    <div className={p.avatar} style={{ width: 44, height: 44 }}>{orderDetail.shippingName?.[0]}</div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ margin: 0, fontWeight: 700 }}>{orderDetail.shippingName}</p>
-                      <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--vdr-text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
-                        <MapPin size={12} /> {orderDetail.shippingAddress}
-                      </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 200px", gap: 24, marginBottom: 32 }}>
+                    <div style={{ background: "var(--vdr-bg)", padding: 20, borderRadius: 16, border: "1px solid var(--vdr-border)" }}>
+                      <h3 className={p.label} style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+                        <MapPin size={14} /> Shipping Information
+                      </h3>
+                      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                        <div className={p.avatar} style={{ width: 44, height: 44, background: "var(--vdr-accent)", color: "white", fontWeight: 700 }}>
+                          {getInitials(orderDetail.shippingName || "Guest")}
+                        </div>
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{orderDetail.shippingName}</p>
+                          <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--vdr-text-muted)", lineHeight: 1.5 }}>
+                            {orderDetail.shippingAddress}<br />
+                            {orderDetail.shippingCity}, {orderDetail.shippingState} {orderDetail.shippingZip}<br />
+                            {orderDetail.shippingCountry}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <p style={{ margin: 0, fontSize: 12, color: "var(--vdr-text-muted)" }}>Vendor Subtotal</p>
-                      <p style={{ margin: 0, fontWeight: 800, color: "var(--vdr-accent)", fontSize: 18 }}>{formatPrice(orderDetail.vendorSubtotal)}</p>
+                    <div style={{ background: "var(--vdr-bg)", padding: 20, borderRadius: 16, border: "1px solid var(--vdr-border)", textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                      <p style={{ margin: 0, fontSize: 12, color: "var(--vdr-text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Revenue</p>
+                      <p style={{ margin: "8px 0 0", fontWeight: 900, color: "var(--vdr-accent)", fontSize: 24 }}>{formatPrice(orderDetail.vendorSubtotal)}</p>
+                      <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--vdr-text-muted)" }}>{orderDetail.items.length} items</p>
                     </div>
                   </div>
 
-                  <div style={{ marginTop: 24 }}>
-                    <h3 className={p.label} style={{ marginBottom: 12 }}>Items & Fulfillment</h3>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div>
+                    <h3 className={p.label} style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+                      <Package size={14} /> Line Items & Fulfillment
+                    </h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                       {orderDetail.items.map((item) => {
                         const nextStatus = { pending: "processing", processing: "shipped", shipped: "delivered" }[item.fulfillmentStatus];
                         return (
-                          <div key={item.id} style={{ padding: 16, border: "1px solid var(--vdr-border)", borderRadius: 12, background: "white" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                              <div style={{ display: "flex", gap: 12 }}>
-                                <div className={p.productThumb} style={{ width: 50, height: 60 }}>
-                                  {item.product?.images?.[0] ? <img src={item.product.images[0].url} alt="" /> : <Package size={20} />}
+                          <div key={item.id} style={{ padding: 20, border: "1px solid var(--vdr-border)", borderRadius: 16, background: "white", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20 }}>
+                              <div style={{ display: "flex", gap: 16, flex: 1 }}>
+                                <div className={p.productThumb} style={{ width: 64, height: 80, borderRadius: 8, overflow: "hidden" }}>
+                                  {item.product?.images?.[0] ? <img src={item.product.images[0].url} alt="" /> : <Package size={24} style={{ opacity: 0.3 }} />}
                                 </div>
-                                <div>
-                                  <p style={{ margin: 0, fontWeight: 700 }}>{item.productName}</p>
-                                  <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--vdr-text-muted)" }}>
-                                    Variant: {item.variantLabel} | SKU: {item.sku}
+                                <div style={{ flex: 1 }}>
+                                  <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{item.productName}</p>
+                                  <div style={{ display: "flex", gap: 12, marginTop: 4, flexWrap: "wrap" }}>
+                                    <span style={{ fontSize: 12, color: "var(--vdr-text-muted)", background: "#f1f5f9", padding: "2px 8px", borderRadius: 4 }}>
+                                      Variant: <strong>{item.variantLabel}</strong>
+                                    </span>
+                                    <span style={{ fontSize: 12, color: "var(--vdr-text-muted)", background: "#f1f5f9", padding: "2px 8px", borderRadius: 4 }}>
+                                      SKU: <strong>{item.sku || "—"}</strong>
+                                    </span>
+                                  </div>
+                                  <p style={{ margin: "12px 0 0", fontWeight: 700, fontSize: 14 }}>
+                                    {item.quantity} × {formatPrice(item.unitPrice)} = <span style={{ color: "var(--vdr-accent)" }}>{formatPrice(item.unitPrice * item.quantity)}</span>
                                   </p>
-                                  <p style={{ margin: "4px 0 0", fontWeight: 600 }}>Qty: {item.quantity} × {formatPrice(item.unitPrice)}</p>
                                 </div>
                               </div>
                               <div style={{ textAlign: "right" }}>
-                                <span className={`${p.badge} ${STATUS_BADGE[item.fulfillmentStatus] || p.badgePending}`} style={{ marginBottom: 8 }}>
+                                <span className={`${p.badge} ${STATUS_BADGE[item.fulfillmentStatus] || p.badgePending}`} style={{ marginBottom: 8, fontSize: 11, padding: "4px 10px" }}>
+                                  <span className={p.badgeDot} />
                                   {item.fulfillmentStatus}
                                 </span>
                                 {item.trackingNumber && (
-                                  <p style={{ margin: 0, fontSize: 11, color: "var(--vdr-accent)", fontWeight: 700 }}>
-                                    <Truck size={10} /> {item.trackingNumber}
-                                  </p>
+                                  <div style={{ marginTop: 8, padding: "8px 12px", background: "var(--vdr-accent-light)", borderRadius: 8, border: "1px solid #c4b5fd" }}>
+                                    <p style={{ margin: 0, fontSize: 10, color: "var(--vdr-accent)", fontWeight: 700, textTransform: "uppercase" }}>Tracking</p>
+                                    <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--vdr-accent)", fontWeight: 800 }}>{item.trackingNumber}</p>
+                                  </div>
                                 )}
                               </div>
                             </div>
 
                             {nextStatus && (
-                              <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed var(--vdr-border)", display: "flex", gap: 12, alignItems: "center" }}>
+                              <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px dashed var(--vdr-border)", display: "flex", gap: 12, alignItems: "center" }}>
                                 {nextStatus === "shipped" && (
-                                  <input
-                                    className={p.input}
-                                    style={{ flex: 1, fontSize: 13, height: 36 }}
-                                    placeholder="Enter Tracking Number..."
-                                    value={tracking}
-                                    onChange={(e) => setTracking(e.target.value)}
-                                  />
+                                  <div style={{ flex: 1, display: "flex", gap: 8 }}>
+                                    <div className={p.searchBox} style={{ flex: 1, height: 40, border: "1.5px solid var(--vdr-border)" }}>
+                                      <Truck size={14} className={p.searchIcon} />
+                                      <input
+                                        className={p.searchInput}
+                                        style={{ fontSize: 13 }}
+                                        placeholder="Tracking Number..."
+                                        value={tracking}
+                                        onChange={(e) => setTracking(e.target.value)}
+                                      />
+                                    </div>
+                                  </div>
                                 )}
                                 <button
                                   className={`${p.btn} ${p.btnPrimary}`}
-                                  style={{ height: 36, padding: "0 16px", marginLeft: "auto" }}
+                                  style={{ height: 40, padding: "0 24px", marginLeft: "auto", fontWeight: 700, borderRadius: 10 }}
                                   disabled={updating === item.id}
                                   onClick={() => updateFulfillment(item.id, item.fulfillmentStatus)}
                                 >
-                                  {updating === item.id ? "Updating..." : `Mark as ${nextStatus}`}
+                                  {updating === item.id ? "Updating..." : `Mark as ${nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}`}
                                 </button>
                               </div>
                             )}
@@ -315,7 +343,7 @@ export default function VendorOrdersPage() {
               )}
             </div>
             <div className={p.modalFoot}>
-              <button className={`${p.btn} ${p.btnOutline}`} onClick={() => setViewOrderId(null)}>Close</button>
+              <button className={`${p.btn} ${p.btnOutline}`} onClick={() => setViewOrderId(null)}>Close Order</button>
             </div>
           </div>
         </div>
