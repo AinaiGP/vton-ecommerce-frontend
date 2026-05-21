@@ -38,7 +38,11 @@ const STATUS_CFG = {
   PENDING: { color: "#64748b", bg: "#f1f5f9", label: "Pending" },
   OPEN: { color: "#ef4444", bg: "#fee2e2", label: "Open" },
   IN_PROGRESS: { color: "#f59e0b", bg: "#fef3c7", label: "In Progress" },
-  AWAITING_RESPONSE: { color: "#8b5cf6", bg: "#f5f3ff", label: "Awaiting Response" },
+  AWAITING_RESPONSE: {
+    color: "#8b5cf6",
+    bg: "#f5f3ff",
+    label: "Awaiting Response",
+  },
   ESCALATED: { color: "#dc2626", bg: "#fff1f2", label: "Escalated" },
   RESOLVED: { color: "#16a34a", bg: "#dcfce7", label: "Resolved" },
   CLOSED: { color: "#94a3b8", bg: "#f1f5f9", label: "Closed" },
@@ -53,6 +57,32 @@ const PRIORITY_CFG = {
 };
 
 const TERMINAL_STATUSES = ["RESOLVED", "CLOSED", "CANCELED"];
+
+function roleLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin":
+      return "Admin";
+    case "technical_support":
+      return "Support";
+    case "vendor":
+      return "Vendor";
+    case "customer":
+      return "Customer";
+    default:
+      return "User";
+  }
+}
+
+function shortId(value) {
+  if (!value) return "—";
+  return `${String(value).slice(0, 8)}…`;
+}
+
+function getInitials(label) {
+  if (!label) return "U";
+  const parts = label.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase()).join("") || "U";
+}
 
 function isImageUrl(url) {
   return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url);
@@ -71,13 +101,18 @@ function mapTicket(ticket) {
     .filter((m) => !m.isSystemMessage)
     .map((m) => {
       const legacy = extractLegacyAttachment(m.content);
-      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(Boolean);
+      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
+        Boolean,
+      );
       const attachments = attachmentUrls.map((url) => ({
         url,
         name: url.split("/").pop() || "Attachment",
         isImage: isImageUrl(url),
       }));
       const senderRole = String(m.senderRole || "").toLowerCase();
+      const sender = m.sender || null;
+      const senderName = sender?.name || sender?.email || roleLabel(senderRole);
+      const senderId = sender?.entityId || sender?.userId || m.senderId || null;
       return {
         from: senderRole === "admin" ? "admin" : "user",
         text: legacy.text || m.content,
@@ -88,6 +123,10 @@ function mapTicket(ticket) {
           minute: "2-digit",
         }),
         attachments,
+        senderName,
+        senderId,
+        senderRole,
+        senderAvatar: sender?.avatarUrl || null,
       };
     });
 
@@ -102,6 +141,12 @@ function mapTicket(ticket) {
     status: ticket.status,
     priority: ticket.priority,
     creatorRole: ticket.creatorRole,
+    creatorId: ticket.creatorId,
+    counterpartyId: ticket.counterpartyId,
+    counterpartyRole: ticket.counterpartyRole,
+    creator: ticket.creator,
+    counterparty: ticket.counterparty,
+    assignee: ticket.assignee,
     createdAt: new Date(ticket.createdAt).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -109,6 +154,7 @@ function mapTicket(ticket) {
     }),
     messages,
     assigneeId: ticket.assigneeId,
+    assigneeRole: ticket.assigneeRole,
   };
 }
 
@@ -122,7 +168,11 @@ function fmt(date) {
 }
 
 function StatusBadge({ status }) {
-  const c = STATUS_CFG[status] || { color: "#94a3b8", bg: "#f1f5f9", label: status };
+  const c = STATUS_CFG[status] || {
+    color: "#94a3b8",
+    bg: "#f1f5f9",
+    label: status,
+  };
   return (
     <span className={t.badge} style={{ background: c.bg, color: c.color }}>
       <span className={t.badgeDot} style={{ background: c.color }} />
@@ -132,7 +182,11 @@ function StatusBadge({ status }) {
 }
 
 function PriorityBadge({ priority }) {
-  const c = PRIORITY_CFG[priority] || { color: "#64748b", bg: "#f1f5f9", label: priority };
+  const c = PRIORITY_CFG[priority] || {
+    color: "#64748b",
+    bg: "#f1f5f9",
+    label: priority,
+  };
   return (
     <span className={t.badge} style={{ background: c.bg, color: c.color }}>
       {c.label}
@@ -267,6 +321,39 @@ function TicketChatModal({ ticket, onClose, onAction }) {
                 {ticket.typeLabel} · {ticket.createdAt}
               </span>
             </div>
+            <div className={t.ticketChatMeta}>
+              {[
+                {
+                  label: `Creator (${roleLabel(ticket.creatorRole)})`,
+                  userId: ticket.creatorId,
+                  entityId: ticket.creator?.entityId,
+                },
+                ticket.counterpartyId && {
+                  label: `Counterparty (${roleLabel(ticket.counterpartyRole)})`,
+                  userId: ticket.counterpartyId,
+                  entityId: ticket.counterparty?.entityId,
+                },
+                ticket.assigneeId && {
+                  label: `Assignee (${roleLabel(ticket.assigneeRole)})`,
+                  userId: ticket.assigneeId,
+                  entityId: ticket.assignee?.entityId,
+                },
+              ]
+                .filter(Boolean)
+                .map((item) => {
+                  const title = `user: ${item.userId || "—"}\nprofile: ${item.entityId || "—"}`;
+                  const label = `${item.label} · user:${shortId(item.userId)}${item.entityId ? ` · profile:${shortId(item.entityId)}` : ""}`;
+                  return (
+                    <span
+                      key={item.label}
+                      className={t.ticketIdPill}
+                      title={title}
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
+            </div>
           </div>
           <div className={t.ticketChatActions}>
             {canClaim && (
@@ -348,12 +435,28 @@ function TicketChatModal({ ticket, onClose, onAction }) {
                     className={t.ticketMsgAvatar}
                     style={{ background: "#4f46e5" }}
                   >
-                    <User size={13} />
+                    {msg.senderAvatar ? (
+                      <img
+                        src={msg.senderAvatar}
+                        alt={msg.senderName}
+                        className={t.ticketAvatarImg}
+                      />
+                    ) : (
+                      getInitials(msg.senderName)
+                    )}
                   </div>
                 )}
                 <div
                   className={`${t.ticketBubble} ${isAdmin ? t.ticketBubbleAdmin : t.ticketBubbleUser}`}
                 >
+                  <div className={t.ticketSenderLabel}>
+                    {msg.senderName}
+                    {msg.senderId && (
+                      <span className={t.ticketSenderId} title={msg.senderId}>
+                        {shortId(msg.senderId)}
+                      </span>
+                    )}
+                  </div>
                   <p className={t.ticketBubbleText}>{msg.text}</p>
                   <AttachmentList attachments={msg.attachments} />
                   <span className={t.ticketBubbleTime}>{msg.time}</span>
@@ -363,7 +466,15 @@ function TicketChatModal({ ticket, onClose, onAction }) {
                     className={t.ticketMsgAvatar}
                     style={{ background: "var(--adm-accent)" }}
                   >
-                    <Shield size={13} />
+                    {msg.senderAvatar ? (
+                      <img
+                        src={msg.senderAvatar}
+                        alt={msg.senderName}
+                        className={t.ticketAvatarImg}
+                      />
+                    ) : (
+                      getInitials(msg.senderName)
+                    )}
                   </div>
                 )}
               </div>
@@ -424,7 +535,8 @@ function TicketChatModal({ ticket, onClose, onAction }) {
         ) : (
           <div className={t.ticketClosedBanner}>
             <CheckCircle size={14} />
-            This ticket is {STATUS_CFG[ticket.status]?.label?.toLowerCase() || "closed"}.
+            This ticket is{" "}
+            {STATUS_CFG[ticket.status]?.label?.toLowerCase() || "closed"}.
           </div>
         )}
       </div>
@@ -471,7 +583,15 @@ export default function AdminTickets() {
       })
       .catch(() => setError("Failed to load tickets."))
       .finally(() => setLoading(false));
-  }, [page, limit, statusFilter, typeFilter, escalatedOnly, claimedByMe, search]);
+  }, [
+    page,
+    limit,
+    statusFilter,
+    typeFilter,
+    escalatedOnly,
+    claimedByMe,
+    search,
+  ]);
 
   useEffect(() => {
     fetchTickets();
@@ -665,27 +785,37 @@ export default function AdminTickets() {
                       <StatusBadge status={tk.status} />
                     </td>
                     <td className={t.ticketRoleCell}>
-                      {tk.creatorRole
-                        ?.toLowerCase()
-                        .replace(/_/g, " ") || "—"}
+                      {tk.creatorRole?.toLowerCase().replace(/_/g, " ") || "—"}
                     </td>
                     <td className={t.ticketTypeCell}>
                       {tk.assigneeId ? (
-                        String(tk.assigneeRole || "").toUpperCase() === "ADMIN" ? (
-                          <span className={t.badge} style={{ background: "#fee2e2", color: "#dc2626" }}>
+                        String(tk.assigneeRole || "").toUpperCase() ===
+                        "ADMIN" ? (
+                          <span
+                            className={t.badge}
+                            style={{ background: "#fee2e2", color: "#dc2626" }}
+                          >
                             Admin claimed
                           </span>
                         ) : (
-                          <span className={t.badge} style={{ background: "#dbeafe", color: "#1d4ed8" }}>
+                          <span
+                            className={t.badge}
+                            style={{ background: "#dbeafe", color: "#1d4ed8" }}
+                          >
                             Support claimed
                           </span>
                         )
                       ) : tk.status === "ESCALATED" ? (
-                        <span className={t.badge} style={{ background: "#fff1f2", color: "#dc2626" }}>
+                        <span
+                          className={t.badge}
+                          style={{ background: "#fff1f2", color: "#dc2626" }}
+                        >
                           Escalated — unclaimed
                         </span>
                       ) : (
-                        <span style={{ color: "#94a3b8", fontSize: 12 }}>Unassigned</span>
+                        <span style={{ color: "#94a3b8", fontSize: 12 }}>
+                          Unassigned
+                        </span>
                       )}
                     </td>
                     <td className={t.ticketTypeCell}>{fmt(tk.createdAt)}</td>

@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Send, Paperclip, X, Search, MessageCircle,
-  CheckCircle, AlertCircle, ShieldAlert, RefreshCw,
+  Send,
+  Paperclip,
+  X,
+  Search,
+  MessageCircle,
+  CheckCircle,
+  AlertCircle,
+  ShieldAlert,
+  RefreshCw,
 } from "lucide-react";
 import SupportLayout from "../../components/support/SupportLayout";
 import { useAuth } from "../../context/AuthContext";
@@ -9,32 +16,32 @@ import apiClient, { multipartClient } from "../../utils/apiClient";
 import p from "../../styles/SupportPage.module.css";
 
 const STATUS_MAP = {
-  PENDING:           "bOpen",
-  OPEN:              "bOpen",
-  IN_PROGRESS:       "bProgress",
+  PENDING: "bOpen",
+  OPEN: "bOpen",
+  IN_PROGRESS: "bProgress",
   AWAITING_RESPONSE: "bProgress",
-  ESCALATED:         "bProgress",
-  RESOLVED:          "bResolved",
-  CLOSED:            "bClosed",
-  CANCELED:          "bClosed",
+  ESCALATED: "bProgress",
+  RESOLVED: "bResolved",
+  CLOSED: "bClosed",
+  CANCELED: "bClosed",
 };
 
 const STATUS_LABEL = {
-  PENDING:           "Pending",
-  OPEN:              "Open",
-  IN_PROGRESS:       "In Progress",
+  PENDING: "Pending",
+  OPEN: "Open",
+  IN_PROGRESS: "In Progress",
   AWAITING_RESPONSE: "Awaiting Response",
-  ESCALATED:         "Escalated",
-  RESOLVED:          "Resolved",
-  CLOSED:            "Closed",
-  CANCELED:          "Canceled",
+  ESCALATED: "Escalated",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed",
+  CANCELED: "Canceled",
 };
 
 const TICKET_TYPES = {
-  GENERAL_SUPPORT:  "General Support",
-  SYSTEM_BUG:       "System Bug",
-  ORDER_DISPUTE:    "Order Dispute",
-  RETURN_REQUEST:   "Return Request",
+  GENERAL_SUPPORT: "General Support",
+  SYSTEM_BUG: "System Bug",
+  ORDER_DISPUTE: "Order Dispute",
+  RETURN_REQUEST: "Return Request",
   VENDOR_VIOLATION: "Vendor Violation",
 };
 
@@ -59,19 +66,51 @@ function extractLegacyAttachment(content) {
   return { text: cleaned || "Attachment", urls: [match[1]] };
 }
 
+function roleLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin":
+      return "Admin";
+    case "technical_support":
+      return "Support";
+    case "vendor":
+      return "Vendor";
+    case "customer":
+      return "Customer";
+    default:
+      return "User";
+  }
+}
+
+function getInitials(label) {
+  if (!label) return "U";
+  const parts = label.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase()).join("") || "U";
+}
+
 function mapTicket(raw) {
   const messages = (raw.messages || [])
     .filter((m) => !m.isSystemMessage)
     .map((m) => {
       const legacy = extractLegacyAttachment(m.content);
-      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(Boolean);
+      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
+        Boolean,
+      );
       const role = String(m.senderRole || "").toLowerCase();
+      const sender = m.sender || null;
+      const senderName = sender?.name || sender?.email || roleLabel(role);
       return {
-        from: role === "technical_support" || role === "admin" ? "agent" : "user",
+        from:
+          role === "technical_support" || role === "admin" ? "agent" : "user",
         text: legacy.text || m.content,
         time: new Date(m.createdAt).toLocaleString("en-US", {
-          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
         }),
+        senderName,
+        senderAvatar: sender?.avatarUrl || null,
+        senderRole: role,
         attachments: attachmentUrls.map((url) => ({
           url,
           name: url.split("/").pop() || "Attachment",
@@ -91,7 +130,7 @@ function mapTicket(raw) {
     creatorRole: raw.creatorRole,
     updatedAt: raw.updatedAt || raw.createdAt,
     createdAt: raw.createdAt,
-    user: raw.creator?.email || raw.creatorId || "Unknown",
+    user: raw.creator?.name || raw.creator?.email || raw.creatorId || "Unknown",
     messages,
   };
 }
@@ -131,7 +170,9 @@ export default function SupportLiveChat() {
       .finally(() => setLoading(false));
   }, [statusFilter, user?.id]);
 
-  useEffect(() => { fetchTickets(); }, [fetchTickets]);
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
 
   useEffect(() => {
     const id = setInterval(fetchTickets, 30000);
@@ -166,15 +207,20 @@ export default function SupportLiveChat() {
         const fd = new FormData();
         fd.append("file", file);
         const res = await multipartClient.post(
-          `/tech-support/support/tickets/${selected.id}/messages/attachments`, fd,
+          `/tech-support/support/tickets/${selected.id}/messages/attachments`,
+          fd,
         );
         attachmentUrl = res.data?.url || null;
       }
-      await apiClient.post(`/tech-support/support/tickets/${selected.id}/messages`, {
-        content: reply.trim() || "Attachment",
-        attachments: attachmentUrl ? [attachmentUrl] : undefined,
-      });
-      setReply(""); setFile(null);
+      await apiClient.post(
+        `/tech-support/support/tickets/${selected.id}/messages`,
+        {
+          content: reply.trim() || "Attachment",
+          attachments: attachmentUrl ? [attachmentUrl] : undefined,
+        },
+      );
+      setReply("");
+      setFile(null);
       await refetchSelected(selected.id);
     } catch {
       setError("Failed to send message.");
@@ -187,7 +233,9 @@ export default function SupportLiveChat() {
     if (!selected) return;
     setActionLoading(true);
     try {
-      await apiClient.patch(`/tech-support/support/tickets/${selected.id}/escalate`);
+      await apiClient.patch(
+        `/tech-support/support/tickets/${selected.id}/escalate`,
+      );
       setSelected(null);
       fetchTickets();
     } catch {
@@ -201,7 +249,10 @@ export default function SupportLiveChat() {
     if (!selected) return;
     setActionLoading(true);
     try {
-      await apiClient.patch(`/tech-support/support/tickets/${selected.id}/resolve`, {});
+      await apiClient.patch(
+        `/tech-support/support/tickets/${selected.id}/resolve`,
+        {},
+      );
       setSelected(null);
       fetchTickets();
     } catch {
@@ -215,7 +266,10 @@ export default function SupportLiveChat() {
     if (!selected) return;
     setActionLoading(true);
     try {
-      await apiClient.patch(`/tech-support/support/tickets/${selected.id}/close`, {});
+      await apiClient.patch(
+        `/tech-support/support/tickets/${selected.id}/close`,
+        {},
+      );
       setSelected(null);
       fetchTickets();
     } catch {
@@ -225,7 +279,9 @@ export default function SupportLiveChat() {
     }
   };
 
-  const isTerminal = selected ? TERMINAL_STATUSES.includes(selected.status) : false;
+  const isTerminal = selected
+    ? TERMINAL_STATUSES.includes(selected.status)
+    : false;
 
   const filtered = tickets.filter(
     (tk) =>
@@ -241,24 +297,60 @@ export default function SupportLiveChat() {
       breadcrumb="Live Chat"
     >
       {error && (
-        <div style={{ marginBottom: 12, padding: "10px 16px", borderRadius: 8, background: "#fee2e2", color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 16px",
+            borderRadius: 8,
+            background: "#fee2e2",
+            color: "#dc2626",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            fontSize: 13,
+          }}
+        >
           {error}
-          <button onClick={() => setError(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626" }}><X size={14} /></button>
+          <button
+            onClick={() => setError(null)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "#dc2626",
+            }}
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 
       {/* Status filter tabs */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+      <div
+        style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}
+      >
         {STATUS_FILTERS.map((f) => (
           <button
             key={f.value}
-            onClick={() => { setStatusFilter(f.value); setSelected(null); }}
+            onClick={() => {
+              setStatusFilter(f.value);
+              setSelected(null);
+            }}
             className={`${p.btn} ${statusFilter === f.value ? p.btnPrimary : p.btnOutline} ${p.btnSm}`}
           >
             {f.label}
           </button>
         ))}
-        <button onClick={fetchTickets} className={`${p.btn} ${p.btnGhost} ${p.btnSm}`} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
+        <button
+          onClick={fetchTickets}
+          className={`${p.btn} ${p.btnGhost} ${p.btnSm}`}
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+          }}
+        >
           <RefreshCw size={13} /> Refresh
         </button>
       </div>
@@ -270,21 +362,45 @@ export default function SupportLiveChat() {
           <div className={p.splitMain}>
             <div className={p.panelHead}>
               <div>
-                <p style={{ fontSize: 12, color: "var(--sup-text-muted)", marginBottom: 4 }}>
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: "var(--sup-text-muted)",
+                    marginBottom: 4,
+                  }}
+                >
                   <span style={{ fontWeight: 700, color: "var(--sup-accent)" }}>
                     {selected.id.slice(0, 8)}…
                   </span>{" "}
                   · {TICKET_TYPES[selected.type] || selected.type}
                 </p>
-                <h2 style={{ font: "700 16px/1.3 Inter, sans-serif", color: "var(--sup-text)", margin: 0 }}>
+                <h2
+                  style={{
+                    font: "700 16px/1.3 Inter, sans-serif",
+                    color: "var(--sup-text)",
+                    margin: 0,
+                  }}
+                >
                   {selected.subject}
                 </h2>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                <span className={`${p.badge} ${p[STATUS_MAP[selected.status]] || p.bOpen}`}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span
+                  className={`${p.badge} ${p[STATUS_MAP[selected.status]] || p.bOpen}`}
+                >
                   {STATUS_LABEL[selected.status] || selected.status}
                 </span>
-                <button className={`${p.btn} ${p.btnGhost} ${p.btnSm}`} onClick={() => setSelected(null)}>
+                <button
+                  className={`${p.btn} ${p.btnGhost} ${p.btnSm}`}
+                  onClick={() => setSelected(null)}
+                >
                   <X size={14} />
                 </button>
               </div>
@@ -293,25 +409,71 @@ export default function SupportLiveChat() {
             {/* Messages */}
             <div className={p.ticketConv}>
               {selected.messages.length === 0 && (
-                <p style={{ textAlign: "center", color: "var(--sup-text-muted)", fontSize: 13, padding: "20px 0" }}>
+                <p
+                  style={{
+                    textAlign: "center",
+                    color: "var(--sup-text-muted)",
+                    fontSize: 13,
+                    padding: "20px 0",
+                  }}
+                >
                   No messages yet.
                 </p>
               )}
               {selected.messages.map((m, i) => (
-                <div key={i} className={`${p.msgRow} ${m.from === "agent" ? p.mine : ""}`}>
+                <div
+                  key={i}
+                  className={`${p.msgRow} ${m.from === "agent" ? p.mine : ""}`}
+                >
                   <div className={p.msgAvat}>
-                    {m.from === "agent" ? "SP" : selected.user.slice(0, 2).toUpperCase()}
+                    {m.senderAvatar ? (
+                      <img
+                        src={m.senderAvatar}
+                        alt={m.senderName}
+                        className={p.msgAvatarImg}
+                      />
+                    ) : (
+                      getInitials(m.senderName)
+                    )}
                   </div>
                   <div>
+                    <span className={p.msgSender}>{m.senderName}</span>
                     <div className={p.msgBubble}>
                       {m.text}
                       {m.attachments?.map((att) =>
                         att.isImage ? (
-                          <a key={att.url} href={att.url} target="_blank" rel="noreferrer">
-                            <img src={att.url} alt={att.name} style={{ display: "block", maxWidth: 160, maxHeight: 120, marginTop: 6, borderRadius: 6, objectFit: "cover" }} />
+                          <a
+                            key={att.url}
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <img
+                              src={att.url}
+                              alt={att.name}
+                              style={{
+                                display: "block",
+                                maxWidth: 160,
+                                maxHeight: 120,
+                                marginTop: 6,
+                                borderRadius: 6,
+                                objectFit: "cover",
+                              }}
+                            />
                           </a>
                         ) : (
-                          <a key={att.url} href={att.url} target="_blank" rel="noreferrer" style={{ display: "block", fontSize: 11, opacity: 0.8, marginTop: 4 }}>
+                          <a
+                            key={att.url}
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: "block",
+                              fontSize: 11,
+                              opacity: 0.8,
+                              marginTop: 4,
+                            }}
+                          >
                             📎 {att.name}
                           </a>
                         ),
@@ -328,10 +490,28 @@ export default function SupportLiveChat() {
             {!isTerminal && (
               <div className={p.ticketReply}>
                 {file && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--sup-text-muted)", marginBottom: 6 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 12,
+                      color: "var(--sup-text-muted)",
+                      marginBottom: 6,
+                    }}
+                  >
                     <Paperclip size={12} />
                     <span>{file.name}</span>
-                    <button onClick={() => setFile(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--sup-text-muted)", display: "flex" }}>
+                    <button
+                      onClick={() => setFile(null)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "var(--sup-text-muted)",
+                        display: "flex",
+                      }}
+                    >
                       <X size={11} />
                     </button>
                   </div>
@@ -341,32 +521,72 @@ export default function SupportLiveChat() {
                   placeholder="Type your reply…"
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendReply(); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendReply();
+                    }
+                  }}
                 />
                 <div className={p.replyActions}>
-                  <button className={`${p.btn} ${p.btnGhost} ${p.btnSm}`} onClick={() => fileRef.current?.click()}>
-                    <Paperclip size={14} /> {file ? file.name.slice(0, 12) + "…" : "Attach"}
+                  <button
+                    className={`${p.btn} ${p.btnGhost} ${p.btnSm}`}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Paperclip size={14} />{" "}
+                    {file ? file.name.slice(0, 12) + "…" : "Attach"}
                   </button>
-                  <input ref={fileRef} type="file" style={{ display: "none" }} accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => setFile(e.target.files[0] || null)} />
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    style={{ display: "none" }}
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={(e) => setFile(e.target.files[0] || null)}
+                  />
                   {selected.status !== "ESCALATED" && (
-                    <button className={`${p.btn} ${p.btnOutline} ${p.btnSm}`} style={{ color: "#dc2626", borderColor: "#fca5a5" }} onClick={handleEscalate} disabled={actionLoading}>
+                    <button
+                      className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
+                      style={{ color: "#dc2626", borderColor: "#fca5a5" }}
+                      onClick={handleEscalate}
+                      disabled={actionLoading}
+                    >
                       <ShieldAlert size={14} /> Escalate to Admin
                     </button>
                   )}
-                  <button className={`${p.btn} ${p.btnOutline} ${p.btnSm}`} onClick={handleResolve} disabled={actionLoading}>
+                  <button
+                    className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
+                    onClick={handleResolve}
+                    disabled={actionLoading}
+                  >
                     <CheckCircle size={14} /> Resolve
                   </button>
-                  <button className={`${p.btn} ${p.btnOutline} ${p.btnSm}`} onClick={handleClose} disabled={actionLoading}>
+                  <button
+                    className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
+                    onClick={handleClose}
+                    disabled={actionLoading}
+                  >
                     <AlertCircle size={14} /> Close
                   </button>
-                  <button className={`${p.btn} ${p.btnPrimary}`} disabled={(!reply.trim() && !file) || sending} onClick={sendReply}>
+                  <button
+                    className={`${p.btn} ${p.btnPrimary}`}
+                    disabled={(!reply.trim() && !file) || sending}
+                    onClick={sendReply}
+                  >
                     <Send size={14} /> {sending ? "Sending…" : "Send Reply"}
                   </button>
                 </div>
               </div>
             )}
             {isTerminal && (
-              <div style={{ padding: "14px 20px", textAlign: "center", fontSize: 13, color: "var(--sup-text-muted)", borderTop: "1px solid var(--sup-border)" }}>
+              <div
+                style={{
+                  padding: "14px 20px",
+                  textAlign: "center",
+                  fontSize: 13,
+                  color: "var(--sup-text-muted)",
+                  borderTop: "1px solid var(--sup-border)",
+                }}
+              >
                 This ticket is {STATUS_LABEL[selected.status]?.toLowerCase()}.
               </div>
             )}
@@ -378,10 +598,37 @@ export default function SupportLiveChat() {
               <div className={p.metaHead}>Ticket Details</div>
               <div className={p.metaBody}>
                 {[
-                  ["Status", <span key="s" className={`${p.badge} ${p[STATUS_MAP[selected.status]] || p.bOpen}`}>{STATUS_LABEL[selected.status] || selected.status}</span>],
-                  ["Type", <span key="t" style={{ color: "var(--sup-text-muted)" }}>{TICKET_TYPES[selected.type] || selected.type}</span>],
-                  ["Creator", <span key="c" style={{ color: "var(--sup-text-muted)" }}>{selected.creatorRole?.toLowerCase().replace(/_/g, " ") || "—"}</span>],
-                  ["Updated", <span key="u" style={{ color: "var(--sup-text-muted)" }}>{new Date(selected.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>],
+                  [
+                    "Status",
+                    <span
+                      key="s"
+                      className={`${p.badge} ${p[STATUS_MAP[selected.status]] || p.bOpen}`}
+                    >
+                      {STATUS_LABEL[selected.status] || selected.status}
+                    </span>,
+                  ],
+                  [
+                    "Type",
+                    <span key="t" style={{ color: "var(--sup-text-muted)" }}>
+                      {TICKET_TYPES[selected.type] || selected.type}
+                    </span>,
+                  ],
+                  [
+                    "Creator",
+                    <span key="c" style={{ color: "var(--sup-text-muted)" }}>
+                      {selected.creatorRole?.toLowerCase().replace(/_/g, " ") ||
+                        "—"}
+                    </span>,
+                  ],
+                  [
+                    "Updated",
+                    <span key="u" style={{ color: "var(--sup-text-muted)" }}>
+                      {new Date(selected.updatedAt).toLocaleDateString(
+                        "en-US",
+                        { month: "short", day: "numeric" },
+                      )}
+                    </span>,
+                  ],
                 ].map(([l, v]) => (
                   <div key={l} className={p.metaRow}>
                     <span className={p.metaLabel}>{l}</span>
@@ -400,7 +647,9 @@ export default function SupportLiveChat() {
             <div className={p.chatSidebarHead}>
               <h3 className={p.chatSidebarTitle}>
                 My Claimed Conversations{" "}
-                <span style={{ color: "var(--sup-accent)", fontWeight: 800 }}>{filtered.length}</span>
+                <span style={{ color: "var(--sup-accent)", fontWeight: 800 }}>
+                  {filtered.length}
+                </span>
               </h3>
               <div className={p.searchWrap} style={{ marginTop: 8 }}>
                 <Search size={13} className={p.searchIcon} />
@@ -415,11 +664,31 @@ export default function SupportLiveChat() {
 
             <div className={p.convList}>
               {loading ? (
-                <div style={{ padding: 24, textAlign: "center", color: "var(--sup-text-muted)", fontSize: 13 }}>Loading…</div>
+                <div
+                  style={{
+                    padding: 24,
+                    textAlign: "center",
+                    color: "var(--sup-text-muted)",
+                    fontSize: 13,
+                  }}
+                >
+                  Loading…
+                </div>
               ) : filtered.length === 0 ? (
-                <div style={{ padding: 24, textAlign: "center", color: "var(--sup-text-muted)" }}>
-                  <MessageCircle size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
-                  <p style={{ fontSize: 13, margin: 0 }}>No active claimed tickets</p>
+                <div
+                  style={{
+                    padding: 24,
+                    textAlign: "center",
+                    color: "var(--sup-text-muted)",
+                  }}
+                >
+                  <MessageCircle
+                    size={28}
+                    style={{ opacity: 0.4, marginBottom: 8 }}
+                  />
+                  <p style={{ fontSize: 13, margin: 0 }}>
+                    No active claimed tickets
+                  </p>
                   <p style={{ fontSize: 11, margin: "4px 0 0", opacity: 0.7 }}>
                     Claim tickets from the Tickets tab
                   </p>
@@ -436,18 +705,35 @@ export default function SupportLiveChat() {
                       {(tk.subject || "T").slice(0, 2).toUpperCase()}
                     </div>
                     <div className={p.convInfo}>
-                      <p className={p.convName} style={{ fontSize: 13, fontWeight: 600, margin: "0 0 3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>
+                      <p
+                        className={p.convName}
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          margin: "0 0 3px",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          maxWidth: 160,
+                        }}
+                      >
                         {tk.subject}
                       </p>
                       <p className={p.convSnippet} style={{ margin: 0 }}>
-                        <span className={`${p.badge} ${p[STATUS_MAP[tk.status]] || p.bOpen}`} style={{ fontSize: 10 }}>
+                        <span
+                          className={`${p.badge} ${p[STATUS_MAP[tk.status]] || p.bOpen}`}
+                          style={{ fontSize: 10 }}
+                        >
                           {STATUS_LABEL[tk.status] || tk.status}
                         </span>
                       </p>
                     </div>
                     <div className={p.convMeta}>
                       <span className={p.convTime}>
-                        {new Date(tk.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {new Date(tk.updatedAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
                       </span>
                     </div>
                   </div>
@@ -457,11 +743,27 @@ export default function SupportLiveChat() {
           </div>
 
           {/* Right: empty state */}
-          <div className={p.chatMain} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ textAlign: "center", color: "var(--sup-text-muted)" }}>
-              <MessageCircle size={40} style={{ opacity: 0.3, marginBottom: 12 }} />
-              <p style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>Select a conversation</p>
-              <p style={{ fontSize: 12, margin: 0 }}>Pick a ticket from the list to open the thread</p>
+          <div
+            className={p.chatMain}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              style={{ textAlign: "center", color: "var(--sup-text-muted)" }}
+            >
+              <MessageCircle
+                size={40}
+                style={{ opacity: 0.3, marginBottom: 12 }}
+              />
+              <p style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>
+                Select a conversation
+              </p>
+              <p style={{ fontSize: 12, margin: 0 }}>
+                Pick a ticket from the list to open the thread
+              </p>
             </div>
           </div>
         </div>

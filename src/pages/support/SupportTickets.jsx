@@ -65,6 +65,27 @@ function extractLegacyAttachment(content) {
   return { text: cleaned || "Attachment", urls: [match[1]] };
 }
 
+function roleLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin":
+      return "Admin";
+    case "technical_support":
+      return "Support";
+    case "vendor":
+      return "Vendor";
+    case "customer":
+      return "Customer";
+    default:
+      return "User";
+  }
+}
+
+function getInitials(label) {
+  if (!label) return "U";
+  const parts = label.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase()).join("") || "U";
+}
+
 function assigneeLabel(raw, userId) {
   if (!raw.assigneeId) return { text: "Unassigned", style: "unassigned" };
   if (String(raw.assigneeRole || "").toUpperCase() === "ADMIN")
@@ -79,10 +100,15 @@ function mapTicket(raw, userId) {
     .filter((m) => !m.isSystemMessage)
     .map((m) => {
       const legacy = extractLegacyAttachment(m.content);
-      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(Boolean);
+      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
+        Boolean,
+      );
       const role = String(m.senderRole || "").toLowerCase();
+      const sender = m.sender || null;
+      const senderName = sender?.name || sender?.email || roleLabel(role);
       return {
-        from: role === "technical_support" || role === "admin" ? "agent" : "user",
+        from:
+          role === "technical_support" || role === "admin" ? "agent" : "user",
         text: legacy.text || m.content,
         time: new Date(m.createdAt).toLocaleString("en-US", {
           month: "short",
@@ -90,6 +116,9 @@ function mapTicket(raw, userId) {
           hour: "2-digit",
           minute: "2-digit",
         }),
+        senderName,
+        senderAvatar: sender?.avatarUrl || null,
+        senderRole: role,
         attachments: attachmentUrls.map((url) => ({
           url,
           name: url.split("/").pop() || "Attachment",
@@ -101,8 +130,11 @@ function mapTicket(raw, userId) {
   return {
     id: raw.id,
     subject: raw.subject,
-    user: raw.creator?.email || raw.creatorId || "Unknown",
-    role: (raw.creatorRole || "").toLowerCase() === "vendor" ? "Vendor" : "Customer",
+    user: raw.creator?.name || raw.creator?.email || raw.creatorId || "Unknown",
+    role:
+      (raw.creatorRole || "").toLowerCase() === "vendor"
+        ? "Vendor"
+        : "Customer",
     status: raw.status,
     priority: raw.priority || "NORMAL",
     updated: new Date(raw.updatedAt).toLocaleDateString("en-US", {
@@ -125,9 +157,9 @@ function fmt(date) {
 }
 
 const AGENT_LABEL_STYLES = {
-  mine:       { color: "#7c3aed", background: "#f5f3ff" },
-  other:      { color: "#0369a1", background: "#e0f2fe" },
-  admin:      { color: "#dc2626", background: "#fee2e2" },
+  mine: { color: "#7c3aed", background: "#f5f3ff" },
+  other: { color: "#0369a1", background: "#e0f2fe" },
+  admin: { color: "#dc2626", background: "#fee2e2" },
   unassigned: { color: "#64748b", background: "#f1f5f9" },
 };
 
@@ -241,7 +273,9 @@ export default function SupportTickets() {
     if (!selected) return;
     setActionLoading(true);
     try {
-      await apiClient.patch(`/tech-support/support/tickets/${selected.id}/claim`);
+      await apiClient.patch(
+        `/tech-support/support/tickets/${selected.id}/claim`,
+      );
       await refetchSelected(selected.id);
     } catch {
       setError("Failed to claim ticket.");
@@ -297,7 +331,9 @@ export default function SupportTickets() {
     }
   };
 
-  const isTerminal = selected ? TERMINAL_STATUSES.includes(selected.status) : false;
+  const isTerminal = selected
+    ? TERMINAL_STATUSES.includes(selected.status)
+    : false;
   const totalPages = Math.ceil(total / limit);
 
   return (
@@ -349,9 +385,7 @@ export default function SupportTickets() {
                     marginBottom: 4,
                   }}
                 >
-                  <span
-                    style={{ fontWeight: 700, color: "var(--sup-accent)" }}
-                  >
+                  <span style={{ fontWeight: 700, color: "var(--sup-accent)" }}>
                     {selected.id.slice(0, 8)}…
                   </span>{" "}
                   · {selected.user}
@@ -408,9 +442,18 @@ export default function SupportTickets() {
                   className={`${p.msgRow} ${m.from === "agent" ? p.mine : ""}`}
                 >
                   <div className={p.msgAvat}>
-                    {m.from === "agent" ? "SP" : selected.user.slice(0, 2).toUpperCase()}
+                    {m.senderAvatar ? (
+                      <img
+                        src={m.senderAvatar}
+                        alt={m.senderName}
+                        className={p.msgAvatarImg}
+                      />
+                    ) : (
+                      getInitials(m.senderName)
+                    )}
                   </div>
                   <div>
+                    <span className={p.msgSender}>{m.senderName}</span>
                     <div className={p.msgBubble}>
                       {m.text}
                       {m.attachments?.map((att) =>
@@ -591,7 +634,10 @@ export default function SupportTickets() {
                   ],
                   [
                     "Updated",
-                    <span key="updated" style={{ color: "var(--sup-text-muted)" }}>
+                    <span
+                      key="updated"
+                      style={{ color: "var(--sup-text-muted)" }}
+                    >
                       {selected.updated}
                     </span>,
                   ],
@@ -600,7 +646,11 @@ export default function SupportTickets() {
                     <span
                       key="assigned"
                       className={p.badge}
-                      style={{ ...AGENT_LABEL_STYLES[selected.agentLabel?.style || "unassigned"] }}
+                      style={{
+                        ...AGENT_LABEL_STYLES[
+                          selected.agentLabel?.style || "unassigned"
+                        ],
+                      }}
                     >
                       {selected.agentLabel?.text || "Unassigned"}
                     </span>,
@@ -733,7 +783,14 @@ export default function SupportTickets() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: "center", padding: 32, color: "var(--sup-text-muted)" }}>
+                    <td
+                      colSpan={8}
+                      style={{
+                        textAlign: "center",
+                        padding: 32,
+                        color: "var(--sup-text-muted)",
+                      }}
+                    >
                       Loading…
                     </td>
                   </tr>
@@ -820,7 +877,10 @@ export default function SupportTickets() {
                       <td>
                         <span
                           className={p.badge}
-                          style={{ ...AGENT_LABEL_STYLES[tk.agentLabel.style], fontSize: 11 }}
+                          style={{
+                            ...AGENT_LABEL_STYLES[tk.agentLabel.style],
+                            fontSize: 11,
+                          }}
                         >
                           {tk.agentLabel.text}
                         </span>
@@ -854,8 +914,8 @@ export default function SupportTickets() {
           {totalPages > 1 && (
             <div className={p.pagination}>
               <span className={p.pageInfo}>
-                Showing {(page - 1) * limit + 1}–
-                {Math.min(page * limit, total)} of {total}
+                Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)}{" "}
+                of {total}
               </span>
               <div className={p.pageButtons}>
                 <button
@@ -865,18 +925,15 @@ export default function SupportTickets() {
                 >
                   ‹
                 </button>
-                {Array.from(
-                  { length: Math.min(totalPages, 7) },
-                  (_, i) => (
-                    <button
-                      key={i + 1}
-                      className={`${p.pageBtn} ${page === i + 1 ? p.active : ""}`}
-                      onClick={() => setPage(i + 1)}
-                    >
-                      {i + 1}
-                    </button>
-                  ),
-                )}
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => (
+                  <button
+                    key={i + 1}
+                    className={`${p.pageBtn} ${page === i + 1 ? p.active : ""}`}
+                    onClick={() => setPage(i + 1)}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
                 <button
                   className={p.pageBtn}
                   onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
