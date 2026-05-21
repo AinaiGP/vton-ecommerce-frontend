@@ -4,6 +4,7 @@ import {
   Store,
   Folders,
   TicketCheck,
+  MessageCircle,
   Settings,
   LogOut,
   ChevronLeft,
@@ -21,6 +22,7 @@ const navItems = [
   { icon: Users, label: "Users", to: "/admin/users" },
   { icon: Folders, label: "Categories", to: "/admin/categories" },
   { icon: TicketCheck, label: "Support Tickets", to: "/admin/tickets" },
+  { icon: MessageCircle, label: "Live Chat", to: "/admin/messages" },
 ];
 
 const bottomItems = [

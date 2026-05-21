@@ -38,14 +38,14 @@ const STATUS_LABEL = {
 
 const PRIORITY_MAP = {
   LOW: "pLow",
-  MEDIUM: "pMed",
+  NORMAL: "pMed",
   HIGH: "pHigh",
   URGENT: "pUrgent",
 };
 
 const PRIORITY_LABEL = {
   LOW: "Low",
-  MEDIUM: "Medium",
+  NORMAL: "Normal",
   HIGH: "High",
   URGENT: "Urgent",
 };
@@ -94,12 +94,12 @@ function mapTicket(raw) {
     user: raw.creator?.email || raw.creatorId || "Unknown",
     role: (raw.creatorRole || "").toLowerCase() === "vendor" ? "Vendor" : "Customer",
     status: raw.status,
-    priority: raw.priority || "MEDIUM",
+    priority: raw.priority || "NORMAL",
     updated: new Date(raw.updatedAt).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
     }),
-    agent: raw.assignedAgentId ? "Assigned" : "Unassigned",
+    agent: raw.assigneeId ? "Assigned" : "Unassigned",
     messages,
     _raw: raw,
   };
@@ -616,7 +616,7 @@ export default function SupportTickets() {
               <div className={p.metaCard}>
                 <div className={p.metaHead}>Quick Actions</div>
                 <div className={p.metaBody}>
-                  {!selected._raw?.assignedAgentId && (
+                  {!selected._raw?.assigneeId && (
                     <button
                       className={`${p.btn} ${p.btnOutline}`}
                       style={{ width: "100%" }}

@@ -47,7 +47,7 @@ const STATUS_CFG = {
 
 const PRIORITY_CFG = {
   LOW: { color: "#16a34a", bg: "#dcfce7", label: "Low" },
-  MEDIUM: { color: "#ca8a04", bg: "#fef9c3", label: "Medium" },
+  NORMAL: { color: "#ca8a04", bg: "#fef9c3", label: "Normal" },
   HIGH: { color: "#dc2626", bg: "#fee2e2", label: "High" },
   URGENT: { color: "#7c3aed", bg: "#f5f3ff", label: "Urgent" },
 };
@@ -108,7 +108,7 @@ function mapTicket(ticket) {
       year: "numeric",
     }),
     messages,
-    assignedAgentId: ticket.assignedAgentId,
+    assigneeId: ticket.assigneeId,
   };
 }
 
@@ -186,7 +186,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
   }, [ticket.messages]);
 
   const isTerminal = TERMINAL_STATUSES.includes(ticket.status);
-  const canClaim = ticket.status === "ESCALATED";
+  const canClaim = ticket.status === "ESCALATED" && !ticket.assigneeId;
   const canResolve = !isTerminal && ticket.status !== "PENDING";
   const canClose = !isTerminal;
 
@@ -443,6 +443,7 @@ export default function AdminTickets() {
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [escalatedOnly, setEscalatedOnly] = useState(false);
+  const [claimedByMe, setClaimedByMe] = useState(false);
   const [active, setActive] = useState(null);
   const [error, setError] = useState(null);
 
@@ -452,6 +453,7 @@ export default function AdminTickets() {
     if (statusFilter) params.status = statusFilter;
     if (typeFilter) params.type = typeFilter;
     if (escalatedOnly) params.escalatedOnly = true;
+    if (claimedByMe) params.claimedByMe = true;
     apiClient
       .get("/admin/support/tickets", { params })
       .then((r) => {
@@ -469,7 +471,7 @@ export default function AdminTickets() {
       })
       .catch(() => setError("Failed to load tickets."))
       .finally(() => setLoading(false));
-  }, [page, limit, statusFilter, typeFilter, escalatedOnly, search]);
+  }, [page, limit, statusFilter, typeFilter, escalatedOnly, claimedByMe, search]);
 
   useEffect(() => {
     fetchTickets();
@@ -584,6 +586,17 @@ export default function AdminTickets() {
             />
             Escalated only
           </label>
+          <label className={t.ticketEscalatedCheck}>
+            <input
+              type="checkbox"
+              checked={claimedByMe}
+              onChange={(e) => {
+                setClaimedByMe(e.target.checked);
+                setPage(1);
+              }}
+            />
+            Claimed by me
+          </label>
         </div>
         <span className={t.pageInfo}>{total} tickets</span>
       </div>
@@ -599,6 +612,7 @@ export default function AdminTickets() {
                 <th>Priority</th>
                 <th>Status</th>
                 <th>Creator Role</th>
+                <th>Assignee</th>
                 <th>Created</th>
                 <th>Action</th>
               </tr>
@@ -607,14 +621,14 @@ export default function AdminTickets() {
               {loading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={8}>
+                    <td colSpan={9}>
                       <span className={`${t.skeleton} ${t.skeletonRow}`} />
                     </td>
                   </tr>
                 ))
               ) : tickets.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className={t.emptyState}>
                       <div className={t.emptyIcon}>
                         <MessageSquare size={24} />
@@ -649,6 +663,15 @@ export default function AdminTickets() {
                       {tk.creatorRole
                         ?.toLowerCase()
                         .replace(/_/g, " ") || "—"}
+                    </td>
+                    <td className={t.ticketTypeCell}>
+                      {tk.assigneeId ? (
+                        <span className={t.badge} style={{ background: "#dcfce7", color: "#15803d" }}>
+                          Claimed
+                        </span>
+                      ) : (
+                        <span style={{ color: "#94a3b8", fontSize: 12 }}>Unassigned</span>
+                      )}
                     </td>
                     <td className={t.ticketTypeCell}>{fmt(tk.createdAt)}</td>
                     <td>

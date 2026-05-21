@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { NavLink, useNavigate, Link } from "react-router-dom";
 import {
-  LayoutDashboard, Ticket, MessageCircle, Users, BarChart3,
+  LayoutDashboard, Ticket, MessageCircle, Users,
   Settings, ChevronLeft, Bell, Search, Menu,
   ChevronDown, LogOut, User, Moon, Sun, Headphones, X, Globe, Home
 } from "lucide-react";
@@ -11,10 +11,9 @@ import { useAuth } from "../../context/AuthContext";
 
 const NAV = [
   { label: "Dashboard",  to: "/support",         icon: LayoutDashboard },
-  { label: "Tickets",    to: "/support/tickets",  icon: Ticket,          badge: 12 },
-  { label: "Live Chat",  to: "/support/chat",     icon: MessageCircle,   badge: 3 },
+  { label: "Tickets",    to: "/support/tickets",  icon: Ticket },
+  { label: "Live Chat",  to: "/support/chat",     icon: MessageCircle },
   { label: "Users",      to: "/support/users",    icon: Users },
-  { label: "Reports",    to: "/support/reports",  icon: BarChart3 },
   { label: "Settings",   to: "/support/settings", icon: Settings },
 ];
 
@@ -45,7 +44,6 @@ export default function SupportLayout({ children, pageTitle, pageSubtitle, bread
     { label: t("support.tickets"),   to: "/support/tickets",  icon: Ticket },
     { label: t("support.chat"),      to: "/support/chat",     icon: MessageCircle },
     { label: t("support.users"),     to: "/support/users",    icon: Users },
-    { label: t("support.reports"),   to: "/support/reports",  icon: BarChart3 },
     { label: lang === "ar" ? "ملفي الشخصي" : "My Profile", to: "/support/profile", icon: User },
     { label: t("support.settings"),  to: "/support/settings", icon: Settings },
   ];
