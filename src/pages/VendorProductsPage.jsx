@@ -14,6 +14,7 @@ import {
   MinusCircle,
   ImagePlus,
   Info,
+  ChevronRight,
 } from "lucide-react";
 import VendorLayout from "../components/vendor/VendorLayout";
 import ProductImageManager from "../components/vendor/ProductImageManager";
@@ -110,14 +111,13 @@ function ProductModal({ product, options, onClose, onSave, onManageImages, onPub
         await onSave(formData);
       } else {
         // Edit flow (JSON) — include id so saveProduct routes to PATCH
+        // Note: status is NOT sent here — use Archive/Publish buttons for status changes
         const payload = {
           id: form.id,
           name: form.name,
-          description: form.description,
           basePrice: Math.round(parseFloat(form.basePrice || "0") * 100),
           categoryId: form.categoryId || undefined,
           gender: form.gender || undefined,
-          status: form.status || undefined,
           variants: form.variants.map(v => ({
             id: v.id || undefined,
             colorId: v.colorId || undefined,
@@ -127,6 +127,9 @@ function ProductModal({ product, options, onClose, onSave, onManageImages, onPub
             status: v.status || "active"
           }))
         };
+        if (form.description && form.description.trim().length >= 10) {
+          payload.description = form.description.trim();
+        }
         await onSave(payload);
       }
     } catch (err) {
@@ -369,6 +372,7 @@ export default function VendorProductsPage() {
   const [editProduct, setEditProduct] = useState(null);
   const [imgManager, setImgManager] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
     fetchOptions();
@@ -565,6 +569,7 @@ export default function VendorProductsPage() {
           <table className={p.table}>
             <thead>
               <tr>
+                <th style={{ width: 28 }}></th>
                 <th>Product</th>
                 <th>Category</th>
                 <th>Base Price</th>
@@ -577,10 +582,10 @@ export default function VendorProductsPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="8" className={p.skeleton} style={{ height: 100 }}></td></tr>
+                <tr><td colSpan="9" className={p.skeleton} style={{ height: 100 }}></td></tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan="8">
+                  <td colSpan="9">
                     <div className={p.emptyState}>
                       <div className={p.emptyIcon}><Package size={22} /></div>
                       <h3 className={p.emptyTitle}>No products found</h3>
@@ -588,39 +593,122 @@ export default function VendorProductsPage() {
                   </td>
                 </tr>
               ) : (
-                products.map((pr) => (
-                  <tr key={pr.id}>
-                    <td>
-                      <div className={p.productCell}>
-                        <div className={p.productThumb}>
-                          {pr.images?.[0] ? <img src={pr.images[0].s3Url || pr.images[0].url} alt="" /> : <ImageIcon size={16} />}
-                        </div>
-                        <span className={p.productName}>{pr.name}</span>
-                      </div>
-                    </td>
-                    <td><span className={`${p.badge} ${p.badgeDraft}`}>{pr.category?.name}</span></td>
-                    <td style={{ fontWeight: 700 }}>{formatPrice(pr.basePrice)}</td>
-                    <td>{pr.variants?.reduce((s, v) => s + v.physicalQuantity, 0) || 0}</td>
-                    <td style={{ fontWeight: 600, color: "var(--vdr-accent)" }}>{pr.totalSold || 0}</td>
-                    <td>{pr.popularityScore || 0}</td>
-                    <td>
-                      <span className={`${p.badge} ${STATUS_BADGE[pr.status] || p.badgeDraft}`}>
-                        <span className={p.badgeDot} />
-                        {pr.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className={p.actions}>
-                        <button className={`${p.actionBtn} ${p.edit}`} onClick={() => setEditProduct({ ...pr, basePrice: (pr.basePrice / 100).toFixed(2), variants: pr.variants?.map(v => ({ ...v, priceOverride: v.priceOverride ? (v.priceOverride / 100).toFixed(2) : "" })) || [] })}>
-                          <Pencil size={14} />
-                        </button>
-                        <button className={`${p.actionBtn} ${p.delete}`} onClick={() => setConfirmDelete(pr)}>
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                products.map((pr) => {
+                  const isExpanded = expandedId === pr.id;
+                  const primaryImg = pr.images?.find(i => i.isPrimary) || pr.images?.[0];
+                  return (
+                    <>
+                      <tr key={pr.id}>
+                        <td>
+                          <button
+                            className={p.expandBtn}
+                            title={isExpanded ? "Collapse variants" : "Expand variants"}
+                            onClick={() => setExpandedId(isExpanded ? null : pr.id)}
+                          >
+                            <span className={`${p.chevron} ${isExpanded ? p.chevronOpen : ""}`}>
+                              <ChevronRight size={15} />
+                            </span>
+                          </button>
+                        </td>
+                        <td>
+                          <div className={p.productCell}>
+                            <div className={p.productThumb}>
+                              {primaryImg ? <img src={primaryImg.s3Url || primaryImg.url} alt="" /> : <ImageIcon size={16} />}
+                            </div>
+                            <span className={p.productName}>{pr.name}</span>
+                          </div>
+                        </td>
+                        <td><span className={`${p.badge} ${p.badgeDraft}`}>{pr.category?.name}</span></td>
+                        <td style={{ fontWeight: 700 }}>{formatPrice(pr.basePrice)}</td>
+                        <td>{pr.variants?.reduce((s, v) => s + v.physicalQuantity, 0) || 0}</td>
+                        <td style={{ fontWeight: 600, color: "var(--vdr-accent)" }}>{pr.totalSold || 0}</td>
+                        <td>{pr.popularityScore || 0}</td>
+                        <td>
+                          <span className={`${p.badge} ${STATUS_BADGE[pr.status] || p.badgeDraft}`}>
+                            <span className={p.badgeDot} />
+                            {pr.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div className={p.actions}>
+                            <button className={`${p.actionBtn} ${p.edit}`} onClick={() => setEditProduct({ ...pr, basePrice: (pr.basePrice / 100).toFixed(2), variants: pr.variants?.map(v => ({ ...v, priceOverride: v.priceOverride ? (v.priceOverride / 100).toFixed(2) : "" })) || [] })}>
+                              <Pencil size={14} />
+                            </button>
+                            <button className={`${p.actionBtn} ${p.delete}`} onClick={() => setConfirmDelete(pr)}>
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${pr.id}-variants`} className={p.variantExpandRow}>
+                          <td colSpan="9">
+                            <div className={p.variantExpandInner}>
+                              {!pr.variants?.length ? (
+                                <p style={{ padding: "12px 16px", margin: 0, fontSize: 13, color: "var(--vdr-text-muted)" }}>No variants found.</p>
+                              ) : (
+                                <table className={p.variantSubTable}>
+                                  <thead>
+                                    <tr>
+                                      <th>Image</th>
+                                      <th>Color</th>
+                                      <th>Size</th>
+                                      <th>SKU</th>
+                                      <th>Physical Qty</th>
+                                      <th>Reserved</th>
+                                      <th>Available</th>
+                                      <th>Price</th>
+                                      <th>Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {pr.variants.map((v) => {
+                                      const variantImg = v.variantImageLinks?.[0]?.image?.s3Url || primaryImg?.s3Url || primaryImg?.url;
+                                      const available = (v.physicalQuantity || 0) - (v.reservedQuantity || 0);
+                                      const effectivePrice = v.priceOverride ?? pr.basePrice;
+                                      return (
+                                        <tr key={v.id}>
+                                          <td>
+                                            {variantImg ? (
+                                              <img src={variantImg} alt="" className={p.variantThumb} />
+                                            ) : (
+                                              <div className={p.variantThumbPlaceholder}><ImageIcon size={14} /></div>
+                                            )}
+                                          </td>
+                                          <td>
+                                            {v.color ? (
+                                              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                {v.color.hexCode && (
+                                                  <span className={p.variantColorDot} style={{ background: v.color.hexCode }} />
+                                                )}
+                                                {v.color.name}
+                                              </span>
+                                            ) : "—"}
+                                          </td>
+                                          <td>{v.size?.name || "—"}</td>
+                                          <td style={{ fontFamily: "monospace", fontSize: 11 }}>{v.sku || "—"}</td>
+                                          <td>{v.physicalQuantity ?? 0}</td>
+                                          <td>{v.reservedQuantity ?? 0}</td>
+                                          <td className={available <= 0 ? p.variantQtyLow : (available <= 5 ? p.variantQtyLow : p.variantQtyOk)}>{available}</td>
+                                          <td style={{ fontWeight: 600 }}>{formatPrice(effectivePrice)}</td>
+                                          <td>
+                                            <span className={`${p.badge} ${STATUS_BADGE[v.status] || p.badgeDraft}`} style={{ fontSize: 10 }}>
+                                              {v.status}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })
               )}
             </tbody>
           </table>

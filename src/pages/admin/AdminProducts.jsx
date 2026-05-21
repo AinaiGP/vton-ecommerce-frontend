@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Search, Package, X, Eye } from "lucide-react";
+import { Search, Package, X, Eye, ChevronRight } from "lucide-react";
 import AdminLayout from "../../components/admin/AdminLayout";
 import apiClient from "../../utils/apiClient";
 import { formatPrice } from "../../utils/formatPrice";
@@ -57,6 +57,7 @@ export default function AdminProducts() {
   const [statusFilter, setStatusFilter] = useState("");
 
   const [viewProduct, setViewProduct] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
   const [error, setError] = useState(null);
 
   const fetchProducts = useCallback(() => {
@@ -121,6 +122,7 @@ export default function AdminProducts() {
           <table className={t.table}>
             <thead>
               <tr>
+                <th style={{ width: 32 }}></th>
                 <th>#</th>
                 <th>Product</th>
                 <th>Brand</th>
@@ -135,12 +137,12 @@ export default function AdminProducts() {
               {loading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={8}><span className={`${t.skeleton} ${t.skeletonRow}`} /></td>
+                    <td colSpan={9}><span className={`${t.skeleton} ${t.skeletonRow}`} /></td>
                   </tr>
                 ))
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className={t.emptyState}>
                       <div className={t.emptyIcon}><Package size={24} /></div>
                       <h3 className={t.emptyTitle}>No products found</h3>
@@ -149,29 +151,131 @@ export default function AdminProducts() {
                   </td>
                 </tr>
               ) : (
-                products.map((p, i) => (
-                  <tr key={p.id}>
-                    <td>{(page - 1) * limit + i + 1}</td>
-                    <td>
-                      <div className={t.avatarCell}>
-                        <ProductImage url={p.images?.[0]?.url} name={p.name} />
-                        <span className={t.avatarName}>{p.name}</span>
-                      </div>
-                    </td>
-                    <td>{p.vendor?.brandName || "—"}</td>
-                    <td>{formatPrice(p.basePrice)}</td>
-                    <td>{p.totalSold}</td>
-                    <td><StatusBadge status={p.status} /></td>
-                    <td>{fmt(p.createdAt)}</td>
-                    <td>
-                      <div className={t.actions}>
-                        <button className={t.actionBtn} title="View" onClick={() => setViewProduct(p)}>
-                          <Eye size={15} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                products.map((p, i) => {
+                  const isExpanded = expandedId === p.id;
+                  const primaryImg = p.images?.find((img) => img.isPrimary) || p.images?.[0];
+                  return (
+                    <>
+                      <tr key={p.id}>
+                        <td>
+                          {p.variants?.length > 0 && (
+                            <button
+                              className={t.expandBtn}
+                              onClick={() => setExpandedId(isExpanded ? null : p.id)}
+                              title={isExpanded ? "Collapse variants" : "Expand variants"}
+                            >
+                              <ChevronRight
+                                size={15}
+                                className={`${t.chevron} ${isExpanded ? t.chevronOpen : ""}`}
+                              />
+                            </button>
+                          )}
+                        </td>
+                        <td>{(page - 1) * limit + i + 1}</td>
+                        <td>
+                          <div className={t.avatarCell}>
+                            <ProductImage url={primaryImg?.url || primaryImg?.s3Url} name={p.name} />
+                            <span className={t.avatarName}>{p.name}</span>
+                          </div>
+                        </td>
+                        <td>{p.vendor?.brandName || "—"}</td>
+                        <td>{formatPrice(p.basePrice)}</td>
+                        <td>{p.totalSold}</td>
+                        <td><StatusBadge status={p.status} /></td>
+                        <td>{fmt(p.createdAt)}</td>
+                        <td>
+                          <div className={t.actions}>
+                            <button className={t.actionBtn} title="View" onClick={() => setViewProduct(p)}>
+                              <Eye size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${p.id}-variants`} className={t.variantExpandRow}>
+                          <td colSpan={9}>
+                            <div className={t.variantExpandInner}>
+                              <table className={t.variantSubTable}>
+                                <thead>
+                                  <tr>
+                                    <th>Image</th>
+                                    <th>Color</th>
+                                    <th>Size</th>
+                                    <th>SKU</th>
+                                    <th>Physical</th>
+                                    <th>Reserved</th>
+                                    <th>Available</th>
+                                    <th>Price</th>
+                                    <th>Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {p.variants.map((v) => {
+                                    const variantImg =
+                                      v.variantImageLinks?.[0]?.image?.s3Url ||
+                                      primaryImg?.s3Url ||
+                                      primaryImg?.url;
+                                    const effectivePrice = v.priceOverride ?? p.basePrice;
+                                    const available =
+                                      v.availableQuantity ??
+                                      (v.physicalQuantity ?? 0) - (v.reservedQuantity ?? 0);
+                                    return (
+                                      <tr key={v.id}>
+                                        <td>
+                                          {variantImg ? (
+                                            <img
+                                              src={variantImg}
+                                              alt={v.sku || "variant"}
+                                              className={t.variantThumb}
+                                            />
+                                          ) : (
+                                            <div className={t.variantThumbPlaceholder}>
+                                              <Package size={12} />
+                                            </div>
+                                          )}
+                                        </td>
+                                        <td>
+                                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                            {v.color?.hexCode && (
+                                              <span
+                                                className={t.variantColorDot}
+                                                style={{ background: v.color.hexCode }}
+                                              />
+                                            )}
+                                            {v.color?.name || "—"}
+                                          </div>
+                                        </td>
+                                        <td>{v.size?.name || "—"}</td>
+                                        <td>{v.sku || "—"}</td>
+                                        <td>
+                                          <span className={v.physicalQuantity > 0 ? t.variantQtyOk : t.variantQtyLow}>
+                                            {v.physicalQuantity ?? 0}
+                                          </span>
+                                        </td>
+                                        <td>{v.reservedQuantity ?? 0}</td>
+                                        <td>
+                                          <span className={available > 0 ? t.variantQtyOk : t.variantQtyLow}>
+                                            {available}
+                                          </span>
+                                        </td>
+                                        <td>{formatPrice(effectivePrice)}</td>
+                                        <td>
+                                          <span className={`${t.badge} ${STATUS_CLASS[v.status] || t.badgeDraft}`}>
+                                            {v.status || "—"}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })
               )}
             </tbody>
           </table>

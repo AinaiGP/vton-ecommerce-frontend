@@ -61,18 +61,20 @@ function extractLegacyAttachment(content) {
 }
 
 const mapReturnTicket = (item) => ({
-  id: item.ticket?.id || item.id, // Support messaging needs ticketId
-  ticketId: item.ticket?.id,
-  orderItemId: item.id,
+  // item may be an OrderItem (from /vendors/orders/return-requests) or a Ticket (from /vendors/support/tickets/:id)
+  id: item.ticket?.id || item.id,
+  ticketId: item.ticket?.id || (item.type === "RETURN_REQUEST" ? item.id : undefined),
+  orderItemId: item.orderItemIds?.[0] || item.id,
   orderNumber: item.order?.orderNumber || "...",
   customer: item.order?.shippingName || "Customer",
-  product: item.productName || "Product",
+  product: item.productName || (item.subject?.replace("Return request for ", "") || "Product"),
   reason: item.returnReason || item.ticket?.returnReason || "No reason provided",
-  status: item.returnStatus || item.ticket?.returnStatus || "pending",
+  status: item.returnStatus || item.ticket?.returnStatus || "REQUESTED",
   date: item.returnRequestedAt || item.ticket?.createdAt || item.createdAt,
-  messages: item.ticket?.messages || [],
-  amount: (item.lineTotal / 100),
-  quantity: item.quantity,
+  // messages may be on item directly (Ticket) or nested (OrderItem with joined Ticket)
+  messages: item.messages || item.ticket?.messages || [],
+  amount: item.lineTotal ? (item.lineTotal / 100) : 0,
+  quantity: item.returnQuantity || item.quantity,
 });
 
 function AttachmentList({ attachments, onImageClick }) {
@@ -138,6 +140,20 @@ export default function VendorRefundsPage() {
     }
   }, [selected?.messages, view]);
 
+  useEffect(() => {
+    if (view === "detail" && selected?.ticketId) {
+      apiClient
+        .get(`/vendors/support/tickets/${selected.ticketId}`)
+        .then((res) => {
+          setSelected((prev) => ({
+            ...prev,
+            messages: res.data?.messages || [],
+          }));
+        })
+        .catch(() => {});
+    }
+  }, [view, selected?.ticketId]);
+
   const fetchRefunds = async () => {
     setLoading(true);
     try {
@@ -182,7 +198,10 @@ export default function VendorRefundsPage() {
       setReplyText("");
       setReplyFile(null);
       const updatedRes = await apiClient.get(`/vendors/support/tickets/${selected.id}`);
-      setSelected(mapReturnTicket(updatedRes.data));
+      setSelected((prev) => ({
+        ...prev,
+        messages: updatedRes.data?.messages || [],
+      }));
     } catch (err) {
       console.error("Failed to reply", err);
       showToast("Failed to send message.", false);
@@ -409,7 +428,7 @@ export default function VendorRefundsPage() {
                   <p style={{ fontSize: 13, color: "var(--vdr-text-muted)", textAlign: "center", margin: 0 }}>No messages yet.</p>
                 ) : (
                   selected.messages.map((msg) => {
-                    const isVendor = msg.senderType === "VENDOR" || msg.senderType === "vendor";
+                    const isVendor = msg.senderRole === "VENDOR" || msg.senderRole === "vendor";
                     const { text, urls } = extractLegacyAttachment(msg.content);
                     return (
                       <div key={msg.id} style={{ display: "flex", flexDirection: "column", alignItems: isVendor ? "flex-end" : "flex-start" }}>

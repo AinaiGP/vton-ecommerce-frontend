@@ -1306,3 +1306,106 @@
   flex-shrink: 0;
   border: 2px solid var(--vdr-border);
 }
+
+/* ── Expandable product row ── */
+.expandBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--vdr-text-muted);
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+.expandBtn:hover {
+  color: var(--vdr-accent);
+}
+.chevron {
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+.chevronOpen {
+  transform: rotate(90deg);
+}
+.variantExpandRow td {
+  padding: 0 !important;
+  border: none !important;
+}
+.variantExpandInner {
+  background: #f8fafc;
+  border-top: 1px solid var(--vdr-border);
+  border-bottom: 2px solid var(--vdr-accent);
+  padding: 0 0 4px 0;
+  overflow: hidden;
+  animation: variantExpand 0.18s ease;
+}
+@keyframes variantExpand {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.variantSubTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.variantSubTable thead tr {
+  background: #eef2f7;
+}
+.variantSubTable thead th {
+  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--vdr-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--vdr-border);
+}
+.variantSubTable tbody tr:hover {
+  background: #eef2f7;
+}
+.variantSubTable tbody td {
+  padding: 7px 12px;
+  color: var(--vdr-text);
+  border-bottom: 1px solid #e8edf3;
+  white-space: nowrap;
+}
+.variantSubTable tbody tr:last-child td {
+  border-bottom: none;
+}
+.variantThumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--vdr-border);
+}
+.variantThumbPlaceholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vdr-text-muted);
+}
+.variantColorDot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid #ccc;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.variantQtyLow {
+  color: #dc2626;
+  font-weight: 700;
+}
+.variantQtyOk {
+  color: #16a34a;
+  font-weight: 600;
+}
