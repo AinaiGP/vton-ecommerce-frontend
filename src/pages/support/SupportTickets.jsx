@@ -693,16 +693,17 @@ export default function SupportTickets() {
               <div className={p.metaCard}>
                 <div className={p.metaHead}>Quick Actions</div>
                 <div className={p.metaBody}>
-                  {!selected._raw?.assigneeId && (
-                    <button
-                      className={`${p.btn} ${p.btnOutline}`}
-                      style={{ width: "100%" }}
-                      onClick={handleClaim}
-                      disabled={actionLoading}
-                    >
-                      <ArrowUpRight size={14} /> Claim Ticket
-                    </button>
-                  )}
+                  {!selected._raw?.assigneeId &&
+                    selected._raw?.status !== "ESCALATED" && (
+                      <button
+                        className={`${p.btn} ${p.btnOutline}`}
+                        style={{ width: "100%" }}
+                        onClick={handleClaim}
+                        disabled={actionLoading}
+                      >
+                        <ArrowUpRight size={14} /> Claim Ticket
+                      </button>
+                    )}
                   <button
                     className={`${p.btn} ${p.btnPrimary}`}
                     style={{ width: "100%" }}

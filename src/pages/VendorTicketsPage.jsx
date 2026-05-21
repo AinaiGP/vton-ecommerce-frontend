@@ -63,15 +63,43 @@ function extractLegacyAttachment(content) {
   return { text: cleaned || "Attachment", urls: [match[1]] };
 }
 
+function senderRoleLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin": return "Admin";
+    case "technical_support": return "Support";
+    case "vendor": return "Vendor";
+    case "customer": return "Customer";
+    default: return "Support";
+  }
+}
+
+function getInitials(name) {
+  if (!name) return "S";
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase()).join("") || "S";
+}
+
+function supportAvatarColor(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin": return "var(--vdr-accent)";
+    case "technical_support": return "#0369a1";
+    default: return "#4f46e5";
+  }
+}
+
 function mapTicket(ticket) {
   const messages = (ticket.messages || []).map((m) => {
     const legacy = extractLegacyAttachment(m.content);
     const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
       Boolean,
     );
+    const senderRole = String(m.senderRole || "").toLowerCase();
+    const sender = m.sender || null;
+    const senderName = sender?.name || sender?.email || senderRoleLabel(senderRole);
+    const senderAvatar = sender?.avatarUrl || null;
 
     return {
-      from: m.senderRole === "VENDOR" ? "me" : "support",
+      from: senderRole === "vendor" ? "me" : "support",
       text: legacy.text || m.content,
       time: new Date(m.createdAt).toLocaleString("en-US", {
         month: "short",
@@ -84,6 +112,9 @@ function mapTicket(ticket) {
         name: url.split("/").pop() || "Attachment",
         isImage: isImageUrl(url),
       })),
+      senderName,
+      senderRole,
+      senderAvatar,
     };
   });
 
@@ -921,6 +952,9 @@ export default function VendorTicketsPage() {
 
               {selected.messages?.map((msg, idx) => {
                 const isMe = msg.from === "me";
+                const avatarBg = isMe
+                  ? "var(--vdr-accent)"
+                  : supportAvatarColor(msg.senderRole);
                 return (
                   <div
                     key={idx}
@@ -928,77 +962,144 @@ export default function VendorTicketsPage() {
                       alignSelf: isMe ? "flex-end" : "flex-start",
                       maxWidth: "75%",
                       display: "flex",
-                      flexDirection: "column",
-                      alignItems: isMe ? "flex-end" : "flex-start",
+                      flexDirection: isMe ? "row-reverse" : "row",
+                      alignItems: "flex-end",
+                      gap: 8,
                     }}
                   >
+                    {/* Avatar */}
                     <div
                       style={{
-                        padding: "12px 16px",
-                        borderRadius: isMe
-                          ? "18px 18px 2px 18px"
-                          : "18px 18px 18px 2px",
-                        background: isMe ? "var(--vdr-accent)" : "white",
-                        color: isMe ? "white" : "var(--vdr-text)",
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.04)",
-                        border: isMe ? "none" : "1px solid var(--vdr-border)",
-                        position: "relative",
+                        width: 30,
+                        height: 30,
+                        borderRadius: "50%",
+                        background: avatarBg,
+                        color: "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        flexShrink: 0,
+                        overflow: "hidden",
                       }}
                     >
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: 14,
-                          lineHeight: 1.5,
-                          whiteSpace: "pre-wrap",
-                        }}
-                      >
-                        {msg.text}
-                      </p>
-                      {msg.attachments?.length > 0 && (
-                        <div className={p.ticketAttachmentList}>
-                          {msg.attachments.map((att) =>
-                            att.isImage ? (
-                              <div
-                                key={att.url}
-                                className={p.ticketAttachmentImageLink}
-                                onClick={() => setFullscreenImage(att.url)}
-                                style={{ cursor: "zoom-in" }}
-                              >
-                                <img
-                                  src={att.url}
-                                  alt={att.name}
-                                  className={p.ticketAttachmentImage}
-                                />
-                              </div>
-                            ) : (
-                              <a
-                                key={att.url}
-                                href={att.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={p.ticketAttachmentFile}
-                              >
-                                <FileText size={14} />
-                                <span className={p.ticketAttachmentName}>
-                                  {att.name}
-                                </span>
-                              </a>
-                            )
-                          )}
-                        </div>
+                      {msg.senderAvatar ? (
+                        <img
+                          src={msg.senderAvatar}
+                          alt={msg.senderName}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : (
+                        getInitials(isMe ? "Me" : msg.senderName)
                       )}
                     </div>
-                    <span
+
+                    <div
                       style={{
-                        fontSize: 10,
-                        color: "var(--vdr-text-muted)",
-                        marginTop: 6,
-                        padding: "0 4px",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: isMe ? "flex-end" : "flex-start",
                       }}
                     >
-                      {isMe ? "You" : "Support Agent"} • {msg.time}
-                    </span>
+                      {/* Sender name */}
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: "var(--vdr-text-muted)",
+                          marginBottom: 3,
+                        }}
+                      >
+                        {isMe ? "You" : msg.senderName}
+                        {!isMe && (
+                          <span
+                            style={{
+                              marginLeft: 5,
+                              fontSize: 9.5,
+                              fontWeight: 600,
+                              padding: "1px 5px",
+                              borderRadius: 4,
+                              background: "#dbeafe",
+                              color: "#1d4ed8",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.03em",
+                            }}
+                          >
+                            {senderRoleLabel(msg.senderRole)}
+                          </span>
+                        )}
+                      </span>
+
+                      {/* Bubble */}
+                      <div
+                        style={{
+                          padding: "12px 16px",
+                          borderRadius: isMe
+                            ? "18px 18px 2px 18px"
+                            : "18px 18px 18px 2px",
+                          background: isMe ? "var(--vdr-accent)" : "white",
+                          color: isMe ? "white" : "var(--vdr-text)",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.04)",
+                          border: isMe ? "none" : "1px solid var(--vdr-border)",
+                        }}
+                      >
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 14,
+                            lineHeight: 1.5,
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {msg.text}
+                        </p>
+                        {msg.attachments?.length > 0 && (
+                          <div className={p.ticketAttachmentList}>
+                            {msg.attachments.map((att) =>
+                              att.isImage ? (
+                                <div
+                                  key={att.url}
+                                  className={p.ticketAttachmentImageLink}
+                                  onClick={() => setFullscreenImage(att.url)}
+                                  style={{ cursor: "zoom-in" }}
+                                >
+                                  <img
+                                    src={att.url}
+                                    alt={att.name}
+                                    className={p.ticketAttachmentImage}
+                                  />
+                                </div>
+                              ) : (
+                                <a
+                                  key={att.url}
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={p.ticketAttachmentFile}
+                                >
+                                  <FileText size={14} />
+                                  <span className={p.ticketAttachmentName}>
+                                    {att.name}
+                                  </span>
+                                </a>
+                              ),
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Timestamp */}
+                      <span
+                        style={{
+                          fontSize: 10,
+                          color: "var(--vdr-text-muted)",
+                          marginTop: 4,
+                        }}
+                      >
+                        {msg.time}
+                      </span>
+                    </div>
                   </div>
                 );
               })}

@@ -73,6 +73,21 @@ function roleLabel(role) {
   }
 }
 
+function roleAvatarColor(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin":
+      return "var(--adm-accent)";
+    case "technical_support":
+      return "#0369a1";
+    case "vendor":
+      return "#d97706";
+    case "customer":
+      return "#7c3aed";
+    default:
+      return "#64748b";
+  }
+}
+
 function shortId(value) {
   if (!value) return "—";
   return `${String(value).slice(0, 8)}…`;
@@ -240,7 +255,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
   }, [ticket.messages]);
 
   const isTerminal = TERMINAL_STATUSES.includes(ticket.status);
-  const canClaim = ticket.status === "ESCALATED" && !ticket.assigneeId;
+  const canClaim = ticket.status === "ESCALATED";
   const canResolve = !isTerminal && ticket.status !== "PENDING";
   const canClose = !isTerminal;
 
@@ -305,12 +320,40 @@ function TicketChatModal({ ticket, onClose, onAction }) {
     }
   };
 
+  const participants = [
+    ticket.creatorId
+      ? {
+          label: "Creator",
+          role: roleLabel(ticket.creatorRole),
+          userId: ticket.creatorId,
+          entityId: ticket.creator?.entityId,
+        }
+      : null,
+    ticket.counterpartyId
+      ? {
+          label: "Counterparty",
+          role: roleLabel(ticket.counterpartyRole),
+          userId: ticket.counterpartyId,
+          entityId: ticket.counterparty?.entityId,
+        }
+      : null,
+    ticket.assigneeId
+      ? {
+          label: "Assignee",
+          role: roleLabel(ticket.assigneeRole),
+          userId: ticket.assigneeId,
+          entityId: ticket.assignee?.entityId,
+        }
+      : null,
+  ].filter(Boolean);
+
   return (
     <div className={t.modalBackdrop} onClick={onClose}>
       <div
-        className={`${t.modal} ${t.modalLg} ${t.ticketChatModal}`}
+        className={`${t.modal} ${t.ticketSplitModal}`}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Header */}
         <div className={t.modalHead}>
           <div className={t.ticketChatHeadInfo}>
             <h2 className={t.modalTitle}>{ticket.subject}</h2>
@@ -321,224 +364,293 @@ function TicketChatModal({ ticket, onClose, onAction }) {
                 {ticket.typeLabel} · {ticket.createdAt}
               </span>
             </div>
-            <div className={t.ticketChatMeta}>
-              {[
-                {
-                  label: `Creator (${roleLabel(ticket.creatorRole)})`,
-                  userId: ticket.creatorId,
-                  entityId: ticket.creator?.entityId,
-                },
-                ticket.counterpartyId && {
-                  label: `Counterparty (${roleLabel(ticket.counterpartyRole)})`,
-                  userId: ticket.counterpartyId,
-                  entityId: ticket.counterparty?.entityId,
-                },
-                ticket.assigneeId && {
-                  label: `Assignee (${roleLabel(ticket.assigneeRole)})`,
-                  userId: ticket.assigneeId,
-                  entityId: ticket.assignee?.entityId,
-                },
-              ]
-                .filter(Boolean)
-                .map((item) => {
-                  const title = `user: ${item.userId || "—"}\nprofile: ${item.entityId || "—"}`;
-                  const label = `${item.label} · user:${shortId(item.userId)}${item.entityId ? ` · profile:${shortId(item.entityId)}` : ""}`;
-                  return (
-                    <span
-                      key={item.label}
-                      className={t.ticketIdPill}
-                      title={title}
+          </div>
+          <button className={t.modalClose} onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Split body */}
+        <div className={t.ticketSplitBody}>
+          {/* Left: Conversation */}
+          <div className={t.ticketSplitMain}>
+            <div className={t.ticketChatArea}>
+              <div className={t.ticketSysEvent}>
+                <span>Ticket opened · {ticket.createdAt}</span>
+              </div>
+              {ticket.messages.map((msg, i) => {
+                const isAdminMsg = msg.from === "admin";
+                const avatarBg = roleAvatarColor(msg.senderRole);
+                return (
+                  <div
+                    key={i}
+                    className={`${t.ticketMsgRow} ${isAdminMsg ? t.ticketMsgRight : t.ticketMsgLeft}`}
+                  >
+                    {!isAdminMsg && (
+                      <div
+                        className={t.ticketMsgAvatar}
+                        style={{ background: avatarBg }}
+                      >
+                        {msg.senderAvatar ? (
+                          <img
+                            src={msg.senderAvatar}
+                            alt={msg.senderName}
+                            className={t.ticketAvatarImg}
+                          />
+                        ) : (
+                          getInitials(msg.senderName)
+                        )}
+                      </div>
+                    )}
+                    <div
+                      className={`${t.ticketBubble} ${isAdminMsg ? t.ticketBubbleAdmin : t.ticketBubbleUser}`}
                     >
-                      {label}
-                    </span>
-                  );
-                })}
-            </div>
-          </div>
-          <div className={t.ticketChatActions}>
-            {canClaim && (
-              <button
-                className={`${t.btn} ${t.btnOutline} ${t.btnSm}`}
-                onClick={handleClaim}
-                disabled={actionLoading}
-              >
-                <Shield size={13} /> Claim
-              </button>
-            )}
-            {showResolve ? (
-              <>
-                <button
-                  className={`${t.btn} ${t.btnOutline} ${t.btnSm}`}
-                  onClick={() => setShowResolve(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className={`${t.btn} ${t.btnPrimary} ${t.btnSm}`}
-                  onClick={handleResolve}
-                  disabled={actionLoading}
-                >
-                  <CheckCircle size={13} />
-                  {actionLoading ? "Resolving…" : "Confirm Resolve"}
-                </button>
-              </>
-            ) : (
-              canResolve && (
-                <button
-                  className={`${t.btn} ${t.btnOutline} ${t.btnSm}`}
-                  onClick={() => setShowResolve(true)}
-                >
-                  <CheckCircle size={13} /> Resolve
-                </button>
-              )
-            )}
-            {canClose && !showResolve && (
-              <button
-                className={`${t.btn} ${t.btnDanger} ${t.btnSm}`}
-                onClick={handleClose}
-                disabled={actionLoading}
-              >
-                <XCircle size={13} />
-                {actionLoading ? "Closing…" : "Force Close"}
-              </button>
-            )}
-            <button className={t.modalClose} onClick={onClose}>
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-
-        {showResolve && (
-          <div className={t.ticketResolveBar}>
-            <input
-              className={t.input}
-              placeholder="Resolution note (optional)…"
-              value={resolveNote}
-              onChange={(e) => setResolveNote(e.target.value)}
-            />
-          </div>
-        )}
-
-        <div className={t.ticketChatArea}>
-          <div className={t.ticketSysEvent}>
-            <span>Ticket opened · {ticket.createdAt}</span>
-          </div>
-          {ticket.messages.map((msg, i) => {
-            const isAdmin = msg.from === "admin";
-            return (
-              <div
-                key={i}
-                className={`${t.ticketMsgRow} ${isAdmin ? t.ticketMsgRight : t.ticketMsgLeft}`}
-              >
-                {!isAdmin && (
-                  <div
-                    className={t.ticketMsgAvatar}
-                    style={{ background: "#4f46e5" }}
-                  >
-                    {msg.senderAvatar ? (
-                      <img
-                        src={msg.senderAvatar}
-                        alt={msg.senderName}
-                        className={t.ticketAvatarImg}
-                      />
-                    ) : (
-                      getInitials(msg.senderName)
+                      <div className={t.ticketSenderLabel}>
+                        {msg.senderName}
+                        <span
+                          className={t.ticketSenderRole}
+                          data-role={msg.senderRole}
+                        >
+                          {roleLabel(msg.senderRole)}
+                        </span>
+                      </div>
+                      <p className={t.ticketBubbleText}>{msg.text}</p>
+                      <AttachmentList attachments={msg.attachments} />
+                      <span className={t.ticketBubbleTime}>{msg.time}</span>
+                    </div>
+                    {isAdminMsg && (
+                      <div
+                        className={t.ticketMsgAvatar}
+                        style={{ background: avatarBg }}
+                      >
+                        {msg.senderAvatar ? (
+                          <img
+                            src={msg.senderAvatar}
+                            alt={msg.senderName}
+                            className={t.ticketAvatarImg}
+                          />
+                        ) : (
+                          getInitials(msg.senderName)
+                        )}
+                      </div>
                     )}
+                  </div>
+                );
+              })}
+              <div ref={bottomRef} />
+            </div>
+
+            {!isTerminal ? (
+              <form className={t.ticketReplyBox} onSubmit={handleSend}>
+                {file && (
+                  <div className={t.ticketFileChip}>
+                    <Paperclip size={12} />
+                    <span>{file.name}</span>
+                    <button type="button" onClick={() => setFile(null)}>
+                      <X size={11} />
+                    </button>
                   </div>
                 )}
-                <div
-                  className={`${t.ticketBubble} ${isAdmin ? t.ticketBubbleAdmin : t.ticketBubbleUser}`}
-                >
-                  <div className={t.ticketSenderLabel}>
-                    {msg.senderName}
-                    {msg.senderId && (
-                      <span className={t.ticketSenderId} title={msg.senderId}>
-                        {shortId(msg.senderId)}
-                      </span>
-                    )}
-                  </div>
-                  <p className={t.ticketBubbleText}>{msg.text}</p>
-                  <AttachmentList attachments={msg.attachments} />
-                  <span className={t.ticketBubbleTime}>{msg.time}</span>
+                <div className={t.ticketReplyRow}>
+                  <button
+                    type="button"
+                    className={t.ticketAttachBtn}
+                    onClick={() => fileRef.current?.click()}
+                    title="Attach image"
+                  >
+                    <Paperclip size={16} />
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileRef}
+                    style={{ display: "none" }}
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={(e) => setFile(e.target.files[0] || null)}
+                  />
+                  <textarea
+                    className={t.ticketReplyInput}
+                    rows={2}
+                    placeholder="Reply as Admin…"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend(e);
+                      }
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    className={t.ticketSendBtn}
+                    disabled={(!text.trim() && !file) || sending}
+                  >
+                    <Send size={15} />
+                  </button>
                 </div>
-                {isAdmin && (
-                  <div
-                    className={t.ticketMsgAvatar}
-                    style={{ background: "var(--adm-accent)" }}
-                  >
-                    {msg.senderAvatar ? (
-                      <img
-                        src={msg.senderAvatar}
-                        alt={msg.senderName}
-                        className={t.ticketAvatarImg}
-                      />
-                    ) : (
-                      getInitials(msg.senderName)
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          <div ref={bottomRef} />
-        </div>
-
-        {!isTerminal ? (
-          <form className={t.ticketReplyBox} onSubmit={handleSend}>
-            {file && (
-              <div className={t.ticketFileChip}>
-                <Paperclip size={12} />
-                <span>{file.name}</span>
-                <button type="button" onClick={() => setFile(null)}>
-                  <X size={11} />
-                </button>
+              </form>
+            ) : (
+              <div className={t.ticketClosedBanner}>
+                <CheckCircle size={14} />
+                This ticket is{" "}
+                {STATUS_CFG[ticket.status]?.label?.toLowerCase() || "closed"}.
               </div>
             )}
-            <div className={t.ticketReplyRow}>
-              <button
-                type="button"
-                className={t.ticketAttachBtn}
-                onClick={() => fileRef.current?.click()}
-                title="Attach image"
-              >
-                <Paperclip size={16} />
-              </button>
-              <input
-                type="file"
-                ref={fileRef}
-                style={{ display: "none" }}
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onChange={(e) => setFile(e.target.files[0] || null)}
-              />
-              <textarea
-                className={t.ticketReplyInput}
-                rows={2}
-                placeholder="Reply as Admin…"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend(e);
-                  }
-                }}
-              />
-              <button
-                type="submit"
-                className={t.ticketSendBtn}
-                disabled={(!text.trim() && !file) || sending}
-              >
-                <Send size={15} />
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className={t.ticketClosedBanner}>
-            <CheckCircle size={14} />
-            This ticket is{" "}
-            {STATUS_CFG[ticket.status]?.label?.toLowerCase() || "closed"}.
           </div>
-        )}
+
+          {/* Right: Metadata sidebar */}
+          <div className={t.ticketSplitSide}>
+            {/* Ticket Details */}
+            <div className={t.ticketMetaCard}>
+              <div className={t.ticketMetaHead}>Ticket Details</div>
+              <div className={t.ticketMetaBody}>
+                {[
+                  ["Status", <StatusBadge key="s" status={ticket.status} />],
+                  [
+                    "Priority",
+                    ticket.priority ? (
+                      <PriorityBadge key="p" priority={ticket.priority} />
+                    ) : (
+                      <span key="p" style={{ color: "#94a3b8", fontSize: 12 }}>
+                        —
+                      </span>
+                    ),
+                  ],
+                  [
+                    "Type",
+                    <span
+                      key="tp"
+                      style={{ fontSize: 12, color: "var(--adm-text-muted)" }}
+                    >
+                      {ticket.typeLabel}
+                    </span>,
+                  ],
+                  [
+                    "Created",
+                    <span
+                      key="cr"
+                      style={{ fontSize: 12, color: "var(--adm-text-muted)" }}
+                    >
+                      {ticket.createdAt}
+                    </span>,
+                  ],
+                ].map(([label, val]) => (
+                  <div key={label} className={t.ticketMetaRow}>
+                    <span className={t.ticketMetaLabel}>{label}</span>
+                    {val}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Participants with full IDs */}
+            {participants.length > 0 && (
+              <div className={t.ticketMetaCard}>
+                <div className={t.ticketMetaHead}>Participants</div>
+                <div className={t.ticketMetaBody}>
+                  {participants.map((p) => (
+                    <div key={p.label} className={t.ticketParticipantEntry}>
+                      <span className={t.ticketParticipantTitle}>
+                        {p.label}{" "}
+                        <span className={t.ticketParticipantRole}>
+                          {p.role}
+                        </span>
+                      </span>
+                      <div className={t.ticketParticipantIdRow}>
+                        <span className={t.ticketParticipantIdKey}>user</span>
+                        <span
+                          className={t.ticketParticipantIdVal}
+                          title={p.userId}
+                        >
+                          {p.userId || "—"}
+                        </span>
+                      </div>
+                      {p.entityId && (
+                        <div className={t.ticketParticipantIdRow}>
+                          <span className={t.ticketParticipantIdKey}>
+                            profile
+                          </span>
+                          <span
+                            className={t.ticketParticipantIdVal}
+                            title={p.entityId}
+                          >
+                            {p.entityId}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quick Actions */}
+            {!isTerminal && (
+              <div className={t.ticketMetaCard}>
+                <div className={t.ticketMetaHead}>Quick Actions</div>
+                <div className={t.ticketMetaBody}>
+                  {canClaim && (
+                    <button
+                      className={`${t.btn} ${t.btnOutline}`}
+                      style={{ width: "100%" }}
+                      onClick={handleClaim}
+                      disabled={actionLoading}
+                    >
+                      <Shield size={14} />
+                      {actionLoading ? "Claiming…" : "Claim Ticket"}
+                    </button>
+                  )}
+                  {!showResolve && canResolve && (
+                    <button
+                      className={`${t.btn} ${t.btnOutline}`}
+                      style={{ width: "100%" }}
+                      onClick={() => setShowResolve(true)}
+                    >
+                      <CheckCircle size={14} /> Resolve
+                    </button>
+                  )}
+                  {showResolve && (
+                    <>
+                      <input
+                        className={t.input}
+                        placeholder="Resolution note (optional)…"
+                        value={resolveNote}
+                        onChange={(e) => setResolveNote(e.target.value)}
+                      />
+                      <button
+                        className={`${t.btn} ${t.btnPrimary}`}
+                        style={{ width: "100%" }}
+                        onClick={handleResolve}
+                        disabled={actionLoading}
+                      >
+                        <CheckCircle size={14} />
+                        {actionLoading ? "Resolving…" : "Confirm Resolve"}
+                      </button>
+                      <button
+                        className={`${t.btn} ${t.btnOutline}`}
+                        style={{ width: "100%" }}
+                        onClick={() => setShowResolve(false)}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                  {canClose && !showResolve && (
+                    <button
+                      className={`${t.btn} ${t.btnDanger}`}
+                      style={{ width: "100%" }}
+                      onClick={handleClose}
+                      disabled={actionLoading}
+                    >
+                      <XCircle size={14} />
+                      {actionLoading ? "Closing…" : "Force Close"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

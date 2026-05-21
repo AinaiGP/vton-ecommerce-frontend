@@ -64,6 +64,30 @@ function extractLegacyAttachment(content) {
   return { text: cleaned || "Attachment", urls: [match[1]] };
 }
 
+function senderRoleLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin": return "Admin";
+    case "technical_support": return "Support";
+    case "vendor": return "Vendor";
+    case "customer": return "Customer";
+    default: return "Support";
+  }
+}
+
+function getInitials(name) {
+  if (!name) return "S";
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase()).join("") || "S";
+}
+
+function supportAvatarColor(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin": return "var(--burgundy, #4f46e5)";
+    case "technical_support": return "#0369a1";
+    default: return "#4f46e5";
+  }
+}
+
 /* ─── Map a backend ticket to UI ─── */
 function mapTicket(ticket) {
   const messages = (ticket.messages || [])
@@ -78,12 +102,14 @@ function mapTicket(ticket) {
         name: url.split("/").pop() || "Attachment",
         isImage: isImageUrl(url),
       }));
+      const senderRole = String(m.senderRole || "").toLowerCase();
+      const sender = m.sender || null;
+      const senderName =
+        sender?.name || sender?.email || senderRoleLabel(senderRole);
+      const senderAvatar = sender?.avatarUrl || null;
 
       return {
-        from:
-          String(m.senderRole || "").toUpperCase() === "CUSTOMER"
-            ? "customer"
-            : "support",
+        from: senderRole === "customer" ? "customer" : "support",
         text: legacy.text || m.content,
         time: new Date(m.createdAt).toLocaleString("en-US", {
           month: "short",
@@ -92,6 +118,9 @@ function mapTicket(ticket) {
           minute: "2-digit",
         }),
         attachments,
+        senderName,
+        senderRole,
+        senderAvatar,
       };
     });
 
@@ -525,6 +554,9 @@ function TicketDetail({ ticket, onBack, onReply, onCancel, onImageClick }) {
         </div>
         {ticket.messages.map((msg, i) => {
           const isMe = msg.from === "customer";
+          const avatarBg = isMe
+            ? "var(--burgundy, #7c3aed)"
+            : supportAvatarColor(msg.senderRole);
           return (
             <div
               key={i}
@@ -533,14 +565,56 @@ function TicketDetail({ ticket, onBack, onReply, onCancel, onImageClick }) {
               {!isMe && (
                 <div
                   className={styles.msgAvatar}
-                  style={{ background: "#4f46e5" }}
+                  style={{ background: avatarBg }}
                 >
-                  <Headphones size={14} />
+                  {msg.senderAvatar ? (
+                    <img
+                      src={msg.senderAvatar}
+                      alt={msg.senderName}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                  ) : (
+                    getInitials(msg.senderName)
+                  )}
                 </div>
               )}
               <div
                 className={`${styles.bubble} ${isMe ? styles.bubbleCustomer : styles.bubbleSupport}`}
               >
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    marginBottom: 4,
+                    opacity: 0.75,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                  }}
+                >
+                  {isMe ? "You" : msg.senderName}
+                  {!isMe && (
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        padding: "1px 5px",
+                        borderRadius: 4,
+                        background: "rgba(0,0,0,0.08)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.03em",
+                      }}
+                    >
+                      {senderRoleLabel(msg.senderRole)}
+                    </span>
+                  )}
+                </div>
                 <p className={styles.bubbleText}>{msg.text}</p>
                 <AttachmentList attachments={msg.attachments} onImageClick={onImageClick} />
                 <span className={styles.bubbleTime}>{msg.time}</span>
@@ -548,7 +622,7 @@ function TicketDetail({ ticket, onBack, onReply, onCancel, onImageClick }) {
               {isMe && (
                 <div
                   className={styles.msgAvatar}
-                  style={{ background: "var(--burgundy)" }}
+                  style={{ background: avatarBg }}
                 >
                   <User size={14} />
                 </div>
