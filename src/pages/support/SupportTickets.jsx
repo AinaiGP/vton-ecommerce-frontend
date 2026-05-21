@@ -11,6 +11,7 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import SupportLayout from "../../components/support/SupportLayout";
+import { useAuth } from "../../context/AuthContext";
 import apiClient, { multipartClient } from "../../utils/apiClient";
 import p from "../../styles/SupportPage.module.css";
 
@@ -64,7 +65,16 @@ function extractLegacyAttachment(content) {
   return { text: cleaned || "Attachment", urls: [match[1]] };
 }
 
-function mapTicket(raw) {
+function assigneeLabel(raw, userId) {
+  if (!raw.assigneeId) return { text: "Unassigned", style: "unassigned" };
+  if (String(raw.assigneeRole || "").toUpperCase() === "ADMIN")
+    return { text: "Admin handling", style: "admin" };
+  if (raw.assigneeId === userId)
+    return { text: "Claimed by you", style: "mine" };
+  return { text: "Claimed by agent", style: "other" };
+}
+
+function mapTicket(raw, userId) {
   const messages = (raw.messages || [])
     .filter((m) => !m.isSystemMessage)
     .map((m) => {
@@ -99,7 +109,7 @@ function mapTicket(raw) {
       month: "short",
       day: "numeric",
     }),
-    agent: raw.assigneeId ? "Assigned" : "Unassigned",
+    agentLabel: assigneeLabel(raw, userId),
     messages,
     _raw: raw,
   };
@@ -114,7 +124,15 @@ function fmt(date) {
   });
 }
 
+const AGENT_LABEL_STYLES = {
+  mine:       { color: "#7c3aed", background: "#f5f3ff" },
+  other:      { color: "#0369a1", background: "#e0f2fe" },
+  admin:      { color: "#dc2626", background: "#fee2e2" },
+  unassigned: { color: "#64748b", background: "#f1f5f9" },
+};
+
 export default function SupportTickets() {
+  const { user } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -149,7 +167,7 @@ export default function SupportTickets() {
               tk.id?.toLowerCase().includes(q),
           );
         }
-        setTickets(data.map(mapTicket));
+        setTickets(data.map((tk) => mapTicket(tk, user?.id)));
         setTotal(r.data.total ?? data.length);
       })
       .catch(() => setError("Failed to load tickets."))
@@ -161,6 +179,11 @@ export default function SupportTickets() {
   }, [fetchTickets]);
 
   useEffect(() => {
+    const id = setInterval(fetchTickets, 30000);
+    return () => clearInterval(id);
+  }, [fetchTickets]);
+
+  useEffect(() => {
     if (selected) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
@@ -169,7 +192,7 @@ export default function SupportTickets() {
   const openTicket = async (tk) => {
     try {
       const res = await apiClient.get(`/tech-support/support/tickets/${tk.id}`);
-      setSelected(mapTicket(res.data));
+      setSelected(mapTicket(res.data, user?.id));
     } catch {
       setError("Failed to load ticket.");
     }
@@ -177,7 +200,7 @@ export default function SupportTickets() {
 
   const refetchSelected = async (id) => {
     const res = await apiClient.get(`/tech-support/support/tickets/${id}`);
-    const updated = mapTicket(res.data);
+    const updated = mapTicket(res.data, user?.id);
     setSelected(updated);
     fetchTickets();
   };
@@ -574,8 +597,12 @@ export default function SupportTickets() {
                   ],
                   [
                     "Assigned",
-                    <span key="assigned" style={{ fontWeight: 600 }}>
-                      {selected.agent}
+                    <span
+                      key="assigned"
+                      className={p.badge}
+                      style={{ ...AGENT_LABEL_STYLES[selected.agentLabel?.style || "unassigned"] }}
+                    >
+                      {selected.agentLabel?.text || "Unassigned"}
                     </span>,
                   ],
                 ].map(([l, v]) => (
@@ -790,10 +817,13 @@ export default function SupportTickets() {
                           {PRIORITY_LABEL[tk.priority] || tk.priority}
                         </span>
                       </td>
-                      <td
-                        style={{ fontSize: 13, color: "var(--sup-text-muted)" }}
-                      >
-                        {tk.agent}
+                      <td>
+                        <span
+                          className={p.badge}
+                          style={{ ...AGENT_LABEL_STYLES[tk.agentLabel.style], fontSize: 11 }}
+                        >
+                          {tk.agentLabel.text}
+                        </span>
                       </td>
                       <td
                         style={{

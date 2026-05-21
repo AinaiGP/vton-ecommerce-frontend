@@ -81,7 +81,7 @@ export default function VendorEarningsPage() {
     try {
       const [statsRes, ordersRes] = await Promise.all([
         apiClient.get("/vendors/orders/stats"),
-        apiClient.get("/vendors/orders", { params: { fulfillmentStatus: "delivered", limit: 100 } })
+        apiClient.get("/vendors/orders", { params: { limit: 100, page: 1 } }),
       ]);
       setStats(statsRes.data);
       setPayments(ordersRes.data?.data || []);
@@ -142,9 +142,9 @@ export default function VendorEarningsPage() {
     (stats?.delivered || 0);
 
   const kpis = [
-    { label: "Total Revenue", value: formatPrice(stats?.totalRevenue || 0), color: "#16a34a", bg: "#dcfce7", icon: DollarSign, change: "All time", up: true },
-    { label: "Items Sold", value: stats?.totalItems || 0, color: "#d97706", bg: "#fef3c7", icon: Clock, change: "All time", up: true },
-    { label: "Total Orders", value: totalOrders, color: "#8b4852", bg: "#f5e8e9", icon: Package, change: "All statuses", up: true },
+    { label: "Net Revenue", value: formatPrice(stats?.netRevenue ?? stats?.totalRevenue ?? 0), color: "#16a34a", bg: "#dcfce7", icon: DollarSign, change: "After refunds", up: true },
+    { label: "Total Refunded", value: formatPrice(stats?.totalRefunded || 0), color: "#dc2626", bg: "#fee2e2", icon: TrendingUp, change: "Processed refunds", up: false },
+    { label: "Items Sold", value: stats?.totalItems || 0, color: "#d97706", bg: "#fef3c7", icon: Package, change: "All time", up: true },
   ];
 
   return (
@@ -185,7 +185,7 @@ export default function VendorEarningsPage() {
       </div>
 
       <div className={p.tableCard}>
-        <div className={p.chartHead} style={{ padding: "16px 20px" }}><h3 className={p.chartTitle}>Recent Delivered Orders</h3></div>
+        <div className={p.chartHead} style={{ padding: "16px 20px" }}><h3 className={p.chartTitle}>Recent Orders</h3></div>
         <div className={p.tableWrap}>
           <table className={p.table}>
             <thead>
@@ -201,21 +201,25 @@ export default function VendorEarningsPage() {
               {loading ? (
                 <tr><td colSpan="5" className={p.skeleton} style={{ height: 100 }}></td></tr>
               ) : payments.length === 0 ? (
-                <tr><td colSpan="5" style={{ textAlign: "center", padding: 32 }}>No delivered orders yet.</td></tr>
+                <tr><td colSpan="5" style={{ textAlign: "center", padding: 32 }}>No orders yet.</td></tr>
               ) : (
-                payments.map((o) => (
-                  <tr key={o.id}>
-                    <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>#{o.orderNumber}</td>
-                    <td style={{ color: "var(--vdr-text-muted)" }}>{new Date(o.createdAt).toLocaleDateString()}</td>
-                    <td style={{ fontWeight: 800, color: "#16a34a", fontSize: 15 }}>{formatPrice(o.vendorSubtotal)}</td>
-                    <td style={{ color: "var(--vdr-text-muted)" }}>{o.itemCount} items</td>
-                    <td>
-                      <span className={`${p.badge} ${p.badgeDelivered}`}>
-                        <span className={p.badgeDot} /> Delivered
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                payments.map((o) => {
+                  const status = o.displayFulfillmentStatus || "pending";
+                  const badgeCls = status === "delivered" ? p.badgeDelivered : status === "shipped" ? p.badgeShipped : status === "canceled" ? p.badgeCancelled : p.badgePending;
+                  return (
+                    <tr key={o.id}>
+                      <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>#{o.orderNumber}</td>
+                      <td style={{ color: "var(--vdr-text-muted)" }}>{new Date(o.createdAt).toLocaleDateString()}</td>
+                      <td style={{ fontWeight: 800, color: "#16a34a", fontSize: 15 }}>{formatPrice(o.vendorSubtotal)}</td>
+                      <td style={{ color: "var(--vdr-text-muted)" }}>{o.itemCount} items</td>
+                      <td>
+                        <span className={`${p.badge} ${badgeCls}`}>
+                          <span className={p.badgeDot} /> {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -237,7 +241,7 @@ export default function VendorEarningsPage() {
                 <div className={p.modalBody}>
                   <div style={{ padding: "14px 16px", background: "var(--vdr-accent-light)", border: "1px solid #c4b5fd", borderRadius: 10 }}>
                     <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 13 }}>Available Balance</p>
-                    <p style={{ margin: 0, fontWeight: 800, fontSize: 22, color: "var(--vdr-accent)" }}>{formatPrice(stats?.totalRevenue || 0)}</p>
+                    <p style={{ margin: 0, fontWeight: 800, fontSize: 22, color: "var(--vdr-accent)" }}>{formatPrice(stats?.netRevenue ?? stats?.totalRevenue ?? 0)}</p>
                   </div>
                   <div className={p.formGroup} style={{ marginTop: 16 }}>
                     <label className={p.label}>Withdrawal Amount</label>

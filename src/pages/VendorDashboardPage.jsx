@@ -38,8 +38,8 @@ export default function VendorDashboardPage() {
 
   const kpis = [
     {
-      label: "Total Revenue",
-      value: formatPrice(stats?.totalRevenue || 0),
+      label: "Net Revenue",
+      value: formatPrice(stats?.netRevenue ?? stats?.totalRevenue ?? 0),
       icon: DollarSign,
       color: "#8b4852",
       bg: "rgba(139,72,82,0.1)",

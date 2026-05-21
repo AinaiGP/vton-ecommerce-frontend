@@ -55,7 +55,7 @@ export default function SupportDashboard() {
       .then((r) => {
         const data = r.data.data || r.data || [];
         const total = r.data.total ?? data.length;
-        const mine = data.filter((tk) => tk.assigneeId === user?.sub).length;
+        const mine = data.filter((tk) => tk.assigneeId === user?.id).length;
         const pending = data.filter((tk) => tk.status === "PENDING").length;
         const inProgress = data.filter((tk) => tk.status === "IN_PROGRESS").length;
         const escalated = data.filter((tk) => tk.status === "ESCALATED").length;
@@ -65,7 +65,7 @@ export default function SupportDashboard() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [user?.sub]);
+  }, [user?.id]);
 
   const KPI_CARDS = [
     { label: "Total Visible", value: stats.total, color: "#8b4852", bg: "#fdf5f6" },

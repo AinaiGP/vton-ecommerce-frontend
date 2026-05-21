@@ -477,6 +477,11 @@ export default function AdminTickets() {
     fetchTickets();
   }, [fetchTickets]);
 
+  useEffect(() => {
+    const id = setInterval(fetchTickets, 30000);
+    return () => clearInterval(id);
+  }, [fetchTickets]);
+
   const openTicket = async (tk) => {
     try {
       const res = await apiClient.get(`/admin/support/tickets/${tk.id}`);
@@ -666,8 +671,18 @@ export default function AdminTickets() {
                     </td>
                     <td className={t.ticketTypeCell}>
                       {tk.assigneeId ? (
-                        <span className={t.badge} style={{ background: "#dcfce7", color: "#15803d" }}>
-                          Claimed
+                        String(tk.assigneeRole || "").toUpperCase() === "ADMIN" ? (
+                          <span className={t.badge} style={{ background: "#fee2e2", color: "#dc2626" }}>
+                            Admin claimed
+                          </span>
+                        ) : (
+                          <span className={t.badge} style={{ background: "#dbeafe", color: "#1d4ed8" }}>
+                            Support claimed
+                          </span>
+                        )
+                      ) : tk.status === "ESCALATED" ? (
+                        <span className={t.badge} style={{ background: "#fff1f2", color: "#dc2626" }}>
+                          Escalated — unclaimed
                         </span>
                       ) : (
                         <span style={{ color: "#94a3b8", fontSize: 12 }}>Unassigned</span>

@@ -122,16 +122,21 @@ export default function SupportLiveChat() {
         const data = r.data.data || r.data || [];
         const claimed = data.filter(
           (tk) =>
-            tk.assigneeId === user?.sub &&
+            tk.assigneeId === user?.id &&
             !TERMINAL_STATUSES.includes(tk.status),
         );
         setTickets(claimed);
       })
       .catch(() => setError("Failed to load tickets."))
       .finally(() => setLoading(false));
-  }, [statusFilter, user?.sub]);
+  }, [statusFilter, user?.id]);
 
   useEffect(() => { fetchTickets(); }, [fetchTickets]);
+
+  useEffect(() => {
+    const id = setInterval(fetchTickets, 30000);
+    return () => clearInterval(id);
+  }, [fetchTickets]);
 
   useEffect(() => {
     if (selected) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
