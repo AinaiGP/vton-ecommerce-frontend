@@ -15,10 +15,13 @@ export default function VendorDashboardPage() {
   useEffect(() => {
     async function fetchData() {
       try {
+        const profileRes = await apiClient.get("/vendors/profile");
+        const threshold = profileRes.data?.lowStockThreshold || 10;
+
         const [statsRes, ordersRes, stockRes] = await Promise.all([
           apiClient.get("/vendors/orders/stats"),
           apiClient.get("/vendors/orders", { params: { page: 1, limit: 5 } }),
-          apiClient.get("/inventory", { params: { isLowStock: true, limit: 3 } }),
+          apiClient.get("/inventory", { params: { isLowStock: true, limit: 3, threshold } }),
         ]);
 
         setStats(statsRes.data);
@@ -151,7 +154,7 @@ export default function VendorDashboardPage() {
                       <td style={{ fontWeight: 600 }}>{formatPrice(ord.vendorSubtotal)}</td>
                       <td>
                         <span className={`${p.badge} ${p.badgeActive}`}>
-                          {ord.fulfillmentStatus || "pending"}
+                          {ord.displayFulfillmentStatus || ord.status || "pending"}
                         </span>
                       </td>
                     </tr>

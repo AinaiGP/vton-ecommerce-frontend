@@ -50,7 +50,18 @@ function attachResponseInterceptor(client, retryClient) {
     async (error) => {
       const originalRequest = error.config;
 
-      if (error?.response?.status !== 401 || originalRequest?._retry) {
+      // Never attempt token refresh for auth endpoints — let the caller handle the error.
+      const isAuthEndpoint =
+        originalRequest?.url?.includes('/auth/login') ||
+        originalRequest?.url?.includes('/auth/register') ||
+        originalRequest?.url?.includes('/auth/forgot-password') ||
+        originalRequest?.url?.includes('/auth/reset-password');
+
+      if (
+        error?.response?.status !== 401 ||
+        originalRequest?._retry ||
+        isAuthEndpoint
+      ) {
         return Promise.reject(error);
       }
 

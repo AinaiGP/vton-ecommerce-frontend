@@ -67,6 +67,9 @@ export default function AdminProfilePage() {
   const [showOTP, setShowOTP] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [notifEmail, setNotifEmail] = useState(false);
+  const [notifSystem, setNotifSystem] = useState(false);
+  const [lang2FA, setLang2FA] = useState(false);
 
   useEffect(() => {
     fetchProfile();

@@ -96,7 +96,7 @@ export default function VendorReviewsPage() {
                 }}
               >
                 <div className={p.productThumb} style={{ width: 36, height: 36, borderRadius: 6 }}>
-                  {prod.images?.[0] ? <img src={prod.images[0].url} alt="" /> : <Package size={14} />}
+                  {prod.images?.[0] ? <img src={prod.images[0].s3Url} alt="" /> : <Package size={14} />}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{prod.name}</p>
@@ -155,9 +155,15 @@ export default function VendorReviewsPage() {
                   filtered.map(r => (
                     <div key={r.id} className={p.reviewCard}>
                       <div className={p.reviewHeader}>
-                        <div className={p.avatar} style={{ width: 40, height: 40, fontSize: 14 }}>{r.user?.fullName?.[0] || "U"}</div>
+                        <div className={p.avatar} style={{ width: 40, height: 40, fontSize: 14 }}>
+                          {r.customer?.firstName?.[0] || "V"}
+                        </div>
                         <div className={p.reviewMeta}>
-                          <span className={p.reviewName}>{r.user?.fullName || "Verified Buyer"}</span>
+                          <span className={p.reviewName}>
+                            {r.customer?.firstName
+                              ? `${r.customer.firstName} ${r.customer.lastName || ""}`.trim()
+                              : "Verified Buyer"}
+                          </span>
                           <span className={p.reviewDate}>{new Date(r.createdAt).toLocaleDateString()}</span>
                         </div>
                         <StarRow rating={r.rating} />

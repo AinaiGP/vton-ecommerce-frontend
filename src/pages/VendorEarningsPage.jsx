@@ -65,6 +65,12 @@ export default function VendorEarningsPage() {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     fetchData();
@@ -129,14 +135,25 @@ export default function VendorEarningsPage() {
     }, 1500);
   };
 
+  const totalOrders =
+    (stats?.pending || 0) +
+    (stats?.processing || 0) +
+    (stats?.shipped || 0) +
+    (stats?.delivered || 0);
+
   const kpis = [
-    { label: "Total Revenue", value: formatPrice(stats?.totalRevenue || 0), color: "#16a34a", bg: "#dcfce7", icon: DollarSign, change: "+12.5%", up: true },
-    { label: "Pending Payouts", value: formatPrice(stats?.pendingValue || 0), color: "#d97706", bg: "#fef3c7", icon: Clock, change: "Current", up: true },
-    { label: "Total Orders", value: stats?.totalOrders || 0, color: "#8b4852", bg: "#f5e8e9", icon: Package, change: "+4.2%", up: true },
+    { label: "Total Revenue", value: formatPrice(stats?.totalRevenue || 0), color: "#16a34a", bg: "#dcfce7", icon: DollarSign, change: "All time", up: true },
+    { label: "Items Sold", value: stats?.totalItems || 0, color: "#d97706", bg: "#fef3c7", icon: Clock, change: "All time", up: true },
+    { label: "Total Orders", value: totalOrders, color: "#8b4852", bg: "#f5e8e9", icon: Package, change: "All statuses", up: true },
   ];
 
   return (
     <VendorLayout pageTitle="Earnings & Payments" pageSubtitle="Track your revenue and manage payouts." breadcrumb="Earnings">
+      {toast && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 20px", background: toast.ok ? "#dcfce7" : "#fee2e2", border: `1px solid ${toast.ok ? "#bbf7d0" : "#fca5a5"}`, borderRadius: 12, color: toast.ok ? "#16a34a" : "#dc2626", fontWeight: 600, marginBottom: 16 }}>
+          {toast.ok ? <Check size={16} /> : <X size={16} />} {toast.msg}
+        </div>
+      )}
       <div className={p.statsGrid} style={{ marginBottom: 24 }}>
         {kpis.map((s) => (
           <div key={s.label} className={p.statCard} style={{ "--stat-color": s.color, "--stat-bg": s.bg }}>

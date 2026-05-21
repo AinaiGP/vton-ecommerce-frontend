@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Mail,
   Loader2,
+  Package,
 } from "lucide-react";
 import VendorLayout from "../components/vendor/VendorLayout";
 import p from "../styles/VendorPage.module.css";
@@ -35,6 +36,7 @@ export default function VendorSettingsPage() {
     businessPhone: "",
     description: "",
     loginEmail: "",
+    lowStockThreshold: 10,
   });
   const [passwords, setPasswords] = useState({
     current: "",
@@ -63,6 +65,7 @@ export default function VendorSettingsPage() {
         businessPhone: v.businessPhone || "",
         description: v.description || "",
         loginEmail: user?.email || "",
+        lowStockThreshold: v.lowStockThreshold ?? 10,
       });
       setLogoPreview(v.logoUrl);
       setPendingEmail(user?.email || "");
@@ -110,7 +113,8 @@ export default function VendorSettingsPage() {
     try {
       const payload = { ...store };
       delete payload.loginEmail; // Backend expects 'email', not 'loginEmail'
-      
+      payload.lowStockThreshold = parseInt(store.lowStockThreshold) || 10;
+
       if (store.loginEmail && store.loginEmail !== user?.email) {
         payload.email = store.loginEmail;
       }
@@ -292,6 +296,26 @@ export default function VendorSettingsPage() {
             <div className={p.formGroup}>
               <label className={p.label}>Brand Description</label>
               <textarea className={p.textarea} rows={4} value={store.description} onChange={(e) => setStore({ ...store, description: e.target.value })} placeholder="Tell customers about your brand story..." />
+            </div>
+
+            <div style={{ marginTop: 32, borderTop: "1px solid var(--vdr-border)", paddingTop: 24 }}>
+              <h3 className={p.settingsSectionTitle} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Package size={16} /> Inventory
+              </h3>
+              <p style={{ fontSize: 13, color: "var(--vdr-text-muted)", marginBottom: 16 }}>
+                Products with fewer units than this threshold will appear in low-stock alerts.
+              </p>
+              <div className={p.formGroup} style={{ maxWidth: 240 }}>
+                <label className={p.label}>Low Stock Threshold</label>
+                <input
+                  className={p.input}
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={store.lowStockThreshold}
+                  onChange={(e) => setStore({ ...store, lowStockThreshold: e.target.value })}
+                />
+              </div>
             </div>
 
             <div style={{ marginTop: 32, borderTop: "1px solid var(--vdr-border)", paddingTop: 24 }}>

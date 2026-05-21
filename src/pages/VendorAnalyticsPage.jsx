@@ -98,10 +98,21 @@ export default function VendorAnalyticsPage() {
     ],
   };
 
+  const totalOrders =
+    (stats?.pending || 0) +
+    (stats?.processing || 0) +
+    (stats?.shipped || 0) +
+    (stats?.delivered || 0);
+
+  const totalViews = products.reduce((s, pr) => s + pr.views, 0);
+  const totalPurchases = products.reduce((s, pr) => s + pr.purchases, 0);
+  const overallConversion =
+    totalViews > 0 ? ((totalPurchases / totalViews) * 100).toFixed(1) + "%" : "—";
+
   const kpis = [
-    { label: "Total Revenue", value: formatPrice(stats?.totalRevenue || 0), color: "#16a34a", bg: "#dcfce7", icon: DollarSign, change: "+14%", up: true },
-    { label: "Total Orders", value: stats?.totalOrders || 0, color: "#8b4852", bg: "#f5e8e9", icon: ShoppingCart, change: "+8%", up: true },
-    { label: "Conversion Rate", value: "3.2%", color: "#d97706", bg: "#fef3c7", icon: Zap, change: "+0.5%", up: true },
+    { label: "Total Revenue", value: formatPrice(stats?.totalRevenue || 0), color: "#16a34a", bg: "#dcfce7", icon: DollarSign, change: "All time", up: true },
+    { label: "Total Orders", value: totalOrders, color: "#8b4852", bg: "#f5e8e9", icon: ShoppingCart, change: "All statuses", up: true },
+    { label: "Conversion Rate", value: overallConversion, color: "#d97706", bg: "#fef3c7", icon: Zap, change: "Views → Sales", up: true },
     { label: "Active Products", value: products.length, color: "#0891b2", bg: "#ecfeff", icon: Package, change: "Stable", up: true },
   ];
 
@@ -151,7 +162,9 @@ export default function VendorAnalyticsPage() {
                 <tr><td colSpan="6"><div className={p.emptyState}><TrendingUp size={22} /><h3 className={p.emptyTitle}>No data yet</h3></div></td></tr>
               ) : (
                 products.map((prod) => {
-                  const rate = ((prod.purchases / prod.views) * 100).toFixed(1) + "%";
+                  const rateNum = prod.views > 0 ? (prod.purchases / prod.views) * 100 : 0;
+                  const rateLabel = prod.views > 0 ? rateNum.toFixed(1) + "%" : "—";
+                  const barWidth = Math.min(rateNum, 100).toFixed(1) + "%";
                   return (
                     <tr key={prod.id}>
                       <td style={{ fontWeight: 600 }}>{prod.name}</td>
@@ -161,9 +174,9 @@ export default function VendorAnalyticsPage() {
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <div style={{ flex: 1, height: 6, background: "var(--vdr-border)", borderRadius: 3, minWidth: 60 }}>
-                            <div style={{ height: "100%", width: rate, background: "var(--vdr-accent)", borderRadius: 3 }} />
+                            <div style={{ height: "100%", width: barWidth, background: "var(--vdr-accent)", borderRadius: 3 }} />
                           </div>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--vdr-accent)" }}>{rate}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--vdr-accent)" }}>{rateLabel}</span>
                         </div>
                       </td>
                       <td>

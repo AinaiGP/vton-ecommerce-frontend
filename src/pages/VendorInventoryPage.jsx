@@ -20,9 +20,7 @@ import p from "../styles/VendorPage.module.css";
 import apiClient from "../utils/apiClient";
 import { formatPrice } from "../utils/formatPrice";
 
-const LOW_STOCK_THRESHOLD = 10;
-
-function getStockStatus(qty, archived) {
+function getStockStatus(qty, archived, threshold = 10) {
   if (archived)
     return {
       label: "Archived",
@@ -35,7 +33,7 @@ function getStockStatus(qty, archived) {
       cls: "badgeCancelled",
       icon: <XCircle size={12} />,
     };
-  if (qty <= LOW_STOCK_THRESHOLD)
+  if (qty <= threshold)
     return {
       label: "Low Stock",
       cls: "badgePending",
@@ -57,17 +55,25 @@ export default function VendorInventoryPage() {
   const [expanded, setExpanded] = useState(new Set());
   const [toast, setToast] = useState(null);
   const [imgManager, setImgManager] = useState(null);
+  const [lowStockThreshold, setLowStockThreshold] = useState(10);
+
+  useEffect(() => {
+    apiClient.get("/vendors/profile").then((res) => {
+      setLowStockThreshold(res.data?.lowStockThreshold ?? 10);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetchInventory();
-  }, [filter]);
+  }, [filter, lowStockThreshold]);
 
   const fetchInventory = async () => {
     setLoading(true);
     try {
       const params = {
         limit: 100,
-        isLowStock: filter === "low" ? true : undefined
+        isLowStock: filter === "low" ? true : undefined,
+        threshold: lowStockThreshold,
       };
       const res = await apiClient.get("/inventory", { params });
       const variants = res.data?.data || [];
@@ -153,7 +159,7 @@ export default function VendorInventoryPage() {
 
   const stats = {
     total: groupedProducts.length,
-    low: groupedProducts.filter(p => p.variants.some(v => v.availableQuantity <= LOW_STOCK_THRESHOLD)).length,
+    low: groupedProducts.filter(p => p.variants.some(v => v.availableQuantity <= lowStockThreshold)).length,
     out: groupedProducts.filter(p => p.totalStock === 0).length,
     archived: groupedProducts.filter(p => p.status === "archived").length,
   };
@@ -265,12 +271,9 @@ export default function VendorInventoryPage() {
                                   <tr key={v.id}>
                                     <td style={{ padding: "12px 16px" }}>
                                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                        {v.color?.hex && (
-                                          <div style={{ width: 12, height: 12, borderRadius: "50%", background: v.color.hex, border: "1px solid #e2e8f0" }} />
-                                        )}
-                                        <span style={{ fontWeight: 600 }}>{v.color?.name || "N/A"}</span>
+                                        <span style={{ fontWeight: 600 }}>{v.color?.name || "—"}</span>
                                         <span style={{ color: "#94a3b8" }}>/</span>
-                                        <span>{v.size?.label || v.size?.name || "N/A"}</span>
+                                        <span>{v.size?.name || "—"}</span>
                                       </div>
                                     </td>
                                     <td style={{ padding: "12px 16px", fontFamily: "monospace", fontSize: 12, color: "#64748b" }}>{v.sku || "—"}</td>
@@ -291,7 +294,7 @@ export default function VendorInventoryPage() {
                                       </div>
                                     </td>
                                     <td style={{ padding: "12px 16px" }}>
-                                      {v.availableQuantity <= LOW_STOCK_THRESHOLD ? (
+                                      {v.availableQuantity <= lowStockThreshold ? (
                                         <span style={{ color: v.availableQuantity === 0 ? "#ef4444" : "#f59e0b", display: "flex", alignItems: "center", gap: 4, fontWeight: 700 }}>
                                           <AlertTriangle size={14} /> {v.availableQuantity === 0 ? "Out of Stock" : "Low Stock"}
                                         </span>

@@ -193,9 +193,9 @@ export default function VendorOrdersPage() {
                     <td style={{ fontWeight: 600 }}>{o.itemCount} items</td>
                     <td style={{ fontWeight: 700 }}>{formatPrice(o.vendorSubtotal)}</td>
                     <td>
-                      <span className={`${p.badge} ${STATUS_BADGE[o.fulfillmentStatus] || p.badgePending}`}>
+                      <span className={`${p.badge} ${STATUS_BADGE[o.displayFulfillmentStatus] || p.badgePending}`}>
                         <span className={p.badgeDot} />
-                        {o.fulfillmentStatus}
+                        {o.displayFulfillmentStatus || o.status}
                       </span>
                     </td>
                     <td style={{ color: "var(--vdr-text-muted)", fontSize: 13 }}>{new Date(o.createdAt).toLocaleDateString()}</td>
@@ -246,14 +246,15 @@ export default function VendorOrdersPage() {
                       </h3>
                       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                         <div className={p.avatar} style={{ width: 44, height: 44, background: "var(--vdr-accent)", color: "white", fontWeight: 700 }}>
-                          {getInitials(orderDetail.shippingName || "Guest")}
+                          {getInitials(orderDetail.shippingAddress?.shippingName || orderDetail.shippingName || "Guest")}
                         </div>
                         <div>
-                          <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{orderDetail.shippingName}</p>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{orderDetail.shippingAddress?.shippingName || orderDetail.shippingName}</p>
+                          <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--vdr-text-muted)" }}>{orderDetail.customerEmail}</p>
                           <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--vdr-text-muted)", lineHeight: 1.5 }}>
-                            {orderDetail.shippingAddress}<br />
-                            {orderDetail.shippingCity}, {orderDetail.shippingState} {orderDetail.shippingZip}<br />
-                            {orderDetail.shippingCountry}
+                            {orderDetail.shippingAddress?.shippingStreet}<br />
+                            {orderDetail.shippingAddress?.shippingCity}
+                            {orderDetail.shippingAddress?.shippingLabel ? ` · ${orderDetail.shippingAddress.shippingLabel}` : ""}
                           </p>
                         </div>
                       </div>
@@ -277,14 +278,16 @@ export default function VendorOrdersPage() {
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20 }}>
                               <div style={{ display: "flex", gap: 16, flex: 1 }}>
                                 <div className={p.productThumb} style={{ width: 64, height: 80, borderRadius: 8, overflow: "hidden" }}>
-                                  {item.product?.images?.[0] ? <img src={item.product.images[0].url} alt="" /> : <Package size={24} style={{ opacity: 0.3 }} />}
+                                  {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <Package size={24} style={{ opacity: 0.3 }} />}
                                 </div>
                                 <div style={{ flex: 1 }}>
                                   <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{item.productName}</p>
                                   <div style={{ display: "flex", gap: 12, marginTop: 4, flexWrap: "wrap" }}>
-                                    <span style={{ fontSize: 12, color: "var(--vdr-text-muted)", background: "#f1f5f9", padding: "2px 8px", borderRadius: 4 }}>
-                                      Variant: <strong>{item.variantLabel}</strong>
-                                    </span>
+                                    {(item.variantColor || item.variantSize) && (
+                                      <span style={{ fontSize: 12, color: "var(--vdr-text-muted)", background: "#f1f5f9", padding: "2px 8px", borderRadius: 4 }}>
+                                        Variant: <strong>{[item.variantColor, item.variantSize].filter(Boolean).join(" / ")}</strong>
+                                      </span>
+                                    )}
                                     <span style={{ fontSize: 12, color: "var(--vdr-text-muted)", background: "#f1f5f9", padding: "2px 8px", borderRadius: 4 }}>
                                       SKU: <strong>{item.sku || "—"}</strong>
                                     </span>

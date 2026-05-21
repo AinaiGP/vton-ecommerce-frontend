@@ -1,150 +1,317 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Search,
   Filter,
-  Plus,
   X,
-  ChevronUp,
-  ChevronDown,
   Paperclip,
   Send,
-  UserCheck,
-  AlertCircle,
   ShieldAlert,
   CheckCircle,
+  AlertCircle,
+  ArrowUpRight,
 } from "lucide-react";
 import SupportLayout from "../../components/support/SupportLayout";
+import apiClient, { multipartClient } from "../../utils/apiClient";
 import p from "../../styles/SupportPage.module.css";
 
 const STATUS_MAP = {
-  Open: "bOpen",
-  Progress: "bProgress",
-  Resolved: "bResolved",
-  Closed: "bClosed",
+  PENDING: "bOpen",
+  OPEN: "bOpen",
+  IN_PROGRESS: "bProgress",
+  AWAITING_RESPONSE: "bProgress",
+  ESCALATED: "bProgress",
+  RESOLVED: "bResolved",
+  CLOSED: "bClosed",
+  CANCELED: "bClosed",
 };
+
+const STATUS_LABEL = {
+  PENDING: "Pending",
+  OPEN: "Open",
+  IN_PROGRESS: "In Progress",
+  AWAITING_RESPONSE: "Awaiting Response",
+  ESCALATED: "Escalated",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed",
+  CANCELED: "Canceled",
+};
+
 const PRIORITY_MAP = {
-  Urgent: "pUrgent",
-  High: "pHigh",
-  Medium: "pMed",
-  Low: "pLow",
+  LOW: "pLow",
+  MEDIUM: "pMed",
+  HIGH: "pHigh",
+  URGENT: "pUrgent",
 };
-const ROLE_MAP = { Customer: "rCustomer", Vendor: "rVendor" };
-const SLA_LABEL = {
-  slaOk: "On Track",
-  slaWarn: "Warning",
-  slaBreached: "Breached",
+
+const PRIORITY_LABEL = {
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High",
+  URGENT: "Urgent",
 };
+
+const TERMINAL_STATUSES = ["RESOLVED", "CLOSED", "CANCELED"];
+
+function isImageUrl(url) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url);
+}
+
+function extractLegacyAttachment(content) {
+  if (!content) return { text: "", urls: [] };
+  const match = content.match(/\(attachment:\s*(https?:\/\/[^\s)]+)\)/i);
+  if (!match) return { text: content, urls: [] };
+  const cleaned = content.replace(match[0], "").trim();
+  return { text: cleaned || "Attachment", urls: [match[1]] };
+}
+
+function mapTicket(raw) {
+  const messages = (raw.messages || [])
+    .filter((m) => !m.isSystemMessage)
+    .map((m) => {
+      const legacy = extractLegacyAttachment(m.content);
+      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(Boolean);
+      const role = String(m.senderRole || "").toLowerCase();
+      return {
+        from: role === "technical_support" || role === "admin" ? "agent" : "user",
+        text: legacy.text || m.content,
+        time: new Date(m.createdAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        attachments: attachmentUrls.map((url) => ({
+          url,
+          name: url.split("/").pop() || "Attachment",
+          isImage: isImageUrl(url),
+        })),
+      };
+    });
+
+  return {
+    id: raw.id,
+    subject: raw.subject,
+    user: raw.creator?.email || raw.creatorId || "Unknown",
+    role: (raw.creatorRole || "").toLowerCase() === "vendor" ? "Vendor" : "Customer",
+    status: raw.status,
+    priority: raw.priority || "MEDIUM",
+    updated: new Date(raw.updatedAt).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }),
+    agent: raw.assignedAgentId ? "Assigned" : "Unassigned",
+    messages,
+    _raw: raw,
+  };
+}
+
+function fmt(date) {
+  if (!date) return "—";
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 export default function SupportTickets() {
   const [tickets, setTickets] = useState([]);
-  const [messages, setMessages] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const limit = 20;
+
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("All");
-  const [priority, setPriority] = useState("All");
-  const [role, setRole] = useState("All");
-  const [sort, setSort] = useState({ col: "updated", dir: "asc" });
+  const [statusFilter, setStatusFilter] = useState("");
   const [selected, setSelected] = useState(null);
   const [reply, setReply] = useState("");
-  const [page, setPage] = useState(1);
-  const [newOpen, setNewOpen] = useState(false);
-  const fileRef = useRef(null);
   const [file, setFile] = useState(null);
-  const PER_PAGE = 6;
+  const [sending, setSending] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fileRef = useRef(null);
+  const bottomRef = useRef(null);
+
+  const fetchTickets = useCallback(() => {
+    setLoading(true);
+    const params = { page, limit };
+    if (statusFilter) params.status = statusFilter;
+    apiClient
+      .get("/tech-support/support/tickets", { params })
+      .then((r) => {
+        let data = r.data.data || r.data || [];
+        if (search) {
+          const q = search.toLowerCase();
+          data = data.filter(
+            (tk) =>
+              tk.subject?.toLowerCase().includes(q) ||
+              tk.id?.toLowerCase().includes(q),
+          );
+        }
+        setTickets(data.map(mapTicket));
+        setTotal(r.data.total ?? data.length);
+      })
+      .catch(() => setError("Failed to load tickets."))
+      .finally(() => setLoading(false));
+  }, [page, limit, statusFilter, search]);
 
   useEffect(() => {
-    // TODO: wire to real API endpoint — Phase X
-    setTickets([]);
-    setMessages({});
-  }, []);
+    fetchTickets();
+  }, [fetchTickets]);
 
-  const getMessages = (id) => messages[id] || [];
+  useEffect(() => {
+    if (selected) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [selected?.messages]);
 
-  const sendReply = () => {
-    if (!reply.trim() && !file) return;
-    const msg = {
-      from: "agent",
-      text: reply,
-      time: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      ...(file ? { att: file.name } : {}),
-    };
-    setMessages((prev) => ({
-      ...prev,
-      [selected]: [...(prev[selected] || []), msg],
-    }));
-    setReply("");
-    setFile(null);
+  const openTicket = async (tk) => {
+    try {
+      const res = await apiClient.get(`/tech-support/support/tickets/${tk.id}`);
+      setSelected(mapTicket(res.data));
+    } catch {
+      setError("Failed to load ticket.");
+    }
   };
 
-  const changeStatus = (id, newStatus) => {
-    setTickets((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t)),
-    );
+  const refetchSelected = async (id) => {
+    const res = await apiClient.get(`/tech-support/support/tickets/${id}`);
+    const updated = mapTicket(res.data);
+    setSelected(updated);
+    fetchTickets();
   };
 
-  const escalate = (id) => {
-    setTickets((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, status: "Escalated", priority: "Urgent" } : t,
-      ),
-    );
-    const msg = {
-      from: "agent",
-      text: "This ticket has been escalated to Admin for further review.",
-      time: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
-    setMessages((prev) => ({ ...prev, [id]: [...(prev[id] || []), msg] }));
+  const sendReply = async () => {
+    if (!selected || (!reply.trim() && !file)) return;
+    setSending(true);
+    try {
+      let attachmentUrl = null;
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await multipartClient.post(
+          `/tech-support/support/tickets/${selected.id}/messages/attachments`,
+          formData,
+        );
+        attachmentUrl = res.data?.url || null;
+      }
+      const content = reply.trim() || "Attachment";
+      await apiClient.post(
+        `/tech-support/support/tickets/${selected.id}/messages`,
+        {
+          content,
+          attachments: attachmentUrl ? [attachmentUrl] : undefined,
+        },
+      );
+      setReply("");
+      setFile(null);
+      await refetchSelected(selected.id);
+    } catch {
+      setError("Failed to send message.");
+    } finally {
+      setSending(false);
+    }
   };
 
-  const filtered = tickets.filter(
-    (t) =>
-      (status === "All" || t.status === status) &&
-      (priority === "All" || t.priority === priority) &&
-      (role === "All" || t.role === role) &&
-      (t.subject.toLowerCase().includes(search.toLowerCase()) ||
-        t.user.toLowerCase().includes(search.toLowerCase()) ||
-        t.id.toLowerCase().includes(search.toLowerCase())),
-  );
+  const handleClaim = async () => {
+    if (!selected) return;
+    setActionLoading(true);
+    try {
+      await apiClient.patch(`/tech-support/support/tickets/${selected.id}/claim`);
+      await refetchSelected(selected.id);
+    } catch {
+      setError("Failed to claim ticket.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
-  const total = filtered.length;
-  const paged = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
-  const pages = Math.ceil(total / PER_PAGE);
+  const handleEscalate = async () => {
+    if (!selected) return;
+    setActionLoading(true);
+    try {
+      await apiClient.patch(
+        `/tech-support/support/tickets/${selected.id}/escalate`,
+      );
+      await refetchSelected(selected.id);
+    } catch {
+      setError("Failed to escalate ticket.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
-  const toggleSort = (col) =>
-    setSort((s) => ({
-      col,
-      dir: s.col === col && s.dir === "asc" ? "desc" : "asc",
-    }));
-  const SortIcon = ({ col }) =>
-    sort.col === col ? (
-      sort.dir === "asc" ? (
-        <ChevronUp size={12} />
-      ) : (
-        <ChevronDown size={12} />
-      )
-    ) : null;
+  const handleResolve = async () => {
+    if (!selected) return;
+    setActionLoading(true);
+    try {
+      await apiClient.patch(
+        `/tech-support/support/tickets/${selected.id}/resolve`,
+        {},
+      );
+      await refetchSelected(selected.id);
+    } catch {
+      setError("Failed to resolve ticket.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
-  const ticket = tickets.find((t) => t.id === selected);
+  const handleClose = async () => {
+    if (!selected) return;
+    setActionLoading(true);
+    try {
+      await apiClient.patch(
+        `/tech-support/support/tickets/${selected.id}/close`,
+        {},
+      );
+      await refetchSelected(selected.id);
+    } catch {
+      setError("Failed to close ticket.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const isTerminal = selected ? TERMINAL_STATUSES.includes(selected.status) : false;
+  const totalPages = Math.ceil(total / limit);
 
   return (
     <SupportLayout
       pageTitle="Tickets"
       pageSubtitle="Manage and resolve all customer and vendor tickets."
       breadcrumb="Tickets"
-      headerAction={
-        <button
-          className={`${p.btn} ${p.btnPrimary}`}
-          onClick={() => setNewOpen(true)}
-        >
-          <Plus size={14} /> New Ticket
-        </button>
-      }
     >
+      {error && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 16px",
+            borderRadius: 8,
+            background: "#fee2e2",
+            color: "#dc2626",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            fontSize: 13,
+          }}
+        >
+          {error}
+          <button
+            onClick={() => setError(null)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "#dc2626",
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {selected ? (
         /* ── Ticket Detail Split View ── */
         <div className={p.splitLayout}>
@@ -159,10 +326,12 @@ export default function SupportTickets() {
                     marginBottom: 4,
                   }}
                 >
-                  <span style={{ fontWeight: 700, color: "var(--sup-accent)" }}>
-                    {ticket.id}
+                  <span
+                    style={{ fontWeight: 700, color: "var(--sup-accent)" }}
+                  >
+                    {selected.id.slice(0, 8)}…
                   </span>{" "}
-                  · opened by {ticket.user}
+                  · {selected.user}
                 </p>
                 <h2
                   style={{
@@ -171,7 +340,7 @@ export default function SupportTickets() {
                     margin: 0,
                   }}
                 >
-                  {ticket.subject}
+                  {selected.subject}
                 </h2>
               </div>
               <div
@@ -182,24 +351,10 @@ export default function SupportTickets() {
                   flexWrap: "wrap",
                 }}
               >
-                <select
-                  value={ticket.status}
-                  onChange={(e) => changeStatus(ticket.id, e.target.value)}
-                  style={{
-                    padding: "5px 9px",
-                    border: "1px solid var(--sup-border)",
-                    borderRadius: 7,
-                    fontSize: 12,
-                    background: "var(--sup-surface)",
-                    color: "var(--sup-text)",
-                  }}
+                <span
+                  className={`${p.badge} ${p[STATUS_MAP[selected.status]] || p.bOpen}`}
                 >
-                  {["Open", "Progress", "Resolved", "Closed"].map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </select>
-                <span className={`${p.badge} ${p[STATUS_MAP[ticket.status]]}`}>
-                  {ticket.status}
+                  {STATUS_LABEL[selected.status] || selected.status}
                 </span>
                 <button
                   className={`${p.btn} ${p.btnGhost} ${p.btnSm}`}
@@ -212,94 +367,179 @@ export default function SupportTickets() {
 
             {/* Messages */}
             <div className={p.ticketConv}>
-              {getMessages(selected).map((m, i) => (
+              {selected.messages.length === 0 && (
+                <p
+                  style={{
+                    textAlign: "center",
+                    color: "var(--sup-text-muted)",
+                    fontSize: 13,
+                    padding: "20px 0",
+                  }}
+                >
+                  No messages yet.
+                </p>
+              )}
+              {selected.messages.map((m, i) => (
                 <div
                   key={i}
                   className={`${p.msgRow} ${m.from === "agent" ? p.mine : ""}`}
                 >
                   <div className={p.msgAvat}>
-                    {m.from === "agent"
-                      ? "SP"
-                      : ticket.user.slice(0, 2).toUpperCase()}
+                    {m.from === "agent" ? "SP" : selected.user.slice(0, 2).toUpperCase()}
                   </div>
                   <div>
                     <div className={p.msgBubble}>
                       {m.text}
-                      {m.att && (
-                        <span
-                          style={{
-                            display: "block",
-                            fontSize: 11,
-                            opacity: 0.7,
-                            marginTop: 4,
-                          }}
-                        >
-                          📎 {m.att}
-                        </span>
+                      {m.attachments?.map((att) =>
+                        att.isImage ? (
+                          <a
+                            key={att.url}
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <img
+                              src={att.url}
+                              alt={att.name}
+                              style={{
+                                display: "block",
+                                maxWidth: 160,
+                                maxHeight: 120,
+                                marginTop: 6,
+                                borderRadius: 6,
+                                objectFit: "cover",
+                              }}
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            key={att.url}
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: "block",
+                              fontSize: 11,
+                              opacity: 0.8,
+                              marginTop: 4,
+                            }}
+                          >
+                            📎 {att.name}
+                          </a>
+                        ),
                       )}
                     </div>
                     <span className={p.msgTime}>{m.time}</span>
                   </div>
                 </div>
               ))}
+              <div ref={bottomRef} />
             </div>
 
             {/* Reply box */}
-            <div className={p.ticketReply}>
-              <textarea
-                className={p.replyInput}
-                placeholder="Type your reply..."
-                value={reply}
-                onChange={(e) => setReply(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendReply();
-                  }
-                }}
-              />
-              <div className={p.replyActions}>
-                <button
-                  className={`${p.btn} ${p.btnGhost} ${p.btnSm}`}
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <Paperclip size={14} />{" "}
-                  {file ? file.name.slice(0, 12) + "…" : "Attach"}
-                </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  style={{ display: "none" }}
-                  onChange={(e) => setFile(e.target.files[0] || null)}
+            {!isTerminal && (
+              <div className={p.ticketReply}>
+                {file && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 12,
+                      color: "var(--sup-text-muted)",
+                      marginBottom: 6,
+                    }}
+                  >
+                    <Paperclip size={12} />
+                    <span>{file.name}</span>
+                    <button
+                      onClick={() => setFile(null)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "var(--sup-text-muted)",
+                        display: "flex",
+                      }}
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                )}
+                <textarea
+                  className={p.replyInput}
+                  placeholder="Type your reply…"
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendReply();
+                    }
+                  }}
                 />
-                <button
-                  className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
-                  style={{ color: "#dc2626", borderColor: "#fca5a5" }}
-                  onClick={() => escalate(ticket.id)}
-                >
-                  <ShieldAlert size={14} /> Escalate to Admin
-                </button>
-                <button
-                  className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
-                  onClick={() => changeStatus(ticket.id, "Resolved")}
-                >
-                  <CheckCircle size={14} /> Resolve
-                </button>
-                <button
-                  className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
-                  onClick={() => changeStatus(ticket.id, "Closed")}
-                >
-                  <AlertCircle size={14} /> Close
-                </button>
-                <button
-                  className={`${p.btn} ${p.btnPrimary}`}
-                  disabled={!reply.trim() && !file}
-                  onClick={sendReply}
-                >
-                  <Send size={14} /> Send Reply
-                </button>
+                <div className={p.replyActions}>
+                  <button
+                    className={`${p.btn} ${p.btnGhost} ${p.btnSm}`}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Paperclip size={14} />{" "}
+                    {file ? file.name.slice(0, 12) + "…" : "Attach"}
+                  </button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    style={{ display: "none" }}
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={(e) => setFile(e.target.files[0] || null)}
+                  />
+                  {selected.status !== "ESCALATED" && (
+                    <button
+                      className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
+                      style={{ color: "#dc2626", borderColor: "#fca5a5" }}
+                      onClick={handleEscalate}
+                      disabled={actionLoading}
+                    >
+                      <ShieldAlert size={14} /> Escalate to Admin
+                    </button>
+                  )}
+                  <button
+                    className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
+                    onClick={handleResolve}
+                    disabled={actionLoading}
+                  >
+                    <CheckCircle size={14} /> Resolve
+                  </button>
+                  <button
+                    className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
+                    onClick={handleClose}
+                    disabled={actionLoading}
+                  >
+                    <AlertCircle size={14} /> Close
+                  </button>
+                  <button
+                    className={`${p.btn} ${p.btnPrimary}`}
+                    disabled={(!reply.trim() && !file) || sending}
+                    onClick={sendReply}
+                  >
+                    <Send size={14} /> {sending ? "Sending…" : "Send Reply"}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
+            {isTerminal && (
+              <div
+                style={{
+                  padding: "14px 20px",
+                  textAlign: "center",
+                  fontSize: 13,
+                  color: "var(--sup-text-muted)",
+                  borderTop: "1px solid var(--sup-border)",
+                }}
+              >
+                This ticket is {STATUS_LABEL[selected.status]?.toLowerCase()}.
+              </div>
+            )}
           </div>
 
           {/* Right: meta panels */}
@@ -311,33 +551,31 @@ export default function SupportTickets() {
                   [
                     "Status",
                     <span
-                      className={`${p.badge} ${p[STATUS_MAP[ticket.status]]}`}
+                      key="status"
+                      className={`${p.badge} ${p[STATUS_MAP[selected.status]] || p.bOpen}`}
                     >
-                      {ticket.status}
+                      {STATUS_LABEL[selected.status] || selected.status}
                     </span>,
                   ],
                   [
                     "Priority",
                     <span
-                      className={`${p.badge} ${p[PRIORITY_MAP[ticket.priority]]}`}
+                      key="priority"
+                      className={`${p.badge} ${p[PRIORITY_MAP[selected.priority]] || p.pMed}`}
                     >
-                      {ticket.priority}
+                      {PRIORITY_LABEL[selected.priority] || selected.priority}
                     </span>,
                   ],
                   [
-                    "SLA",
-                    <span className={`${p.badge} ${p[ticket.sla]}`}>
-                      {SLA_LABEL[ticket.sla]}
+                    "Updated",
+                    <span key="updated" style={{ color: "var(--sup-text-muted)" }}>
+                      {selected.updated}
                     </span>,
                   ],
                   [
                     "Assigned",
-                    <span style={{ fontWeight: 600 }}>{ticket.agent}</span>,
-                  ],
-                  [
-                    "Updated",
-                    <span style={{ color: "var(--sup-text-muted)" }}>
-                      {ticket.updated}
+                    <span key="assigned" style={{ fontWeight: 600 }}>
+                      {selected.agent}
                     </span>,
                   ],
                 ].map(([l, v]) => (
@@ -357,58 +595,67 @@ export default function SupportTickets() {
                     className={p.avatar}
                     style={{ width: 40, height: 40, fontSize: 14 }}
                   >
-                    {ticket.user.slice(0, 2).toUpperCase()}
+                    {selected.user.slice(0, 2).toUpperCase()}
                   </div>
                   <div>
                     <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>
-                      {ticket.user}
+                      {selected.user}
                     </p>
                     <span
-                      className={`${p.badge} ${p[ROLE_MAP[ticket.role]]}`}
+                      className={`${p.badge} ${selected.role === "Vendor" ? p.rVendor : p.rCustomer}`}
                       style={{ marginTop: 4 }}
                     >
-                      {ticket.role}
+                      {selected.role}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className={p.metaCard}>
-              <div className={p.metaHead}>Quick Actions</div>
-              <div className={p.metaBody}>
-                <button
-                  className={`${p.btn} ${p.btnPrimary}`}
-                  style={{ width: "100%" }}
-                >
-                  Mark as Resolved
-                </button>
-                <button
-                  className={`${p.btn} ${p.btnOutline}`}
-                  style={{ width: "100%" }}
-                >
-                  Reassign Agent
-                </button>
-                <button
-                  className={`${p.btn} ${p.btnDanger}`}
-                  style={{ width: "100%" }}
-                >
-                  Close Ticket
-                </button>
+            {!isTerminal && (
+              <div className={p.metaCard}>
+                <div className={p.metaHead}>Quick Actions</div>
+                <div className={p.metaBody}>
+                  {!selected._raw?.assignedAgentId && (
+                    <button
+                      className={`${p.btn} ${p.btnOutline}`}
+                      style={{ width: "100%" }}
+                      onClick={handleClaim}
+                      disabled={actionLoading}
+                    >
+                      <ArrowUpRight size={14} /> Claim Ticket
+                    </button>
+                  )}
+                  <button
+                    className={`${p.btn} ${p.btnPrimary}`}
+                    style={{ width: "100%" }}
+                    onClick={handleResolve}
+                    disabled={actionLoading}
+                  >
+                    <CheckCircle size={14} /> Mark as Resolved
+                  </button>
+                  <button
+                    className={`${p.btn} ${p.btnDanger}`}
+                    style={{ width: "100%" }}
+                    onClick={handleClose}
+                    disabled={actionLoading}
+                  >
+                    <AlertCircle size={14} /> Close Ticket
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       ) : (
         /* ── Tickets Table ── */
         <div className={p.panel}>
-          {/* Filter bar */}
           <div className={p.filterBar}>
             <div className={p.searchWrap}>
               <Search size={14} className={p.searchIcon} />
               <input
                 className={p.searchInput}
-                placeholder="Search tickets, users..."
+                placeholder="Search tickets…"
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -418,41 +665,18 @@ export default function SupportTickets() {
             </div>
             <select
               className={p.filterSelect}
-              value={status}
+              value={statusFilter}
               onChange={(e) => {
-                setStatus(e.target.value);
+                setStatusFilter(e.target.value);
                 setPage(1);
               }}
             >
-              <option value="All">All Status</option>
-              {["Open", "Progress", "Resolved", "Closed"].map((s) => (
-                <option key={s}>{s}</option>
+              <option value="">All Status</option>
+              {Object.entries(STATUS_LABEL).map(([val, label]) => (
+                <option key={val} value={val}>
+                  {label}
+                </option>
               ))}
-            </select>
-            <select
-              className={p.filterSelect}
-              value={priority}
-              onChange={(e) => {
-                setPriority(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="All">All Priority</option>
-              {["Urgent", "High", "Medium", "Low"].map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </select>
-            <select
-              className={p.filterSelect}
-              value={role}
-              onChange={(e) => {
-                setRole(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="All">All Users</option>
-              <option>Customer</option>
-              <option>Vendor</option>
             </select>
             <span
               style={{
@@ -469,28 +693,24 @@ export default function SupportTickets() {
             <table className={p.table}>
               <thead>
                 <tr>
-                  <th
-                    onClick={() => toggleSort("id")}
-                    style={{ cursor: "pointer" }}
-                  >
-                    ID <SortIcon col="id" />
-                  </th>
+                  <th>ID</th>
                   <th>User</th>
                   <th>Subject</th>
                   <th>Status</th>
                   <th>Priority</th>
-                  <th>SLA</th>
                   <th>Assigned</th>
-                  <th
-                    onClick={() => toggleSort("updated")}
-                    style={{ cursor: "pointer" }}
-                  >
-                    Updated <SortIcon col="updated" />
-                  </th>
+                  <th>Updated</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {paged.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: "center", padding: 32, color: "var(--sup-text-muted)" }}>
+                      Loading…
+                    </td>
+                  </tr>
+                ) : tickets.length === 0 ? (
                   <tr>
                     <td colSpan={8}>
                       <div className={p.emptyState}>
@@ -505,21 +725,26 @@ export default function SupportTickets() {
                     </td>
                   </tr>
                 ) : (
-                  paged.map((t) => (
+                  tickets.map((tk) => (
                     <tr
-                      key={t.id}
+                      key={tk.id}
                       className={p.clickable}
-                      onClick={() => setSelected(t.id)}
+                      onClick={() => openTicket(tk)}
                     >
                       <td
-                        style={{ fontWeight: 700, color: "var(--sup-accent)" }}
+                        style={{
+                          fontWeight: 700,
+                          color: "var(--sup-accent)",
+                          fontSize: 12,
+                          fontFamily: "monospace",
+                        }}
                       >
-                        {t.id}
+                        {tk.id.slice(0, 8)}…
                       </td>
                       <td>
                         <div className={p.avatarCell}>
                           <div className={p.avatar}>
-                            {t.user.slice(0, 2).toUpperCase()}
+                            {tk.user.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
                             <span
@@ -529,50 +754,46 @@ export default function SupportTickets() {
                                 display: "block",
                               }}
                             >
-                              {t.user}
+                              {tk.user}
                             </span>
                             <span
-                              className={`${p.badge} ${p[ROLE_MAP[t.role]]}`}
+                              className={`${p.badge} ${tk.role === "Vendor" ? p.rVendor : p.rCustomer}`}
                               style={{ fontSize: 10 }}
                             >
-                              {t.role}
+                              {tk.role}
                             </span>
                           </div>
                         </div>
                       </td>
                       <td
                         style={{
-                          maxWidth: 220,
+                          maxWidth: 200,
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
+                          fontWeight: 600,
                         }}
                       >
-                        {t.subject}
+                        {tk.subject}
                       </td>
                       <td>
                         <span
-                          className={`${p.badge} ${p[STATUS_MAP[t.status]]}`}
+                          className={`${p.badge} ${p[STATUS_MAP[tk.status]] || p.bOpen}`}
                         >
-                          {t.status}
+                          {STATUS_LABEL[tk.status] || tk.status}
                         </span>
                       </td>
                       <td>
                         <span
-                          className={`${p.badge} ${p[PRIORITY_MAP[t.priority]]}`}
+                          className={`${p.badge} ${p[PRIORITY_MAP[tk.priority]] || p.pMed}`}
                         >
-                          {t.priority}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`${p.badge} ${p[t.sla]}`}>
-                          {SLA_LABEL[t.sla]}
+                          {PRIORITY_LABEL[tk.priority] || tk.priority}
                         </span>
                       </td>
                       <td
                         style={{ fontSize: 13, color: "var(--sup-text-muted)" }}
                       >
-                        {t.agent}
+                        {tk.agent}
                       </td>
                       <td
                         style={{
@@ -580,7 +801,18 @@ export default function SupportTickets() {
                           color: "var(--sup-text-subtle)",
                         }}
                       >
-                        {t.updated}
+                        {tk.updated}
+                      </td>
+                      <td>
+                        <button
+                          className={`${p.btn} ${p.btnGhost} ${p.btnSm}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openTicket(tk);
+                          }}
+                        >
+                          Open
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -589,123 +821,42 @@ export default function SupportTickets() {
             </table>
           </div>
 
-          {pages > 1 && (
+          {totalPages > 1 && (
             <div className={p.pagination}>
               <span className={p.pageInfo}>
-                Showing {(page - 1) * PER_PAGE + 1}–
-                {Math.min(page * PER_PAGE, total)} of {total}
+                Showing {(page - 1) * limit + 1}–
+                {Math.min(page * limit, total)} of {total}
               </span>
               <div className={p.pageButtons}>
                 <button
                   className={p.pageBtn}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  onClick={() => setPage((v) => Math.max(1, v - 1))}
                   disabled={page === 1}
                 >
                   ‹
                 </button>
-                {Array.from({ length: pages }, (_, i) => (
-                  <button
-                    key={i + 1}
-                    className={`${p.pageBtn} ${page === i + 1 ? p.active : ""}`}
-                    onClick={() => setPage(i + 1)}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
+                {Array.from(
+                  { length: Math.min(totalPages, 7) },
+                  (_, i) => (
+                    <button
+                      key={i + 1}
+                      className={`${p.pageBtn} ${page === i + 1 ? p.active : ""}`}
+                      onClick={() => setPage(i + 1)}
+                    >
+                      {i + 1}
+                    </button>
+                  ),
+                )}
                 <button
                   className={p.pageBtn}
-                  onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                  disabled={page === pages}
+                  onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
+                  disabled={page === totalPages}
                 >
                   ›
                 </button>
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* New Ticket Modal */}
-      {newOpen && (
-        <div
-          className={p.modalBackdrop}
-          onClick={(e) => e.target === e.currentTarget && setNewOpen(false)}
-        >
-          <div className={p.modal}>
-            <div className={p.modalHead}>
-              <h3 className={p.modalTitle}>Create New Ticket</h3>
-              <button
-                className={`${p.btn} ${p.btnGhost} ${p.btnIcon}`}
-                onClick={() => setNewOpen(false)}
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className={p.modalBody}>
-              <div className={p.formGroup}>
-                <label className={p.label}>Subject</label>
-                <input
-                  className={p.input}
-                  placeholder="Brief description of the issue"
-                />
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 12,
-                }}
-              >
-                <div className={p.formGroup}>
-                  <label className={p.label}>Priority</label>
-                  <select className={p.select}>
-                    <option>Low</option>
-                    <option>Medium</option>
-                    <option selected>High</option>
-                    <option>Urgent</option>
-                  </select>
-                </div>
-                <div className={p.formGroup}>
-                  <label className={p.label}>User Type</label>
-                  <select className={p.select}>
-                    <option>Customer</option>
-                    <option>Vendor</option>
-                  </select>
-                </div>
-              </div>
-              <div className={p.formGroup}>
-                <label className={p.label}>User Name / ID</label>
-                <input className={p.input} placeholder="Search user..." />
-              </div>
-              <div className={p.formGroup}>
-                <label className={p.label}>Description</label>
-                <textarea
-                  className={p.textarea}
-                  placeholder="Detailed description of the issue..."
-                />
-              </div>
-              <div className={p.formGroup}>
-                <label className={p.label}>Assign To</label>
-                <select className={p.select}>
-                  <option>Jamie Sullivan</option>
-                  <option>Mike R.</option>
-                  <option>Elena V.</option>
-                  <option>David K.</option>
-                </select>
-              </div>
-            </div>
-            <div className={p.modalFoot}>
-              <button
-                className={`${p.btn} ${p.btnOutline}`}
-                onClick={() => setNewOpen(false)}
-              >
-                Cancel
-              </button>
-              <button className={`${p.btn} ${p.btnPrimary}`}>
-                Create Ticket
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </SupportLayout>

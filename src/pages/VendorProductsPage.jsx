@@ -109,15 +109,17 @@ function ProductModal({ product, options, onClose, onSave, onManageImages, onPub
 
         await onSave(formData);
       } else {
-        // Edit flow (JSON) - Clean payload to avoid non-whitelisted field errors
+        // Edit flow (JSON) — include id so saveProduct routes to PATCH
         const payload = {
+          id: form.id,
           name: form.name,
           description: form.description,
           basePrice: Math.round(parseFloat(form.basePrice || "0") * 100),
           categoryId: form.categoryId || undefined,
           gender: form.gender || undefined,
+          status: form.status || undefined,
           variants: form.variants.map(v => ({
-            id: v.id,
+            id: v.id || undefined,
             colorId: v.colorId || undefined,
             sizeId: v.sizeId || undefined,
             physicalQuantity: parseInt(v.physicalQuantity) || 0,

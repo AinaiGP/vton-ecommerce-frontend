@@ -1,430 +1,499 @@
-import { useState, useRef } from "react";
-import { useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  X,
   MessageSquare,
-  CheckCircle,
   Search,
-  AlertTriangle,
-  Paperclip,
+  X,
   Send,
-  ImageIcon,
-  FileText,
-  Filter,
+  Paperclip,
+  CheckCircle,
+  XCircle,
   ArrowUpRight,
-  UserCheck,
-  ShieldAlert,
-  Tag,
-  Clock,
+  Shield,
+  FileText,
+  User,
 } from "lucide-react";
 import AdminLayout from "../../components/admin/AdminLayout";
+import apiClient, { multipartClient } from "../../utils/apiClient";
 import t from "../../styles/AdminTable.module.css";
 
-/* ─── Seed ─── */
-const SEED = []; /*
-  {
-    id: "TKT-6001", subject: "Order #ORD-2841 never arrived", user: "Sara Al-Rashid", email: "sara@example.com",
-    userType: "Customer", category: "Order Issue", priority: "High", status: "Open",
-    date: "Apr 20, 2026", assignedTo: null,
-    messages: [
-      { from: "user", name: "Sara Al-Rashid", text: "My order was placed on April 12 and tracking hasn't updated in 8 days.", time: "Apr 20, 09:30 AM", attachment: null },
-    ],
-  },
-  {
-    id: "TKT-6002", subject: "VTON model not loading on Safari", user: "Urban Threads", email: "hello@urbanthreads.dev",
-    userType: "Vendor", category: "Technical Issue", priority: "High", status: "Escalated to Admin",
-    date: "Apr 18, 2026", assignedTo: "Ahmed (Support)",
-    messages: [
-      { from: "user", name: "Urban Threads", text: "The virtual try-on shows a blank screen on Safari. Customers are complaining.", time: "Apr 18, 10:00 AM", attachment: { name: "safari_bug.png", type: "image" } },
-      { from: "support", name: "Ahmed (Support)", text: "We've escalated this to the admin team for a platform-level fix.", time: "Apr 18, 11:30 AM", attachment: null },
-    ],
-  },
-  {
-    id: "TKT-6003", subject: "Refund request — Velvet Abaya", user: "Yasmin Bakr", email: "yasmin@example.com",
-    userType: "Customer", category: "Return / Refund", priority: "Medium", status: "In Progress",
-    date: "Apr 17, 2026", assignedTo: "Layla (Support)",
-    messages: [
-      { from: "user", name: "Yasmin Bakr", text: "I received the wrong size and would like a full refund.", time: "Apr 17, 02:00 PM", attachment: null },
-      { from: "admin", name: "Admin", text: "We've reviewed your case and confirmed the refund is approved. It will be processed in 3–5 business days.", time: "Apr 17, 04:00 PM", attachment: null },
-    ],
-  },
-  {
-    id: "TKT-6004", subject: "Vendor payout delay — March", user: "Silk & Satin", email: "contact@silksatin.com",
-    userType: "Vendor", category: "Payment", priority: "High", status: "Open",
-    date: "Apr 16, 2026", assignedTo: null,
-    messages: [
-      { from: "user", name: "Silk & Satin", text: "We haven't received the March payout of EGP 8,400. It is 12 days overdue.", time: "Apr 16, 10:00 AM", attachment: null },
-    ],
-  },
-  {
-    id: "TKT-6005", subject: "Bug in checkout promo code field", user: "Amira Fayed", email: "amira@example.com",
-    userType: "Customer", category: "Technical Issue", priority: "Low", status: "Solved",
-    date: "Apr 14, 2026", assignedTo: "Ahmed (Support)",
-    messages: [
-      { from: "user", name: "Amira Fayed", text: "The promo code field shows 'invalid' even with valid codes.", time: "Apr 14, 11:00 AM", attachment: null },
-      { from: "support", name: "Ahmed (Support)", text: "Fixed! The issue was a caching problem. Please clear your browser cache and try again.", time: "Apr 14, 03:00 PM", attachment: null },
-      { from: "user", name: "Amira Fayed", text: "It works now, thank you!", time: "Apr 14, 04:00 PM", attachment: null },
-    ],
-  },
-  {
-    id: "TKT-6006", subject: "Account suspended — appeal", user: "Fashion Hub", email: "admin@fashionhub.eg",
-    userType: "Vendor", category: "Account", priority: "High", status: "Escalated to Admin",
-    date: "Apr 12, 2026", assignedTo: null,
-    messages: [
-      { from: "user", name: "Fashion Hub", text: "Our account was suspended without notice. We believe this was an error. Please review.", time: "Apr 12, 09:00 AM", attachment: { name: "account_docs.pdf", type: "file" } },
-    ],
-  },
-*/
-
-const STATUS_ALL = [
-  "Open",
-  "In Progress",
-  "Waiting for Customer",
-  "Solved",
-  "Closed",
-  "Escalated to Admin",
+const TICKET_TYPES = [
+  { value: "GENERAL_SUPPORT", label: "General Support" },
+  { value: "SYSTEM_BUG", label: "Technical Bug" },
+  { value: "ORDER_DISPUTE", label: "Order Dispute" },
+  { value: "RETURN_REQUEST", label: "Return Request" },
 ];
+
+const TICKET_STATUSES = [
+  "PENDING",
+  "OPEN",
+  "IN_PROGRESS",
+  "AWAITING_RESPONSE",
+  "ESCALATED",
+  "RESOLVED",
+  "CLOSED",
+  "CANCELED",
+];
+
 const STATUS_CFG = {
-  Open: { color: "#ef4444", bg: "#fee2e2" },
-  "In Progress": { color: "#f59e0b", bg: "#fef3c7" },
-  "Waiting for Customer": { color: "#8b5cf6", bg: "#f5f3ff" },
-  Solved: { color: "#16a34a", bg: "#dcfce7" },
-  Closed: { color: "#94a3b8", bg: "#f1f5f9" },
-  "Escalated to Admin": { color: "#dc2626", bg: "#fff1f2" },
+  PENDING: { color: "#64748b", bg: "#f1f5f9", label: "Pending" },
+  OPEN: { color: "#ef4444", bg: "#fee2e2", label: "Open" },
+  IN_PROGRESS: { color: "#f59e0b", bg: "#fef3c7", label: "In Progress" },
+  AWAITING_RESPONSE: { color: "#8b5cf6", bg: "#f5f3ff", label: "Awaiting Response" },
+  ESCALATED: { color: "#dc2626", bg: "#fff1f2", label: "Escalated" },
+  RESOLVED: { color: "#16a34a", bg: "#dcfce7", label: "Resolved" },
+  CLOSED: { color: "#94a3b8", bg: "#f1f5f9", label: "Closed" },
+  CANCELED: { color: "#94a3b8", bg: "#f1f5f9", label: "Canceled" },
 };
-const SUPPORT_AGENTS = [
-  "Ahmed (Support)",
-  "Layla (Support)",
-  "Rania (Support)",
-];
-const CATEGORIES = [
-  "All",
-  "Order Issue",
-  "Technical Issue",
-  "Return / Refund",
-  "Payment",
-  "Account",
-  "Other",
-];
-const USER_TYPES = ["All", "Customer", "Vendor"];
-const PAGE_SIZE = 5;
 
-function getInitials(name) {
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+const PRIORITY_CFG = {
+  LOW: { color: "#16a34a", bg: "#dcfce7", label: "Low" },
+  MEDIUM: { color: "#ca8a04", bg: "#fef9c3", label: "Medium" },
+  HIGH: { color: "#dc2626", bg: "#fee2e2", label: "High" },
+  URGENT: { color: "#7c3aed", bg: "#f5f3ff", label: "Urgent" },
+};
+
+const TERMINAL_STATUSES = ["RESOLVED", "CLOSED", "CANCELED"];
+
+function isImageUrl(url) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url);
+}
+
+function extractLegacyAttachment(content) {
+  if (!content) return { text: "", urls: [] };
+  const match = content.match(/\(attachment:\s*(https?:\/\/[^\s)]+)\)/i);
+  if (!match) return { text: content, urls: [] };
+  const cleaned = content.replace(match[0], "").trim();
+  return { text: cleaned || "Attachment", urls: [match[1]] };
+}
+
+function mapTicket(ticket) {
+  const messages = (ticket.messages || [])
+    .filter((m) => !m.isSystemMessage)
+    .map((m) => {
+      const legacy = extractLegacyAttachment(m.content);
+      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(Boolean);
+      const attachments = attachmentUrls.map((url) => ({
+        url,
+        name: url.split("/").pop() || "Attachment",
+        isImage: isImageUrl(url),
+      }));
+      const senderRole = String(m.senderRole || "").toLowerCase();
+      return {
+        from: senderRole === "admin" ? "admin" : "user",
+        text: legacy.text || m.content,
+        time: new Date(m.createdAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        attachments,
+      };
+    });
+
+  const typeLabel =
+    TICKET_TYPES.find((tp) => tp.value === ticket.type)?.label || ticket.type;
+
+  return {
+    id: ticket.id,
+    subject: ticket.subject,
+    typeLabel,
+    type: ticket.type,
+    status: ticket.status,
+    priority: ticket.priority,
+    creatorRole: ticket.creatorRole,
+    createdAt: new Date(ticket.createdAt).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+    messages,
+    assignedAgentId: ticket.assignedAgentId,
+  };
+}
+
+function fmt(date) {
+  if (!date) return "—";
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function StatusBadge({ status }) {
-  const c = STATUS_CFG[status] || { color: "#94a3b8", bg: "#f1f5f9" };
+  const c = STATUS_CFG[status] || { color: "#94a3b8", bg: "#f1f5f9", label: status };
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
-        padding: "3px 10px",
-        borderRadius: 99,
-        fontSize: 11,
-        fontWeight: 700,
-        background: c.bg,
-        color: c.color,
-      }}
-    >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: "50%",
-          background: c.color,
-          display: "inline-block",
-        }}
-      />
-      {status}
+    <span className={t.badge} style={{ background: c.bg, color: c.color }}>
+      <span className={t.badgeDot} style={{ background: c.color }} />
+      {c.label}
     </span>
   );
 }
 
 function PriorityBadge({ priority }) {
-  const cfg = { High: "#ef4444", Medium: "#f59e0b", Low: "#16a34a" };
+  const c = PRIORITY_CFG[priority] || { color: "#64748b", bg: "#f1f5f9", label: priority };
   return (
-    <span
-      style={{
-        padding: "2px 9px",
-        borderRadius: 99,
-        fontSize: 11,
-        fontWeight: 700,
-        color: cfg[priority],
-        background: cfg[priority] + "18",
-      }}
-    >
-      {priority}
+    <span className={t.badge} style={{ background: c.bg, color: c.color }}>
+      {c.label}
     </span>
   );
 }
 
-function FileAtt({ att }) {
-  if (!att) return null;
+function AttachmentList({ attachments }) {
+  if (!attachments?.length) return null;
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "5px 9px",
-        background: "rgba(255,255,255,0.2)",
-        borderRadius: 6,
-        fontSize: 11,
-        marginTop: 6,
-      }}
-    >
-      {att.type === "image" ? <ImageIcon size={12} /> : <FileText size={12} />}
-      <span>{att.name}</span>
+    <div className={t.ticketAttachList}>
+      {attachments.map((att) =>
+        att.isImage ? (
+          <a
+            key={att.url}
+            href={att.url}
+            target="_blank"
+            rel="noreferrer"
+            className={t.ticketAttachImg}
+          >
+            <img src={att.url} alt={att.name} />
+          </a>
+        ) : (
+          <a
+            key={att.url}
+            href={att.url}
+            target="_blank"
+            rel="noreferrer"
+            className={t.ticketAttach}
+          >
+            <FileText size={12} /> {att.name}
+          </a>
+        ),
+      )}
     </div>
   );
 }
 
-/* ─── Ticket Detail Modal ─── */
-function TicketModal({ ticket, onClose, onReply }) {
+function TicketChatModal({ ticket, onClose, onAction }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [resolveNote, setResolveNote] = useState("");
+  const [showResolve, setShowResolve] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
   const fileRef = useRef(null);
+  const bottomRef = useRef(null);
 
-  const handleSend = (e) => {
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [ticket.messages]);
+
+  const isTerminal = TERMINAL_STATUSES.includes(ticket.status);
+  const canClaim = ticket.status === "ESCALATED";
+  const canResolve = !isTerminal && ticket.status !== "PENDING";
+  const canClose = !isTerminal;
+
+  const handleSend = async (e) => {
     e.preventDefault();
     if (!text.trim() && !file) return;
-    onReply(
-      ticket.id,
-      text,
-      file
-        ? {
-            name: file.name,
-            type: file.type?.startsWith("image") ? "image" : "file",
-          }
-        : null,
-    );
-    setText("");
-    setFile(null);
+    setSending(true);
+    try {
+      let attachmentUrl = null;
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await multipartClient.post(
+          `/admin/support/tickets/${ticket.id}/messages/attachments`,
+          formData,
+        );
+        attachmentUrl = res.data?.url || null;
+      }
+      const content = text.trim() || "Attachment";
+      await apiClient.post(`/admin/support/tickets/${ticket.id}/messages`, {
+        content,
+        attachments: attachmentUrl ? [attachmentUrl] : undefined,
+      });
+      setText("");
+      setFile(null);
+      await onAction("refetch", ticket.id);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleClaim = async () => {
+    setActionLoading(true);
+    try {
+      await apiClient.patch(`/admin/support/tickets/${ticket.id}/claim`);
+      await onAction("refetch", ticket.id);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResolve = async () => {
+    setActionLoading(true);
+    try {
+      await apiClient.patch(`/admin/support/tickets/${ticket.id}/resolve`, {
+        resolutionNote: resolveNote || undefined,
+      });
+      setShowResolve(false);
+      await onAction("refetch", ticket.id);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleClose = async () => {
+    setActionLoading(true);
+    try {
+      await apiClient.patch(`/admin/support/tickets/${ticket.id}/close`);
+      await onAction("refetch", ticket.id);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.55)",
-        zIndex: 1000,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-      }}
-      onClick={onClose}
-    >
+    <div className={t.modalBackdrop} onClick={onClose}>
       <div
-        style={{
-          background: "var(--adm-surface)",
-          borderRadius: 16,
-          width: "100%",
-          maxWidth: 760,
-          maxHeight: "90vh",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-        }}
+        className={`${t.modal} ${t.modalLg} ${t.ticketChatModal}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          style={{
-            padding: "20px 24px",
-            borderBottom: "1px solid var(--adm-border)",
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-          }}
-        >
-          <div>
-            <h3 style={{ margin: 0 }}>{ticket.subject}</h3>
-            <p
-              style={{
-                margin: "4px 0 0",
-                color: "var(--adm-text-muted)",
-                fontSize: 12,
-              }}
-            >
-              {ticket.user} · {ticket.id}
-            </p>
+        <div className={t.modalHead}>
+          <div className={t.ticketChatHeadInfo}>
+            <h2 className={t.modalTitle}>{ticket.subject}</h2>
+            <div className={t.ticketChatMeta}>
+              <StatusBadge status={ticket.status} />
+              {ticket.priority && <PriorityBadge priority={ticket.priority} />}
+              <span className={t.pageInfo}>
+                {ticket.typeLabel} · {ticket.createdAt}
+              </span>
+            </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{ border: "none", background: "none", cursor: "pointer" }}
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div style={{ padding: 24, overflow: "auto" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {ticket.messages.map((msg, index) => (
-              <div
-                key={index}
-                style={{
-                  padding: 12,
-                  borderRadius: 12,
-                  border: "1px solid var(--adm-border)",
-                  background: "var(--adm-bg)",
-                }}
+          <div className={t.ticketChatActions}>
+            {canClaim && (
+              <button
+                className={`${t.btn} ${t.btnOutline} ${t.btnSm}`}
+                onClick={handleClaim}
+                disabled={actionLoading}
               >
-                <p style={{ margin: 0, fontWeight: 700, fontSize: 12 }}>
-                  {msg.name}
-                </p>
-                <p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.5 }}>
-                  {msg.text}
-                </p>
-              </div>
-            ))}
+                <Shield size={13} /> Claim
+              </button>
+            )}
+            {showResolve ? (
+              <>
+                <button
+                  className={`${t.btn} ${t.btnOutline} ${t.btnSm}`}
+                  onClick={() => setShowResolve(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={`${t.btn} ${t.btnPrimary} ${t.btnSm}`}
+                  onClick={handleResolve}
+                  disabled={actionLoading}
+                >
+                  <CheckCircle size={13} />
+                  {actionLoading ? "Resolving…" : "Confirm Resolve"}
+                </button>
+              </>
+            ) : (
+              canResolve && (
+                <button
+                  className={`${t.btn} ${t.btnOutline} ${t.btnSm}`}
+                  onClick={() => setShowResolve(true)}
+                >
+                  <CheckCircle size={13} /> Resolve
+                </button>
+              )
+            )}
+            {canClose && !showResolve && (
+              <button
+                className={`${t.btn} ${t.btnDanger} ${t.btnSm}`}
+                onClick={handleClose}
+                disabled={actionLoading}
+              >
+                <XCircle size={13} />
+                {actionLoading ? "Closing…" : "Force Close"}
+              </button>
+            )}
+            <button className={t.modalClose} onClick={onClose}>
+              <X size={18} />
+            </button>
           </div>
         </div>
 
-        <form
-          style={{
-            padding: "12px 24px",
-            borderTop: "1px solid var(--adm-border)",
-            display: "flex",
-            gap: 8,
-            alignItems: "flex-end",
-          }}
-          onSubmit={handleSend}
-        >
-          <button
-            type="button"
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--adm-text-muted)",
-              padding: 8,
-            }}
-            onClick={() => fileRef.current?.click()}
-          >
-            <Paperclip size={17} />
-          </button>
-          <input
-            type="file"
-            ref={fileRef}
-            style={{ display: "none" }}
-            onChange={(e) => setFile(e.target.files[0] || null)}
-          />
-          <textarea
-            style={{
-              flex: 1,
-              padding: "10px 14px",
-              border: "1.5px solid var(--adm-border)",
-              borderRadius: 12,
-              fontSize: 13.5,
-              resize: "none",
-              outline: "none",
-              background: "var(--adm-bg)",
-              color: "var(--adm-text)",
-              fontFamily: "inherit",
-            }}
-            rows={2}
-            placeholder="Reply as Admin…"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-          <button
-            type="submit"
-            disabled={!text.trim() && !file}
-            style={{
-              background: "var(--adm-accent)",
-              color: "white",
-              border: "none",
-              borderRadius: 10,
-              padding: "10px 14px",
-              cursor: "pointer",
-              opacity: !text.trim() && !file ? 0.4 : 1,
-            }}
-          >
-            <Send size={16} />
-          </button>
-        </form>
+        {showResolve && (
+          <div className={t.ticketResolveBar}>
+            <input
+              className={t.input}
+              placeholder="Resolution note (optional)…"
+              value={resolveNote}
+              onChange={(e) => setResolveNote(e.target.value)}
+            />
+          </div>
+        )}
+
+        <div className={t.ticketChatArea}>
+          <div className={t.ticketSysEvent}>
+            <span>Ticket opened · {ticket.createdAt}</span>
+          </div>
+          {ticket.messages.map((msg, i) => {
+            const isAdmin = msg.from === "admin";
+            return (
+              <div
+                key={i}
+                className={`${t.ticketMsgRow} ${isAdmin ? t.ticketMsgRight : t.ticketMsgLeft}`}
+              >
+                {!isAdmin && (
+                  <div
+                    className={t.ticketMsgAvatar}
+                    style={{ background: "#4f46e5" }}
+                  >
+                    <User size={13} />
+                  </div>
+                )}
+                <div
+                  className={`${t.ticketBubble} ${isAdmin ? t.ticketBubbleAdmin : t.ticketBubbleUser}`}
+                >
+                  <p className={t.ticketBubbleText}>{msg.text}</p>
+                  <AttachmentList attachments={msg.attachments} />
+                  <span className={t.ticketBubbleTime}>{msg.time}</span>
+                </div>
+                {isAdmin && (
+                  <div
+                    className={t.ticketMsgAvatar}
+                    style={{ background: "var(--adm-accent)" }}
+                  >
+                    <Shield size={13} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
+
+        {!isTerminal ? (
+          <form className={t.ticketReplyBox} onSubmit={handleSend}>
+            {file && (
+              <div className={t.ticketFileChip}>
+                <Paperclip size={12} />
+                <span>{file.name}</span>
+                <button type="button" onClick={() => setFile(null)}>
+                  <X size={11} />
+                </button>
+              </div>
+            )}
+            <div className={t.ticketReplyRow}>
+              <button
+                type="button"
+                className={t.ticketAttachBtn}
+                onClick={() => fileRef.current?.click()}
+                title="Attach image"
+              >
+                <Paperclip size={16} />
+              </button>
+              <input
+                type="file"
+                ref={fileRef}
+                style={{ display: "none" }}
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(e) => setFile(e.target.files[0] || null)}
+              />
+              <textarea
+                className={t.ticketReplyInput}
+                rows={2}
+                placeholder="Reply as Admin…"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend(e);
+                  }
+                }}
+              />
+              <button
+                type="submit"
+                className={t.ticketSendBtn}
+                disabled={(!text.trim() && !file) || sending}
+              >
+                <Send size={15} />
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className={t.ticketClosedBanner}>
+            <CheckCircle size={14} />
+            This ticket is {STATUS_CFG[ticket.status]?.label?.toLowerCase() || "closed"}.
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* ─── Main page ─── */
 export default function AdminTickets() {
-  const [tickets, setTickets] = useState(SEED);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [priorityFilter, setPriorityFilter] = useState("All");
-  const [categoryFilter, setCategoryFilter] = useState("All");
-  const [userTypeFilter, setUserTypeFilter] = useState("All");
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const limit = 20;
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [escalatedOnly, setEscalatedOnly] = useState(false);
   const [active, setActive] = useState(null);
+  const [error, setError] = useState(null);
 
-  const filtered = tickets.filter((tk) => {
-    const q =
-      tk.subject.toLowerCase().includes(search.toLowerCase()) ||
-      tk.user.toLowerCase().includes(search.toLowerCase()) ||
-      tk.id.toLowerCase().includes(search.toLowerCase());
-    return (
-      q &&
-      (statusFilter === "All" || tk.status === statusFilter) &&
-      (priorityFilter === "All" || tk.priority === priorityFilter) &&
-      (categoryFilter === "All" || tk.category === categoryFilter) &&
-      (userTypeFilter === "All" || tk.userType === userTypeFilter)
-    );
-  });
+  const fetchTickets = useCallback(() => {
+    setLoading(true);
+    const params = { page, limit };
+    if (statusFilter) params.status = statusFilter;
+    if (typeFilter) params.type = typeFilter;
+    if (escalatedOnly) params.escalatedOnly = true;
+    apiClient
+      .get("/admin/support/tickets", { params })
+      .then((r) => {
+        let data = r.data.data || r.data || [];
+        if (search) {
+          const q = search.toLowerCase();
+          data = data.filter(
+            (tk) =>
+              tk.subject?.toLowerCase().includes(q) ||
+              tk.id?.toLowerCase().includes(q),
+          );
+        }
+        setTickets(data);
+        setTotal(r.data.total ?? data.length);
+      })
+      .catch(() => setError("Failed to load tickets."))
+      .finally(() => setLoading(false));
+  }, [page, limit, statusFilter, typeFilter, escalatedOnly, search]);
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
 
-  const update = (id, changes) => {
-    const updated = tickets.map((tk) =>
-      tk.id === id ? { ...tk, ...changes } : tk,
-    );
-    setTickets(updated);
-    if (active?.id === id) setActive((prev) => ({ ...prev, ...changes }));
+  const openTicket = async (tk) => {
+    try {
+      const res = await apiClient.get(`/admin/support/tickets/${tk.id}`);
+      setActive(mapTicket(res.data));
+    } catch {
+      setError("Failed to load ticket details.");
+    }
   };
 
-  const handleReply = (id, text, attachment) => {
-    const msg = {
-      from: "admin",
-      name: "Admin",
-      text,
-      time: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      attachment,
-    };
-    const updated = tickets.map((tk) =>
-      tk.id === id
-        ? {
-            ...tk,
-            messages: [...tk.messages, msg],
-            status: tk.status === "Open" ? "In Progress" : tk.status,
-          }
-        : tk,
-    );
-    setTickets(updated);
-    setActive(updated.find((tk) => tk.id === id));
+  const handleAction = async (type, id) => {
+    if (type === "refetch") {
+      const res = await apiClient.get(`/admin/support/tickets/${id}`);
+      const updated = mapTicket(res.data);
+      setActive(updated);
+      fetchTickets();
+    }
   };
 
-  const stats = {
-    open: tickets.filter((t) => t.status === "Open").length,
-    escalated: tickets.filter((t) => t.status === "Escalated to Admin").length,
-    inProgress: tickets.filter((t) => t.status === "In Progress").length,
-    solved: tickets.filter(
-      (t) => t.status === "Solved" || t.status === "Closed",
-    ).length,
-  };
+  const totalPages = Math.ceil(total / limit);
 
   return (
     <AdminLayout
@@ -432,79 +501,41 @@ export default function AdminTickets() {
       pageSubtitle="Full control over all customer, vendor, and support tickets."
       breadcrumb="Tickets"
     >
-      {/* Stats */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 14,
-          marginBottom: 20,
-        }}
-      >
-        {[
-          { label: "Open", value: stats.open, color: "#ef4444", bg: "#fee2e2" },
-          {
-            label: "Escalated",
-            value: stats.escalated,
+      {error && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 16px",
+            borderRadius: 8,
+            background: "#fee2e2",
             color: "#dc2626",
-            bg: "#fff1f2",
-          },
-          {
-            label: "In Progress",
-            value: stats.inProgress,
-            color: "#f59e0b",
-            bg: "#fef3c7",
-          },
-          {
-            label: "Solved / Closed",
-            value: stats.solved,
-            color: "#16a34a",
-            bg: "#dcfce7",
-          },
-        ].map((s) => (
-          <div
-            key={s.label}
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          {error}
+          <button
+            onClick={() => setError(null)}
             style={{
-              background: s.bg,
-              border: `1.5px solid ${s.color}30`,
-              borderRadius: 12,
-              padding: "14px 18px",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "#dc2626",
             }}
           >
-            <p
-              style={{
-                margin: "0 0 4px",
-                fontSize: 26,
-                fontWeight: 800,
-                color: s.color,
-                lineHeight: 1,
-              }}
-            >
-              {s.value}
-            </p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 12,
-                fontWeight: 600,
-                color: s.color,
-                opacity: 0.75,
-              }}
-            >
-              {s.label}
-            </p>
-          </div>
-        ))}
-      </div>
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
-      {/* Toolbar */}
       <div className={t.toolbar}>
         <div className={t.toolbarLeft}>
           <div className={t.searchBox}>
-            <Search size={15} className={t.searchIcon} />
+            <Search size={14} className={t.searchIcon} />
             <input
               className={t.searchInput}
-              placeholder="Search by ID, subject or user…"
+              placeholder="Search by subject or ID…"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -520,80 +551,73 @@ export default function AdminTickets() {
               setPage(1);
             }}
           >
-            <option value="All">All Status</option>
-            {STATUS_ALL.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-          <select
-            className={t.filterSelect}
-            value={priorityFilter}
-            onChange={(e) => {
-              setPriorityFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="All">All Priority</option>
-            <option>High</option>
-            <option>Medium</option>
-            <option>Low</option>
-          </select>
-          <select
-            className={t.filterSelect}
-            value={categoryFilter}
-            onChange={(e) => {
-              setCategoryFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
+            <option value="">All Status</option>
+            {TICKET_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_CFG[s]?.label || s}
               </option>
             ))}
           </select>
           <select
             className={t.filterSelect}
-            value={userTypeFilter}
+            value={typeFilter}
             onChange={(e) => {
-              setUserTypeFilter(e.target.value);
+              setTypeFilter(e.target.value);
               setPage(1);
             }}
           >
-            {USER_TYPES.map((u) => (
-              <option key={u} value={u}>
-                {u}
+            <option value="">All Types</option>
+            {TICKET_TYPES.map((tp) => (
+              <option key={tp.value} value={tp.value}>
+                {tp.label}
               </option>
             ))}
           </select>
+          <label className={t.ticketEscalatedCheck}>
+            <input
+              type="checkbox"
+              checked={escalatedOnly}
+              onChange={(e) => {
+                setEscalatedOnly(e.target.checked);
+                setPage(1);
+              }}
+            />
+            Escalated only
+          </label>
         </div>
-        <span className={t.pageInfo}>{filtered.length} tickets</span>
+        <span className={t.pageInfo}>{total} tickets</span>
       </div>
 
-      {/* Table */}
       <div className={t.tableCard}>
         <div className={t.tableWrap}>
           <table className={t.table}>
             <thead>
               <tr>
-                <th>Ticket ID</th>
+                <th>#</th>
                 <th>Subject</th>
-                <th>Reported By</th>
-                <th>Category</th>
+                <th>Type</th>
                 <th>Priority</th>
                 <th>Status</th>
-                <th>Assigned To</th>
-                <th>Date</th>
-                <th style={{ width: 80 }}>Action</th>
+                <th>Creator Role</th>
+                <th>Created</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {paged.length === 0 ? (
+              {loading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    <td colSpan={8}>
+                      <span className={`${t.skeleton} ${t.skeletonRow}`} />
+                    </td>
+                  </tr>
+                ))
+              ) : tickets.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={8}>
                     <div className={t.emptyState}>
                       <div className={t.emptyIcon}>
-                        <CheckCircle size={24} />
+                        <MessageSquare size={24} />
                       </div>
                       <h3 className={t.emptyTitle}>No tickets found</h3>
                       <p className={t.emptyText}>
@@ -603,79 +627,35 @@ export default function AdminTickets() {
                   </td>
                 </tr>
               ) : (
-                paged.map((tk) => (
+                tickets.map((tk, i) => (
                   <tr key={tk.id}>
-                    <td
-                      style={{
-                        fontWeight: 700,
-                        color: "var(--adm-accent)",
-                        fontFamily: "monospace",
-                        fontSize: 12,
-                      }}
-                    >
-                      {tk.id}
-                    </td>
-                    <td
-                      style={{
-                        fontWeight: 600,
-                        maxWidth: 180,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {tk.subject}
+                    <td>{(page - 1) * limit + i + 1}</td>
+                    <td className={t.ticketSubjectCell}>{tk.subject}</td>
+                    <td className={t.ticketTypeCell}>
+                      {TICKET_TYPES.find((tp) => tp.value === tk.type)?.label ||
+                        tk.type}
                     </td>
                     <td>
-                      <div className={t.avatarCell}>
-                        <div
-                          className={t.avatar}
-                          style={{ width: 28, height: 28, fontSize: 11 }}
-                        >
-                          {getInitials(tk.user)}
-                        </div>
-                        <div>
-                          <span className={t.avatarName}>{tk.user}</span>
-                          <span
-                            className={t.avatarSub}
-                            style={{ display: "block" }}
-                          >
-                            {tk.userType}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td
-                      style={{ fontSize: 12, color: "var(--adm-text-muted)" }}
-                    >
-                      {tk.category}
-                    </td>
-                    <td>
-                      <PriorityBadge priority={tk.priority} />
+                      {tk.priority ? (
+                        <PriorityBadge priority={tk.priority} />
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td>
                       <StatusBadge status={tk.status} />
                     </td>
-                    <td
-                      style={{
-                        fontSize: 12,
-                        color: tk.assignedTo
-                          ? "var(--adm-text)"
-                          : "var(--adm-text-muted)",
-                      }}
-                    >
-                      {tk.assignedTo || "—"}
+                    <td className={t.ticketRoleCell}>
+                      {tk.creatorRole
+                        ?.toLowerCase()
+                        .replace(/_/g, " ") || "—"}
                     </td>
-                    <td
-                      style={{ fontSize: 12, color: "var(--adm-text-muted)" }}
-                    >
-                      {tk.date}
-                    </td>
+                    <td className={t.ticketTypeCell}>{fmt(tk.createdAt)}</td>
                     <td>
                       <button
                         className={`${t.actionBtn} ${t.approve}`}
                         title="Open Ticket"
-                        onClick={() => setActive(tk)}
+                        onClick={() => openTicket(tk)}
                       >
                         <ArrowUpRight size={15} />
                       </button>
@@ -690,8 +670,8 @@ export default function AdminTickets() {
         {totalPages > 1 && (
           <div className={t.pagination}>
             <span className={t.pageInfo}>
-              Showing {(page - 1) * PAGE_SIZE + 1}–
-              {Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+              Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)}{" "}
+              of {total}
             </span>
             <div className={t.pageButtons}>
               <button
@@ -701,7 +681,7 @@ export default function AdminTickets() {
               >
                 ←
               </button>
-              {Array.from({ length: totalPages }, (_, i) => (
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => (
                 <button
                   key={i + 1}
                   className={`${t.pageBtn} ${page === i + 1 ? t.pageBtnActive : ""}`}
@@ -722,15 +702,11 @@ export default function AdminTickets() {
         )}
       </div>
 
-      {/* Modal */}
       {active && (
-        <TicketModal
+        <TicketChatModal
           ticket={active}
           onClose={() => setActive(null)}
-          onReply={handleReply}
-          onStatusChange={(id, status) => update(id, { status })}
-          onAssign={(id, agent) => update(id, { assignedTo: agent || null })}
-          onEscalate={(id) => update(id, { status: "Escalated to Admin" })}
+          onAction={handleAction}
         />
       )}
     </AdminLayout>

@@ -336,7 +336,7 @@ export default function VendorRefundsPage() {
                         </td>
                         <td style={{ color: "var(--vdr-text-muted)" }}>{r.orderNumber}</td>
                         <td style={{ fontWeight: 500 }}>{r.product}</td>
-                        <td style={{ color: "var(--vdr-text-muted)" }}>{r.date}</td>
+                        <td style={{ color: "var(--vdr-text-muted)" }}>{r.date ? new Date(r.date).toLocaleDateString() : "—"}</td>
                         <td>
                           <span className={`${p.badge} ${STATUS_BADGE[r.status] || p.badgePending}`}>
                             <span className={p.badgeDot} /> {STATUS_LABELS[r.status] || r.status}
@@ -397,6 +397,74 @@ export default function VendorRefundsPage() {
                 </div>
               </div>
             )}
+
+            {/* Message Thread */}
+            <div style={{ marginTop: 32 }}>
+              <label className={p.label} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 16 }}>
+                <MessageSquare size={14} /> Message Thread
+              </label>
+
+              <div style={{ background: "#f8fafc", border: "1px solid var(--vdr-border)", borderRadius: 12, padding: 20, maxHeight: 400, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
+                {!selected.messages?.length ? (
+                  <p style={{ fontSize: 13, color: "var(--vdr-text-muted)", textAlign: "center", margin: 0 }}>No messages yet.</p>
+                ) : (
+                  selected.messages.map((msg) => {
+                    const isVendor = msg.senderType === "VENDOR" || msg.senderType === "vendor";
+                    const { text, urls } = extractLegacyAttachment(msg.content);
+                    return (
+                      <div key={msg.id} style={{ display: "flex", flexDirection: "column", alignItems: isVendor ? "flex-end" : "flex-start" }}>
+                        <div style={{ maxWidth: "75%", background: isVendor ? "var(--vdr-accent)" : "white", color: isVendor ? "white" : "inherit", padding: "10px 14px", borderRadius: isVendor ? "14px 14px 4px 14px" : "14px 14px 14px 4px", border: isVendor ? "none" : "1px solid var(--vdr-border)", fontSize: 13, lineHeight: 1.5 }}>
+                          {text}
+                          {urls.map(u => isImageUrl(u) ? (
+                            <img key={u} src={u} alt="" style={{ marginTop: 8, maxWidth: 160, borderRadius: 8, cursor: "pointer" }} onClick={() => setFullscreenImage(u)} />
+                          ) : (
+                            <a key={u} href={u} target="_blank" rel="noreferrer" style={{ display: "block", marginTop: 6, fontSize: 12, color: isVendor ? "rgba(255,255,255,0.85)" : "var(--vdr-accent)" }}>{u}</a>
+                          ))}
+                          {msg.attachments?.map((att) => {
+                            const url = att.url || att;
+                            return isImageUrl(url) ? (
+                              <img key={url} src={url} alt="" style={{ marginTop: 8, maxWidth: 160, borderRadius: 8, cursor: "pointer" }} onClick={() => setFullscreenImage(url)} />
+                            ) : (
+                              <a key={url} href={url} target="_blank" rel="noreferrer" style={{ display: "block", marginTop: 6, fontSize: 12 }}>{att.name || url}</a>
+                            );
+                          })}
+                        </div>
+                        <span style={{ fontSize: 11, color: "var(--vdr-text-muted)", marginTop: 4 }}>
+                          {isVendor ? "You" : "Customer"} · {new Date(msg.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={bottomRef} />
+              </div>
+
+              {/* Reply Input */}
+              <form onSubmit={handleReply} style={{ marginTop: 14, display: "flex", gap: 10 }}>
+                <div className={p.searchBox} style={{ flex: 1, height: 44, border: "1.5px solid var(--vdr-border)" }}>
+                  <input
+                    className={p.searchInput}
+                    style={{ fontSize: 13 }}
+                    placeholder="Write a message…"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                  />
+                  <button type="button" onClick={() => fileRef.current?.click()} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--vdr-text-muted)", display: "flex", alignItems: "center" }}>
+                    <Paperclip size={15} />
+                  </button>
+                  <input ref={fileRef} type="file" style={{ display: "none" }} onChange={(e) => setReplyFile(e.target.files?.[0] || null)} />
+                </div>
+                <button type="submit" className={`${p.btn} ${p.btnPrimary}`} style={{ height: 44, padding: "0 20px" }} disabled={sending || (!replyText.trim() && !replyFile)}>
+                  <Send size={14} /> {sending ? "Sending…" : "Send"}
+                </button>
+              </form>
+              {replyFile && (
+                <div style={{ marginTop: 8, fontSize: 12, color: "var(--vdr-text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+                  <Paperclip size={12} /> {replyFile.name}
+                  <button onClick={() => setReplyFile(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", display: "flex" }}><X size={12} /></button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
