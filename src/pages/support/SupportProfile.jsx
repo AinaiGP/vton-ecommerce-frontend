@@ -156,7 +156,7 @@ export default function SupportProfilePage() {
       const firstName = names[0];
       const lastName = names.slice(1).join(" ");
       
-      const payload = { firstName, lastName };
+      const payload = { firstName, lastName, department: level };
       if (email !== user?.email) {
         payload.email = email;
       }

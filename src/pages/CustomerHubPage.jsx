@@ -127,7 +127,10 @@ export default function CustomerHubPage() {
         orders: ordersRes.data.total || ordersRes.data.data?.length || 0,
         tickets:
           ticketsRes.data.data?.filter(
-            (t) => t.status !== "CLOSED" && t.status !== "SOLVED",
+            (t) =>
+              t.status !== "CLOSED" &&
+              t.status !== "RESOLVED" &&
+              t.status !== "CANCELED",
           ).length || 0,
         wardrobe: wardrobeRes.data.total || 0,
       });

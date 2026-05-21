@@ -17,6 +17,7 @@ import {
 import VendorLayout from "../components/vendor/VendorLayout";
 import p from "../styles/VendorPage.module.css";
 import apiClient, { multipartClient } from "../utils/apiClient";
+import { formatPrice } from "../utils/formatPrice";
 
 const STATUS_BADGE = {
   REQUESTED: p.badgePending,
@@ -73,7 +74,7 @@ const mapReturnTicket = (item) => ({
   date: item.returnRequestedAt || item.ticket?.createdAt || item.createdAt,
   // messages may be on item directly (Ticket) or nested (OrderItem with joined Ticket)
   messages: item.messages || item.ticket?.messages || [],
-  amount: item.lineTotal ? (item.lineTotal / 100) : 0,
+  amount: item.lineTotal || 0,
   quantity: item.returnQuantity || item.quantity,
 });
 
@@ -402,7 +403,7 @@ export default function VendorRefundsPage() {
           <div style={{ padding: 32, background: "white" }}>
             <div className={p.formGrid}>
               <div><label className={p.label}>Return Reason</label><p style={{ fontSize: 15, fontWeight: 600 }}>{selected.reason}</p></div>
-              <div><label className={p.label}>Refund Amount</label><p style={{ fontSize: 15, fontWeight: 600, color: "#16a34a" }}>{selected.amount}</p></div>
+              <div><label className={p.label}>Refund Amount</label><p style={{ fontSize: 15, fontWeight: 600, color: "#16a34a" }}>{formatPrice(selected.amount)}</p></div>
               <div style={{ gridColumn: "1 / -1" }}><label className={p.label}>Customer Explanation</label><p style={{ fontSize: 14, color: "var(--vdr-text-muted)", background: "#f8fafc", padding: 16, borderRadius: 12 }}>{selected.description || "No description provided."}</p></div>
             </div>
             
