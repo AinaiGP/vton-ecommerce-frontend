@@ -1297,6 +1297,174 @@
   flex-wrap: wrap;
 }
 
+/* ── Star Rating Filter Bar ── */
+.starFilterBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.starFilterBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 14px;
+  border: 1.5px solid var(--vdr-border);
+  border-radius: var(--vdr-radius-pill);
+  background: var(--vdr-surface);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--vdr-text);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.starFilterBtn:hover {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.starFilterActive {
+  border-color: #f59e0b !important;
+  background: #fef3c7 !important;
+  color: #92400e;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+.starFilterCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--vdr-text-muted);
+  background: var(--vdr-bg);
+  border-radius: 20px;
+  padding: 1px 6px;
+  min-width: 20px;
+  text-align: center;
+  margin-left: 3px;
+  line-height: 1.5;
+}
+
+.starFilterActive .starFilterCount {
+  background: rgba(245, 158, 11, 0.2);
+  color: #92400e;
+}
+
+.starFilterClear {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1.5px solid var(--vdr-border);
+  border-radius: var(--vdr-radius-pill);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vdr-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.starFilterClear:hover {
+  border-color: #dc2626;
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+/* ── Clickable distribution bar rows ── */
+.distRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.distRow:hover {
+  background: #fef3c7 !important;
+  border-color: #f59e0b !important;
+}
+
+.distRow:last-child {
+  margin-bottom: 0;
+}
+
+.distStarLabel {
+  display: flex;
+  gap: 1px;
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.distBarTrack {
+  flex: 1;
+  height: 8px;
+  background: var(--vdr-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.distBarFill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.35s ease, background 0.15s;
+}
+
+.distCount {
+  font-size: 12px;
+  width: 26px;
+  text-align: right;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+/* ── Product list rating filter ── */
+.productRatingFilter {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px 12px;
+  flex-wrap: wrap;
+}
+
+.productRatingBtn {
+  flex: 1;
+  min-width: 30px;
+  padding: 5px 6px;
+  border: 1.5px solid var(--vdr-border);
+  border-radius: 6px;
+  background: var(--vdr-surface);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--vdr-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.productRatingBtn:hover {
+  border-color: #f59e0b;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.productRatingActive {
+  border-color: #f59e0b !important;
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18);
+}
+
 /* ── Product thumb img ── */
 .productThumbImg {
   width: 44px;

@@ -14,17 +14,17 @@ function StarRow({ rating, size = 15 }) {
   );
 }
 
-const FILTERS = ["All", "5★", "4★", "3★ & below"];
-
 export default function VendorReviewsPage() {
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [reviews, setReviews] = useState([]);
-  const [filter, setFilter] = useState("All");
+  const [filter, setFilter] = useState(0); // 0 = all, 1-5 = exact star count
   const [replyTarget, setReplyTarget] = useState(null);
   const [replyText, setReplyText] = useState("");
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [productRatings, setProductRatings] = useState({});
+  const [ratingFilter, setRatingFilter] = useState(0);
 
   useEffect(() => {
     fetchProducts();
@@ -49,7 +49,12 @@ export default function VendorReviewsPage() {
     setLoading(true);
     try {
       const res = await apiClient.get(`/products/${productId}/reviews`);
-      setReviews(res.data?.data || []);
+      const data = res.data?.data || [];
+      setReviews(data);
+      if (data.length > 0) {
+        const avg = data.reduce((s, r) => s + (r.rating || 0), 0) / data.length;
+        setProductRatings(prev => ({ ...prev, [productId]: avg }));
+      }
     } catch (err) {
       console.error("Failed to fetch reviews", err);
     } finally {
@@ -59,16 +64,21 @@ export default function VendorReviewsPage() {
 
   const totalRating = reviews.length > 0 ? reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length : 0;
 
-  const filtered = reviews.filter(r => {
-    if (filter === "5★") return r.rating === 5;
-    if (filter === "4★") return r.rating === 4;
-    if (filter === "3★ & below") return r.rating <= 3;
-    return true;
-  });
+  const filtered = reviews.filter(r =>
+    filter === 0 ? true : r.rating === filter,
+  );
+
+  const countFor = (n) => reviews.filter(r => r.rating === n).length;
 
   const dist = [5,4,3,2,1].map(r => ({ stars: r, count: reviews.filter(v => v.rating === r).length }));
 
-  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredProducts = products.filter(prod => {
+    if (!prod.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (ratingFilter === 0) return true;
+    const rating = productRatings[prod.id] ?? prod.averageRating ?? null;
+    if (rating === null) return false;
+    return Math.round(rating) === ratingFilter;
+  });
 
   return (
     <VendorLayout pageTitle="Reviews & Ratings" pageSubtitle="Manage customer feedback by product." breadcrumb="Reviews">
@@ -76,12 +86,24 @@ export default function VendorReviewsPage() {
         
         {/* Left: Product Picker */}
         <aside className={p.tableCard} style={{ padding: "16px 0" }}>
-          <div style={{ padding: "0 16px 16px" }}>
+          <div style={{ padding: "0 16px 12px" }}>
             <h3 className={p.label} style={{ marginBottom: 12 }}>Select Product</h3>
             <div className={p.searchBox}>
               <Search size={14} className={p.searchIcon} />
               <input className={p.searchInput} placeholder="Filter products..." value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
+          </div>
+          <div className={p.productRatingFilter}>
+            {[0, 5, 4, 3, 2, 1].map(n => (
+              <button
+                key={n}
+                className={`${p.productRatingBtn} ${ratingFilter === n ? p.productRatingActive : ""}`}
+                onClick={() => setRatingFilter(n)}
+                title={n === 0 ? "All products" : `${n}-star products`}
+              >
+                {n === 0 ? "All" : `${n}★`}
+              </button>
+            ))}
           </div>
           <div style={{ maxHeight: "600px", overflowY: "auto" }}>
             {filteredProducts.map(prod => (
@@ -100,7 +122,12 @@ export default function VendorReviewsPage() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{prod.name}</p>
-                  <p style={{ margin: 0, fontSize: 11, color: "var(--vdr-text-muted)" }}>{prod.category?.name}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: "var(--vdr-text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                    {prod.category?.name}
+                    {productRatings[prod.id] !== undefined && (
+                      <span style={{ color: "#f59e0b", fontWeight: 700 }}>· ★ {productRatings[prod.id].toFixed(1)}</span>
+                    )}
+                  </p>
                 </div>
                 <ChevronRight size={14} style={{ opacity: selectedProduct?.id === prod.id ? 1 : 0.3 }} />
               </button>
@@ -122,27 +149,94 @@ export default function VendorReviewsPage() {
                   <p style={{ margin: 0, fontSize: 13, color: "var(--vdr-text-muted)" }}>{reviews.length} total reviews</p>
                 </div>
                 <div className={p.chartCard} style={{ padding: 20 }}>
-                  <h3 className={p.chartTitle} style={{ marginBottom: 12 }}>Rating Distribution</h3>
-                  {dist.map(d => (
-                    <div key={d.stars} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b", width: 30 }}>{d.stars} ★</span>
-                      <div style={{ flex: 1, height: 6, background: "var(--vdr-border)", borderRadius: 3, overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${reviews.length > 0 ? (d.count / reviews.length) * 100 : 0}%`, background: "var(--vdr-accent)", borderRadius: 3 }} />
-                      </div>
-                      <span style={{ fontSize: 12, color: "var(--vdr-text-muted)", width: 24, textAlign: "right" }}>{d.count}</span>
-                    </div>
-                  ))}
+                  <h3 className={p.chartTitle} style={{ marginBottom: 12 }}>
+                    Rating Distribution{" "}
+                    <span style={{ fontSize: 11, fontWeight: 400, color: "var(--vdr-text-muted)" }}>
+                      — click a row to filter
+                    </span>
+                  </h3>
+                  {dist.map(d => {
+                    const isActive = filter === d.stars;
+                    const pct = reviews.length > 0 ? (d.count / reviews.length) * 100 : 0;
+                    return (
+                      <button
+                        key={d.stars}
+                        onClick={() => setFilter(isActive ? 0 : d.stars)}
+                        className={p.distRow}
+                        style={{
+                          background: isActive ? "#fef3c7" : "transparent",
+                          border: isActive ? "1.5px solid #f59e0b" : "1.5px solid transparent",
+                        }}
+                      >
+                        <span className={p.distStarLabel}>
+                          {[1,2,3,4,5].map(i => (
+                            <span key={i} style={{ color: i <= d.stars ? "#f59e0b" : "var(--vdr-border)", fontSize: 12 }}>★</span>
+                          ))}
+                        </span>
+                        <div className={p.distBarTrack}>
+                          <div
+                            className={p.distBarFill}
+                            style={{
+                              width: `${pct}%`,
+                              background: isActive ? "#f59e0b" : "var(--vdr-accent)",
+                            }}
+                          />
+                        </div>
+                        <span className={p.distCount} style={{ color: isActive ? "#92400e" : "var(--vdr-text-muted)", fontWeight: isActive ? 700 : 400 }}>
+                          {d.count}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Filters */}
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <Filter size={14} style={{ color: "var(--vdr-text-subtle)" }} />
-                <div className={p.filterChips}>
-                  {FILTERS.map(f => (
-                    <button key={f} className={`${p.filterTab} ${filter === f ? p.active : ""}`} onClick={() => setFilter(f)}>{f}</button>
-                  ))}
-                </div>
+              {/* Star Rating Filters */}
+              <div className={p.starFilterBar}>
+                <Filter size={14} style={{ color: "var(--vdr-text-subtle)", flexShrink: 0 }} />
+
+                {/* All */}
+                <button
+                  className={`${p.starFilterBtn} ${filter === 0 ? p.starFilterActive : ""}`}
+                  onClick={() => setFilter(0)}
+                >
+                  All
+                  <span className={p.starFilterCount}>{reviews.length}</span>
+                </button>
+
+                {/* Individual star buttons 5 → 1 */}
+                {[5, 4, 3, 2, 1].map(n => (
+                  <button
+                    key={n}
+                    className={`${p.starFilterBtn} ${filter === n ? p.starFilterActive : ""}`}
+                    onClick={() => setFilter(filter === n ? 0 : n)}
+                    title={`Show ${n}-star reviews only`}
+                  >
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <span
+                        key={i}
+                        style={{
+                          color: i <= n ? "#f59e0b" : "var(--vdr-border)",
+                          fontSize: 14,
+                          lineHeight: 1,
+                        }}
+                      >
+                        ★
+                      </span>
+                    ))}
+                    <span className={p.starFilterCount}>{countFor(n)}</span>
+                  </button>
+                ))}
+
+                {filter !== 0 && (
+                  <button
+                    className={p.starFilterClear}
+                    onClick={() => setFilter(0)}
+                    title="Clear filter"
+                  >
+                    <X size={13} /> Clear
+                  </button>
+                )}
               </div>
 
               {/* Reviews */}

@@ -11,6 +11,8 @@ import {
   User,
   RefreshCw,
   Filter,
+  Copy,
+  Check,
 } from "lucide-react";
 import AdminLayout from "../../components/admin/AdminLayout";
 import apiClient, { multipartClient } from "../../utils/apiClient";
@@ -87,6 +89,16 @@ function roleLabel(role) {
       return "Customer";
     default:
       return "User";
+  }
+}
+
+function profileKeyLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin": return "Admin ID";
+    case "technical_support": return "Support ID";
+    case "vendor": return "Vendor ID";
+    case "customer": return "Customer ID";
+    default: return "Profile ID";
   }
 }
 
@@ -191,6 +203,15 @@ export default function AdminMessagesPage() {
   const [resolveNote, setResolveNote] = useState("");
   const [showResolve, setShowResolve] = useState(false);
   const [error, setError] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+
+  const copyToClipboard = (value, key) => {
+    if (!value) return;
+    navigator.clipboard.writeText(value).then(() => {
+      setCopiedId(key);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
+  };
 
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
@@ -563,7 +584,8 @@ export default function AdminMessagesPage() {
 
         {/* Detail panel */}
         {active ? (
-          <div className={m.convPanel}>
+          <div className={m.convPanel} style={{ flexDirection: "row" }}>
+            <div className={m.convPanelMain}>
             {/* Header */}
             <div
               className={m.convHeader}
@@ -602,56 +624,6 @@ export default function AdminMessagesPage() {
                   >
                     {TICKET_TYPES[active.type] || active.type}
                   </span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: "var(--adm-text-muted, #7a6a60)",
-                    }}
-                  >
-                    Creator:{" "}
-                    {active.creatorRole?.toLowerCase().replace(/_/g, " ") ||
-                      "—"}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 6,
-                    flexWrap: "wrap",
-                    marginTop: 6,
-                  }}
-                >
-                  {[
-                    {
-                      label: `Creator (${roleLabel(active.creatorRole)})`,
-                      userId: active.creatorId,
-                      entityId: active.creator?.entityId,
-                    },
-                    active.counterpartyId && {
-                      label: `Counterparty (${roleLabel(active.counterpartyRole)})`,
-                      userId: active.counterpartyId,
-                      entityId: active.counterparty?.entityId,
-                    },
-                    active.assigneeId && {
-                      label: `Assignee (${roleLabel(active.assigneeRole)})`,
-                      userId: active.assigneeId,
-                      entityId: active.assignee?.entityId,
-                    },
-                  ]
-                    .filter(Boolean)
-                    .map((item) => {
-                      const title = `user: ${item.userId || "—"}\nprofile: ${item.entityId || "—"}`;
-                      const label = `${item.label} · user:${shortId(item.userId)}${item.entityId ? ` · profile:${shortId(item.entityId)}` : ""}`;
-                      return (
-                        <span
-                          key={item.label}
-                          className={m.idPill}
-                          title={title}
-                        >
-                          {label}
-                        </span>
-                      );
-                    })}
                 </div>
               </div>
               <div
@@ -961,6 +933,68 @@ export default function AdminMessagesPage() {
                 {STATUS_CFG[active.status]?.label?.toLowerCase() || "closed"}.
               </div>
             )}
+            </div>
+            <div className={m.convMetaSidebar}>
+              <div className={m.convMetaCard}>
+                <div className={m.convMetaHead}>Ticket Details</div>
+                <div className={m.convMetaBody}>
+                  {[
+                    ["Status", <StatusBadge key="s" status={active.status} />],
+                    ["Type", <span key="t" style={{ fontSize: 12, color: "var(--adm-text-muted,#7a6a60)" }}>{TICKET_TYPES[active.type] || active.type}</span>],
+                    ["Created", <span key="cr" style={{ fontSize: 12, color: "var(--adm-text-muted,#7a6a60)" }}>{new Date(active.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>],
+                  ].map(([l, v]) => (
+                    <div key={l} className={m.convMetaRow}>
+                      <span className={m.convMetaLabel}>{l}</span>
+                      {v}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {(() => {
+                const parts = [
+                  active.creatorId ? { label: "Creator", role: roleLabel(active.creatorRole), rawRole: active.creatorRole, userId: active.creatorId, entityId: active.creator?.entityId } : null,
+                  active.counterpartyId ? { label: "Counterparty", role: roleLabel(active.counterpartyRole), rawRole: active.counterpartyRole, userId: active.counterpartyId, entityId: active.counterparty?.entityId } : null,
+                  active.assigneeId ? { label: "Assignee", role: roleLabel(active.assigneeRole), rawRole: active.assigneeRole, userId: active.assigneeId, entityId: active.assignee?.entityId } : null,
+                ].filter(Boolean);
+                if (!parts.length) return null;
+                return (
+                  <div className={m.convMetaCard}>
+                    <div className={m.convMetaHead}>Participants</div>
+                    <div className={`${m.convMetaBody} ${m.convParticipantsScroll}`}>
+                      {parts.map(pt => {
+                        const userKey = `${pt.label}-user`;
+                        const profileKey = `${pt.label}-profile`;
+                        return (
+                          <div key={pt.label} className={m.convParticipantEntry}>
+                            <span className={m.convParticipantTitle}>
+                              {pt.label} <span className={m.convParticipantRole}>{pt.role}</span>
+                            </span>
+                            <button className={`${m.convCopyIdBtn} ${copiedId === userKey ? m.convCopyIdBtnCopied : ""}`}
+                              onClick={() => copyToClipboard(pt.userId, userKey)}>
+                              <div className={m.convCopyIdHeader}>
+                                <span className={m.convCopyIdKey}>User ID</span>
+                                {copiedId === userKey ? <Check size={12} /> : <Copy size={12} />}
+                              </div>
+                              <span className={m.convCopyIdVal}>{pt.userId || "—"}</span>
+                            </button>
+                            {pt.entityId && (
+                              <button className={`${m.convCopyIdBtn} ${copiedId === profileKey ? m.convCopyIdBtnCopied : ""}`}
+                                onClick={() => copyToClipboard(pt.entityId, profileKey)}>
+                                <div className={m.convCopyIdHeader}>
+                                  <span className={m.convCopyIdKey}>{profileKeyLabel(pt.rawRole)}</span>
+                                  {copiedId === profileKey ? <Check size={12} /> : <Copy size={12} />}
+                                </div>
+                                <span className={m.convCopyIdVal}>{pt.entityId}</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         ) : (
           <div className={m.emptyConv}>

@@ -9,6 +9,8 @@ import {
   AlertCircle,
   ShieldAlert,
   RefreshCw,
+  Copy,
+  Check,
 } from "lucide-react";
 import SupportLayout from "../../components/support/SupportLayout";
 import { useAuth } from "../../context/AuthContext";
@@ -81,6 +83,16 @@ function roleLabel(role) {
   }
 }
 
+function profileKeyLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin": return "Admin ID";
+    case "technical_support": return "Support ID";
+    case "vendor": return "Vendor ID";
+    case "customer": return "Customer ID";
+    default: return "Profile ID";
+  }
+}
+
 function getInitials(label) {
   if (!label) return "U";
   const parts = label.trim().split(/\s+/).slice(0, 2);
@@ -126,8 +138,14 @@ function mapTicket(raw) {
     priority: raw.priority || "NORMAL",
     type: raw.type,
     assigneeId: raw.assigneeId,
+    assigneeRole: raw.assigneeRole,
+    assignee: raw.assignee,
     creatorId: raw.creatorId,
     creatorRole: raw.creatorRole,
+    creator: raw.creator,
+    counterpartyId: raw.counterpartyId,
+    counterpartyRole: raw.counterpartyRole,
+    counterparty: raw.counterparty,
     updatedAt: raw.updatedAt || raw.createdAt,
     createdAt: raw.createdAt,
     user: raw.creator?.name || raw.creator?.email || raw.creatorId || "Unknown",
@@ -147,6 +165,15 @@ export default function SupportLiveChat() {
   const [sending, setSending] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+
+  const copyToClipboard = (value, key) => {
+    if (!value) return;
+    navigator.clipboard.writeText(value).then(() => {
+      setCopiedId(key);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
+  };
 
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
@@ -614,13 +641,6 @@ export default function SupportLiveChat() {
                     </span>,
                   ],
                   [
-                    "Creator",
-                    <span key="c" style={{ color: "var(--sup-text-muted)" }}>
-                      {selected.creatorRole?.toLowerCase().replace(/_/g, " ") ||
-                        "—"}
-                    </span>,
-                  ],
-                  [
                     "Updated",
                     <span key="u" style={{ color: "var(--sup-text-muted)" }}>
                       {new Date(selected.updatedAt).toLocaleDateString(
@@ -637,6 +657,54 @@ export default function SupportLiveChat() {
                 ))}
               </div>
             </div>
+            {(() => {
+              const parts = [
+                selected.creatorId ? { label: "Creator", role: roleLabel(selected.creatorRole), rawRole: selected.creatorRole, userId: selected.creatorId, entityId: selected.creator?.entityId } : null,
+                selected.counterpartyId ? { label: "Counterparty", role: roleLabel(selected.counterpartyRole), rawRole: selected.counterpartyRole, userId: selected.counterpartyId, entityId: selected.counterparty?.entityId } : null,
+                selected.assigneeId ? { label: "Assignee", role: roleLabel(selected.assigneeRole), rawRole: selected.assigneeRole, userId: selected.assigneeId, entityId: selected.assignee?.entityId } : null,
+              ].filter(Boolean);
+              if (!parts.length) return null;
+              return (
+                <div className={p.metaCard}>
+                  <div className={p.metaHead}>Participants</div>
+                  <div className={`${p.metaBody} ${p.supParticipantScroll}`}>
+                    {parts.map(pt => {
+                      const userKey = `${pt.label}-user`;
+                      const profileKey = `${pt.label}-profile`;
+                      return (
+                        <div key={pt.label} className={p.supParticipantEntry}>
+                          <span className={p.supParticipantTitle}>
+                            {pt.label} <span className={p.supParticipantRole}>{pt.role}</span>
+                          </span>
+                          <button
+                            className={`${p.supCopyIdBtn} ${copiedId === userKey ? p.supCopyIdBtnCopied : ""}`}
+                            onClick={() => copyToClipboard(pt.userId, userKey)}
+                          >
+                            <div className={p.supCopyIdHeader}>
+                              <span className={p.supCopyIdKey}>User ID</span>
+                              {copiedId === userKey ? <Check size={13} /> : <Copy size={13} />}
+                            </div>
+                            <span className={p.supCopyIdVal}>{pt.userId || "—"}</span>
+                          </button>
+                          {pt.entityId && (
+                            <button
+                              className={`${p.supCopyIdBtn} ${copiedId === profileKey ? p.supCopyIdBtnCopied : ""}`}
+                              onClick={() => copyToClipboard(pt.entityId, profileKey)}
+                            >
+                              <div className={p.supCopyIdHeader}>
+                                <span className={p.supCopyIdKey}>{profileKeyLabel(pt.rawRole)}</span>
+                                {copiedId === profileKey ? <Check size={13} /> : <Copy size={13} />}
+                              </div>
+                              <span className={p.supCopyIdVal}>{pt.entityId}</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       ) : (

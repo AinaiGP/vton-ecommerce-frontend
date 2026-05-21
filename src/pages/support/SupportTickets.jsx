@@ -9,6 +9,8 @@ import {
   CheckCircle,
   AlertCircle,
   ArrowUpRight,
+  Copy,
+  Check,
 } from "lucide-react";
 import SupportLayout from "../../components/support/SupportLayout";
 import { useAuth } from "../../context/AuthContext";
@@ -84,6 +86,16 @@ function getInitials(label) {
   if (!label) return "U";
   const parts = label.trim().split(/\s+/).slice(0, 2);
   return parts.map((p) => p[0]?.toUpperCase()).join("") || "U";
+}
+
+function profileKeyLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin": return "Admin ID";
+    case "technical_support": return "Support ID";
+    case "vendor": return "Vendor ID";
+    case "customer": return "Customer ID";
+    default: return "Profile ID";
+  }
 }
 
 function assigneeLabel(raw, userId) {
@@ -179,6 +191,15 @@ export default function SupportTickets() {
   const [sending, setSending] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+
+  const copyToClipboard = (value, key) => {
+    if (!value) return;
+    navigator.clipboard.writeText(value).then(() => {
+      setCopiedId(key);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
+  };
 
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
@@ -664,30 +685,76 @@ export default function SupportTickets() {
               </div>
             </div>
 
-            <div className={p.metaCard}>
-              <div className={p.metaHead}>Requester</div>
-              <div className={p.metaBody}>
-                <div className={p.avatarCell}>
-                  <div
-                    className={p.avatar}
-                    style={{ width: 40, height: 40, fontSize: 14 }}
-                  >
-                    {selected.user.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>
-                      {selected.user}
-                    </p>
-                    <span
-                      className={`${p.badge} ${selected.role === "Vendor" ? p.rVendor : p.rCustomer}`}
-                      style={{ marginTop: 4 }}
-                    >
-                      {selected.role}
-                    </span>
+            {(() => {
+              const raw = selected._raw || {};
+              const participants = [
+                raw.creatorId ? {
+                  label: "Creator",
+                  role: roleLabel(raw.creatorRole),
+                  rawRole: raw.creatorRole,
+                  userId: raw.creatorId,
+                  entityId: raw.creator?.entityId,
+                } : null,
+                raw.counterpartyId ? {
+                  label: "Counterparty",
+                  role: roleLabel(raw.counterpartyRole),
+                  rawRole: raw.counterpartyRole,
+                  userId: raw.counterpartyId,
+                  entityId: raw.counterparty?.entityId,
+                } : null,
+                raw.assigneeId ? {
+                  label: "Assignee",
+                  role: roleLabel(raw.assigneeRole),
+                  rawRole: raw.assigneeRole,
+                  userId: raw.assigneeId,
+                  entityId: raw.assignee?.entityId,
+                } : null,
+              ].filter(Boolean);
+              if (!participants.length) return null;
+              return (
+                <div className={p.metaCard}>
+                  <div className={p.metaHead}>Participants</div>
+                  <div className={`${p.metaBody} ${p.supParticipantScroll}`}>
+                    {participants.map((pt) => {
+                      const userKey = `${pt.label}-user`;
+                      const profileKey = `${pt.label}-profile`;
+                      return (
+                        <div key={pt.label} className={p.supParticipantEntry}>
+                          <span className={p.supParticipantTitle}>
+                            {pt.label}{" "}
+                            <span className={p.supParticipantRole}>{pt.role}</span>
+                          </span>
+                          <button
+                            className={`${p.supCopyIdBtn} ${copiedId === userKey ? p.supCopyIdBtnCopied : ""}`}
+                            onClick={() => copyToClipboard(pt.userId, userKey)}
+                            title="Click to copy User ID"
+                          >
+                            <div className={p.supCopyIdHeader}>
+                              <span className={p.supCopyIdKey}>User ID</span>
+                              {copiedId === userKey ? <Check size={13} /> : <Copy size={13} />}
+                            </div>
+                            <span className={p.supCopyIdVal}>{pt.userId || "—"}</span>
+                          </button>
+                          {pt.entityId && (
+                            <button
+                              className={`${p.supCopyIdBtn} ${copiedId === profileKey ? p.supCopyIdBtnCopied : ""}`}
+                              onClick={() => copyToClipboard(pt.entityId, profileKey)}
+                              title={`Click to copy ${profileKeyLabel(pt.rawRole)}`}
+                            >
+                              <div className={p.supCopyIdHeader}>
+                                <span className={p.supCopyIdKey}>{profileKeyLabel(pt.rawRole)}</span>
+                                {copiedId === profileKey ? <Check size={13} /> : <Copy size={13} />}
+                              </div>
+                              <span className={p.supCopyIdVal}>{pt.entityId}</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {!isTerminal && (
               <div className={p.metaCard}>

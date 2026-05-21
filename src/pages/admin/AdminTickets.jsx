@@ -11,6 +11,8 @@ import {
   Shield,
   FileText,
   User,
+  Copy,
+  Check,
 } from "lucide-react";
 import AdminLayout from "../../components/admin/AdminLayout";
 import apiClient, { multipartClient } from "../../utils/apiClient";
@@ -85,6 +87,21 @@ function roleAvatarColor(role) {
       return "#7c3aed";
     default:
       return "#64748b";
+  }
+}
+
+function profileKeyLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin":
+      return "Admin ID";
+    case "technical_support":
+      return "Support ID";
+    case "vendor":
+      return "Vendor ID";
+    case "customer":
+      return "Customer ID";
+    default:
+      return "Profile ID";
   }
 }
 
@@ -247,8 +264,17 @@ function TicketChatModal({ ticket, onClose, onAction }) {
   const [resolveNote, setResolveNote] = useState("");
   const [showResolve, setShowResolve] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
+
+  const copyToClipboard = (value, key) => {
+    if (!value) return;
+    navigator.clipboard.writeText(value).then(() => {
+      setCopiedId(key);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -325,6 +351,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
       ? {
           label: "Creator",
           role: roleLabel(ticket.creatorRole),
+          rawRole: ticket.creatorRole,
           userId: ticket.creatorId,
           entityId: ticket.creator?.entityId,
         }
@@ -333,6 +360,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
       ? {
           label: "Counterparty",
           role: roleLabel(ticket.counterpartyRole),
+          rawRole: ticket.counterpartyRole,
           userId: ticket.counterpartyId,
           entityId: ticket.counterparty?.entityId,
         }
@@ -341,6 +369,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
       ? {
           label: "Assignee",
           role: roleLabel(ticket.assigneeRole),
+          rawRole: ticket.assigneeRole,
           userId: ticket.assigneeId,
           entityId: ticket.assignee?.entityId,
         }
@@ -547,39 +576,65 @@ function TicketChatModal({ ticket, onClose, onAction }) {
             {participants.length > 0 && (
               <div className={t.ticketMetaCard}>
                 <div className={t.ticketMetaHead}>Participants</div>
-                <div className={t.ticketMetaBody}>
-                  {participants.map((p) => (
-                    <div key={p.label} className={t.ticketParticipantEntry}>
-                      <span className={t.ticketParticipantTitle}>
-                        {p.label}{" "}
-                        <span className={t.ticketParticipantRole}>
-                          {p.role}
+                <div className={`${t.ticketMetaBody} ${t.ticketParticipantsScroll}`}>
+                  {participants.map((p) => {
+                    const userKey = `${p.label}-user`;
+                    const profileKey = `${p.label}-profile`;
+                    return (
+                      <div key={p.label} className={t.ticketParticipantEntry}>
+                        <span className={t.ticketParticipantTitle}>
+                          {p.label}{" "}
+                          <span className={t.ticketParticipantRole}>
+                            {p.role}
+                          </span>
                         </span>
-                      </span>
-                      <div className={t.ticketParticipantIdRow}>
-                        <span className={t.ticketParticipantIdKey}>user</span>
-                        <span
-                          className={t.ticketParticipantIdVal}
-                          title={p.userId}
+
+                        {/* User ID copy button */}
+                        <button
+                          className={`${t.ticketCopyIdBtn} ${copiedId === userKey ? t.ticketCopyIdBtnCopied : ""}`}
+                          onClick={() => copyToClipboard(p.userId, userKey)}
+                          title="Click to copy User ID"
                         >
-                          {p.userId || "—"}
-                        </span>
-                      </div>
-                      {p.entityId && (
-                        <div className={t.ticketParticipantIdRow}>
-                          <span className={t.ticketParticipantIdKey}>
-                            profile
+                          <div className={t.ticketCopyIdHeader}>
+                            <span className={t.ticketCopyIdKey}>User ID</span>
+                            {copiedId === userKey ? (
+                              <Check size={13} />
+                            ) : (
+                              <Copy size={13} />
+                            )}
+                          </div>
+                          <span className={t.ticketCopyIdVal}>
+                            {p.userId || "—"}
                           </span>
-                          <span
-                            className={t.ticketParticipantIdVal}
-                            title={p.entityId}
+                        </button>
+
+                        {/* Profile / role-specific ID copy button */}
+                        {p.entityId && (
+                          <button
+                            className={`${t.ticketCopyIdBtn} ${copiedId === profileKey ? t.ticketCopyIdBtnCopied : ""}`}
+                            onClick={() =>
+                              copyToClipboard(p.entityId, profileKey)
+                            }
+                            title={`Click to copy ${profileKeyLabel(p.rawRole)}`}
                           >
-                            {p.entityId}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                            <div className={t.ticketCopyIdHeader}>
+                              <span className={t.ticketCopyIdKey}>
+                                {profileKeyLabel(p.rawRole)}
+                              </span>
+                              {copiedId === profileKey ? (
+                                <Check size={13} />
+                              ) : (
+                                <Copy size={13} />
+                              )}
+                            </div>
+                            <span className={t.ticketCopyIdVal}>
+                              {p.entityId}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

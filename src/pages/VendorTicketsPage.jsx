@@ -400,6 +400,16 @@ export default function VendorTicketsPage() {
     }
   };
 
+  const openTicket = async (tk) => {
+    try {
+      const res = await apiClient.get(`/vendors/support/tickets/${tk.id}`);
+      setSelected(mapTicket(res.data));
+    } catch {
+      setSelected(tk);
+    }
+    setView("detail");
+  };
+
   const handleCancelTicket = async (id) => {
     setCancelingId(id);
   };
@@ -744,10 +754,7 @@ export default function VendorTicketsPage() {
                       transition: "all 0.2s",
                       background: "white",
                     }}
-                    onClick={() => {
-                      setSelected(tk);
-                      setView("detail");
-                    }}
+                    onClick={() => openTicket(tk)}
                     onMouseEnter={(e) =>
                       (e.currentTarget.style.borderColor = "var(--vdr-accent)")
                     }

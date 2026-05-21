@@ -861,6 +861,157 @@
   background: var(--vdr-surface, #fff);
 }
 
+/* ── Conversation split: chat + metadata sidebar ── */
+.convPanelMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  border-right: 1px solid var(--vdr-border, #e8e0d5);
+}
+
+.convMetaSidebar {
+  width: 256px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--vdr-surface, #fff);
+}
+
+.convMetaCard {
+  background: var(--vdr-bg, #f8f6f3);
+  border: 1px solid var(--vdr-border, #e8e0d5);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.convMetaHead {
+  padding: 8px 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--vdr-text-muted, #7a6a60);
+  border-bottom: 1px solid var(--vdr-border, #e8e0d5);
+  background: var(--vdr-surface, #fff);
+}
+
+.convMetaBody {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.convMetaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  gap: 6px;
+}
+
+.convMetaLabel {
+  color: var(--vdr-text-muted, #7a6a60);
+  font-weight: 500;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.convParticipantsScroll {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.convParticipantEntry {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--vdr-border, #e8e0d5);
+}
+
+.convParticipantEntry:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.convParticipantTitle {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--vdr-text, #1a1210);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.convParticipantRole {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--vdr-text-muted, #7a6a60);
+  background: var(--vdr-surface, #fff);
+  border: 1px solid var(--vdr-border, #e8e0d5);
+  border-radius: 20px;
+  padding: 1px 6px;
+}
+
+.convCopyIdBtn {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--vdr-surface, #fff);
+  border: 1.5px solid var(--vdr-border, #e8e0d5);
+  border-radius: 7px;
+  padding: 7px 9px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.14s;
+  font-family: inherit;
+  gap: 2px;
+}
+
+.convCopyIdBtn:hover {
+  border-color: var(--vdr-accent, #7c3aed);
+  background: var(--vdr-accent-light, #f5f3ff);
+}
+
+.convCopyIdBtnCopied {
+  border-color: #16a34a !important;
+  background: #dcfce7 !important;
+  color: #15803d;
+}
+
+.convCopyIdHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  color: var(--vdr-text-subtle, #a89080);
+  margin-bottom: 1px;
+}
+
+.convCopyIdKey {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: inherit;
+}
+
+.convCopyIdVal {
+  font-size: 11px;
+  font-family: "Consolas", "Menlo", "Monaco", monospace;
+  color: var(--vdr-text, #1a1210);
+  word-break: break-all;
+  line-height: 1.4;
+  white-space: normal;
+}
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .msgShell {
