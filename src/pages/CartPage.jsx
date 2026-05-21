@@ -142,7 +142,7 @@ export default function CartPage() {
 
                 return (
                   <div key={item.variantId} className={`${styles.cartItem} ${isBusy ? styles.itemBusy : ''}`}>
-                    <Link to={`/products/${item.productId}`} className={styles.itemImageLink}>
+                    <Link to={`/product/${item.productId}`} className={styles.itemImageLink}>
                       {item.primaryImageUrl ? (
                         <img src={item.primaryImageUrl} alt={item.productName} className={styles.itemImage} />
                       ) : (
@@ -154,7 +154,7 @@ export default function CartPage() {
 
                     <div className={styles.itemDetails}>
                       <div className={styles.itemHeader}>
-                        <Link to={`/products/${item.productId}`} className={styles.itemName}>
+                        <Link to={`/product/${item.productId}`} className={styles.itemName}>
                           {item.productName}
                         </Link>
                         {/* Backend doesn't provide vtonTried in CartItem yet, omitting or keeping placeholder if desired */}

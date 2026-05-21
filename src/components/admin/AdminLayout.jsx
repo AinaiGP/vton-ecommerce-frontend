@@ -64,6 +64,20 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const { t, lang } = useLanguage();
+  const navRef = useRef(null);
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem("admin-sidebar-scroll");
+    if (saved && navRef.current) {
+      navRef.current.scrollTop = parseInt(saved, 10);
+    }
+  }, []);
+
+  const handleNavScroll = () => {
+    if (navRef.current) {
+      sessionStorage.setItem("admin-sidebar-scroll", navRef.current.scrollTop);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -114,7 +128,6 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
     {
       label: t("admin.insights"),
       items: [
-        { icon: BarChart2, label: t("admin.reports"), to: "/admin/reports" },
         {
           icon: LifeBuoy,
           label: t("admin.support"),
@@ -164,7 +177,7 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
         </div>
 
         {/* Nav */}
-        <nav className={styles.nav}>
+        <nav className={styles.nav} ref={navRef} onScroll={handleNavScroll}>
           {NAV_SECTIONS.map((section) => (
             <div key={section.label} className={styles.navSection}>
               <span className={styles.navSectionLabel}>{section.label}</span>

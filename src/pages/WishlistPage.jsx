@@ -150,7 +150,9 @@ export default function WishlistPage() {
                 </Link>
                 <div className={styles.info}>
                   <span className={styles.cat}>{item.category}</span>
-                  <h3 className={styles.name}>{item.name}</h3>
+                  <Link to={`/product/${item.productId}`} className={styles.name}>
+                    <h3>{item.name}</h3>
+                  </Link>
                   <p className={styles.price}>{formatPrice(item.price)}</p>
                   <div className={styles.cardActions}>
                     <button
