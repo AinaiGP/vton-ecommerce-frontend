@@ -61,21 +61,20 @@ function extractLegacyAttachment(content) {
   return { text: cleaned || "Attachment", urls: [match[1]] };
 }
 
-const mapReturnTicket = (item) => ({
-  // item may be an OrderItem (from /vendors/orders/return-requests) or a Ticket (from /vendors/support/tickets/:id)
-  id: item.ticket?.id || item.id,
-  ticketId: item.ticket?.id || (item.type === "RETURN_REQUEST" ? item.id : undefined),
-  orderItemId: item.orderItemIds?.[0] || item.id,
-  orderNumber: item.order?.orderNumber || "...",
-  customer: item.order?.shippingName || "Customer",
-  product: item.productName || (item.subject?.replace("Return request for ", "") || "Product"),
-  reason: item.returnReason || item.ticket?.returnReason || "No reason provided",
-  status: item.returnStatus || item.ticket?.returnStatus || "REQUESTED",
-  date: item.returnRequestedAt || item.ticket?.createdAt || item.createdAt,
-  // messages may be on item directly (Ticket) or nested (OrderItem with joined Ticket)
-  messages: item.messages || item.ticket?.messages || [],
-  amount: item.lineTotal || 0,
-  quantity: item.returnQuantity || item.quantity,
+// item is a Ticket object from /vendors/support/tickets?type=RETURN_REQUEST
+const mapReturnTicket = (ticket) => ({
+  id: ticket.id,
+  ticketId: ticket.id,
+  orderItemId: ticket.orderItemIds?.[0],
+  orderNumber: ticket.order?.orderNumber || "...",
+  customer: ticket.order?.shippingName || "Customer",
+  product: ticket.subject?.replace("Return request for ", "") || "Product",
+  reason: ticket.returnReason || "No reason provided",
+  status: ticket.returnStatus || "REQUESTED",
+  date: ticket.createdAt,
+  messages: ticket.messages || [],
+  amount: ticket.refundAmount || 0,
+  quantity: ticket.returnQuantity || 1,
 });
 
 function AttachmentList({ attachments, onImageClick }) {
@@ -142,9 +141,9 @@ export default function VendorRefundsPage() {
   }, [selected?.messages, view]);
 
   useEffect(() => {
-    if (view === "detail" && selected?.ticketId) {
+    if (view === "detail" && selected?.id) {
       apiClient
-        .get(`/vendors/support/tickets/${selected.ticketId}`)
+        .get(`/vendors/support/tickets/${selected.id}`)
         .then((res) => {
           setSelected((prev) => ({
             ...prev,
@@ -153,13 +152,13 @@ export default function VendorRefundsPage() {
         })
         .catch(() => {});
     }
-  }, [view, selected?.ticketId]);
+  }, [view, selected?.id]);
 
   const fetchRefunds = async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get("/vendors/orders/return-requests", {
-        params: { limit: 100 },
+      const res = await apiClient.get("/vendors/support/tickets", {
+        params: { type: "RETURN_REQUEST", limit: 100 },
       });
       setRefunds((res.data?.data || []).map(mapReturnTicket));
     } catch (err) {

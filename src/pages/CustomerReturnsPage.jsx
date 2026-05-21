@@ -679,36 +679,25 @@ export default function CustomerReturnsPage() {
 
   /* ── Create return ── */
   const handleCreate = async ({ orderId, itemId, reason, desc, file }) => {
-    // POST to the order return endpoint — returns a ticket
+    let attachmentUrl = null;
+
+    if (file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await multipartClient.post(
+        `/customers/support/upload`,
+        formData,
+      );
+      attachmentUrl = uploadRes.data?.url || null;
+    }
+
     const res = await apiClient.post(`/customers/orders/${orderId}/return`, {
       orderItemId: itemId,
       quantity: 1,
       reason: reason,
       ...(desc ? { note: desc } : {}),
+      ...(attachmentUrl ? { attachments: [attachmentUrl] } : {}),
     });
-
-    if (file) {
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        const uploadRes = await multipartClient.post(
-          `/customers/support/tickets/${res.data.id}/messages/attachments`,
-          formData,
-        );
-        const attachmentUrl = uploadRes.data?.url || null;
-        if (attachmentUrl) {
-          await apiClient.post(
-            `/customers/support/tickets/${res.data.id}/messages`,
-            {
-              content: "Attachment",
-              attachments: [attachmentUrl],
-            },
-          );
-        }
-      } catch (err) {
-        console.error("Failed to upload return attachment:", err);
-      }
-    }
 
     setShowCreate(false);
     await refetchReturns();
