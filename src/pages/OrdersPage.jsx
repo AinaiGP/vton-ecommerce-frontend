@@ -93,6 +93,8 @@ function mapOrder(o) {
     color: item.variantColor || "—",
     price: item.unitPrice, // piasters
     image: item.imageUrl || "",
+    fulfillmentStatus: item.fulfillmentStatus,
+    cancellationReason: item.cancellationReason,
   }));
 
   const trackStep = getTrackStep(o.status);
@@ -202,6 +204,125 @@ function CancelModal({ order, onConfirm, onClose, loading, error }) {
             >
               <XCircle size={14} style={{ marginRight: 4 }} />
               {loading ? "Cancelling…" : "Cancel Order"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Cancel Item Confirm Modal ─── */
+function CancelItemModal({ order, item, onConfirm, onClose, loading, error }) {
+  const [reason, setReason] = useState("");
+  const [quantity, setQuantity] = useState(item.qty);
+
+  return (
+    <div className={t.backdrop} onClick={onClose}>
+      <div
+        className={t.modalSm}
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: "white", borderRadius: 16 }}
+      >
+        <div style={{ padding: "28px 24px" }}>
+          <div style={{ textAlign: "center", marginBottom: 20 }}>
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: "50%",
+                background: "#fee2e2",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px",
+              }}
+            >
+              <AlertTriangle size={26} style={{ color: "#dc2626" }} />
+            </div>
+            <h3
+              style={{
+                fontFamily: "var(--font-serif)",
+                fontSize: 18,
+                fontWeight: 700,
+                color: "var(--charcoal)",
+                margin: "0 0 8px",
+              }}
+            >
+              Cancel Item?
+            </h3>
+            <p
+              style={{
+                fontSize: 13.5,
+                color: "var(--charcoal-muted)",
+              }}
+            >
+              Are you sure you want to cancel <strong>{item.name}</strong>?
+            </p>
+          </div>
+
+          <div className={t.formGroup} style={{ marginBottom: 16 }}>
+            <label className={t.label}>Quantity to cancel</label>
+            <input
+              type="number"
+              className={t.input}
+              min={1}
+              max={item.qty}
+              value={quantity}
+              onChange={(e) => setQuantity(Number(e.target.value))}
+            />
+          </div>
+
+          <div className={t.formGroup} style={{ marginBottom: 20 }}>
+            <label className={t.label}>Reason for Cancellation *</label>
+            <textarea
+              className={t.textarea}
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why are you cancelling this item?"
+              required
+            />
+          </div>
+
+          {error && (
+            <p style={{ color: "#dc2626", fontSize: 12, marginBottom: 12, textAlign: "center" }}>
+              {error}
+            </p>
+          )}
+
+          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+            <button
+              onClick={onClose}
+              disabled={loading}
+              style={{
+                padding: "10px 20px",
+                borderRadius: 10,
+                border: "1.5px solid var(--ivory-dark)",
+                background: "white",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Keep Item
+            </button>
+            <button
+              onClick={() => onConfirm(quantity, reason)}
+              disabled={loading || !reason.trim() || quantity < 1 || quantity > item.qty}
+              style={{
+                padding: "10px 20px",
+                borderRadius: 10,
+                border: "none",
+                background: "#dc2626",
+                color: "white",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                opacity: (loading || !reason.trim()) ? 0.7 : 1,
+              }}
+            >
+              {loading ? "Cancelling…" : "Cancel Item"}
             </button>
           </div>
         </div>
@@ -391,6 +512,11 @@ export default function OrdersPage() {
   const [cancelModal, setCancelModal] = useState(null); // order id
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+  
+  const [cancelItemModal, setCancelItemModal] = useState(null); // { orderId, item }
+  const [cancelItemLoading, setCancelItemLoading] = useState(false);
+  const [cancelItemError, setCancelItemError] = useState(null);
+
   const [returnModal, setReturnModal] = useState(null); // order object
   const [returnLoading, setReturnLoading] = useState(false);
   const [returnError, setReturnError] = useState(null);
@@ -460,6 +586,36 @@ export default function OrdersPage() {
       setCancelError(Array.isArray(msg) ? msg.join(", ") : msg);
     } finally {
       setCancelLoading(false);
+    }
+  };
+
+  /* ── Cancel item ── */
+  const handleCancelItemConfirm = async (quantity, reason) => {
+    if (!cancelItemModal) return;
+    setCancelItemLoading(true);
+    setCancelItemError(null);
+    try {
+      await apiClient.patch(
+        `/customers/orders/${cancelItemModal.orderId}/items/${cancelItemModal.item.id}/cancel`,
+        { quantity, reason }
+      );
+      
+      // Update local state by re-fetching orders to ensure we have the correct total and status
+      const res = await apiClient.get("/customers/orders", {
+        params: { limit: 50, page: 1 },
+      });
+      const raw = res.data?.data || res.data || [];
+      setOrders(Array.isArray(raw) ? raw.map(mapOrder) : []);
+      
+      setCancelItemModal(null);
+      addToast("Item has been cancelled.", "success");
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        "Failed to cancel item. Please try again.";
+      setCancelItemError(Array.isArray(msg) ? msg.join(", ") : msg);
+    } finally {
+      setCancelItemLoading(false);
     }
   };
 
@@ -762,24 +918,84 @@ export default function OrdersPage() {
                       </div>
 
                       {/* Items */}
-                      <div className={styles.items}>
+                      <div className={styles.items} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                         {order.items.map((item) => (
-                          <div key={item.id} className={styles.item}>
-                            <img
-                              src={item.image}
-                              alt={item.name}
-                              className={styles.itemImg}
-                            />
-                            <div className={styles.itemInfo}>
-                              <p className={styles.itemName}>{item.name}</p>
-                              <p className={styles.itemMeta}>
-                                Qty: {item.qty} · Size: {item.size} · Color:{" "}
-                                {item.color}
-                              </p>
+                          <div key={item.id} style={{ 
+                            display: "flex", 
+                            flexDirection: "column", 
+                            gap: 12,
+                            padding: 20,
+                            border: "1px solid var(--ivory-dark)",
+                            borderRadius: 12,
+                            background: "#fafafa"
+                          }}>
+                            <div style={{ display: "flex", alignItems: "flex-start", gap: 24 }}>
+                              <img
+                                src={item.image}
+                                alt={item.name}
+                                style={{ width: 110, height: 110, objectFit: "contain", borderRadius: 10, border: "1px solid #e5e7eb", flexShrink: 0, background: "white", padding: 4 }}
+                              />
+                              <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: 110 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                  <div>
+                                    <p style={{ fontSize: 16, fontWeight: 700, margin: "0 0 6px", color: "var(--charcoal)" }}>{item.name}</p>
+                                    <p style={{ fontSize: 13, color: "var(--charcoal-muted)", margin: 0 }}>
+                                      Qty: {item.qty} &middot; Size: {item.size} &middot; Color: {item.color}
+                                    </p>
+                                  </div>
+                                  <div style={{ textAlign: "right" }}>
+                                    <span style={{
+                                      display: "inline-block",
+                                      padding: "4px 10px",
+                                      borderRadius: 6,
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      background: STATUS_CFG[STATUS_LABEL[item.fulfillmentStatus] || "Pending"]?.bg || "#f3f4f6",
+                                      color: STATUS_CFG[STATUS_LABEL[item.fulfillmentStatus] || "Pending"]?.color || "#6b7280",
+                                      marginBottom: 6
+                                    }}>
+                                      {item.fulfillmentStatus.toUpperCase()}
+                                    </span>
+                                    <p className={styles.itemPrice} style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--charcoal)" }}>
+                                      {formatPrice(item.price)}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {item.fulfillmentStatus === 'canceled' && item.cancellationReason && (
+                                  <div style={{ marginTop: 12, padding: "10px 14px", background: "#fee2e2", borderRadius: 8, fontSize: 13, color: "#991b1b", border: "1px solid #fca5a5" }}>
+                                    <strong style={{ display: "block", marginBottom: 2 }}>Cancellation Reason:</strong> 
+                                    {item.cancellationReason}
+                                  </div>
+                                )}
+
+                                {item.fulfillmentStatus === 'pending' && (
+                                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #e5e7eb", display: "flex", justifyContent: "flex-end" }}>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCancelItemModal({ orderId: order.id, item });
+                                      }}
+                                      style={{
+                                        padding: "8px 16px",
+                                        borderRadius: 8,
+                                        border: "1.5px solid #fca5a5",
+                                        background: "white",
+                                        color: "#dc2626",
+                                        fontSize: 13,
+                                        fontWeight: 600,
+                                        cursor: "pointer",
+                                        transition: "all 0.15s"
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.background = "#fee2e2"}
+                                      onMouseLeave={(e) => e.currentTarget.style.background = "white"}
+                                    >
+                                      Cancel Item
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <p className={styles.itemPrice}>
-                              {formatPrice(item.price)}
-                            </p>
                           </div>
                         ))}
                       </div>
@@ -802,6 +1018,19 @@ export default function OrdersPage() {
           }}
           loading={cancelLoading}
           error={cancelError}
+        />
+      )}
+      {cancelItemModal && (
+        <CancelItemModal
+          order={orders.find((o) => o.id === cancelItemModal.orderId)}
+          item={cancelItemModal.item}
+          onConfirm={handleCancelItemConfirm}
+          onClose={() => {
+            setCancelItemModal(null);
+            setCancelItemError(null);
+          }}
+          loading={cancelItemLoading}
+          error={cancelItemError}
         />
       )}
       {returnModal && (

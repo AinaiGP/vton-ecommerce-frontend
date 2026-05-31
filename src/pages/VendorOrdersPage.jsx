@@ -54,6 +54,8 @@ export default function VendorOrdersPage() {
   const [orderDetail, setOrderDetail] = useState(null);
   const [tracking, setTracking] = useState("");
   const [updating, setUpdating] = useState(null); // itemId
+  const [cancelItemId, setCancelItemId] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
 
   useEffect(() => {
     fetchOrders();
@@ -114,6 +116,28 @@ export default function VendorOrdersPage() {
       setTracking("");
     } catch (err) {
       console.error("Update failed", err);
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const cancelItem = async (itemId) => {
+    if (!cancelReason.trim()) {
+      alert("Cancellation reason is required.");
+      return;
+    }
+    setUpdating(itemId);
+    try {
+      await apiClient.patch(`/vendors/orders/${orderDetail.id}/items/${itemId}/cancel`, {
+        reason: cancelReason
+      });
+      fetchOrderDetail(orderDetail.id);
+      fetchOrders();
+      setCancelItemId(null);
+      setCancelReason("");
+    } catch (err) {
+      console.error("Cancellation failed", err);
+      alert(err?.response?.data?.message || "Failed to cancel item.");
     } finally {
       setUpdating(null);
     }
@@ -249,9 +273,13 @@ export default function VendorOrdersPage() {
                           {getInitials(orderDetail.shippingAddress?.shippingName || orderDetail.shippingName || "Guest")}
                         </div>
                         <div>
-                          <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{orderDetail.shippingAddress?.shippingName || orderDetail.shippingName}</p>
-                          <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--vdr-text-muted)" }}>{orderDetail.customerEmail}</p>
-                          <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--vdr-text-muted)", lineHeight: 1.5 }}>
+                          <p style={{ margin: "0 0 4px", fontSize: 12, color: "var(--vdr-muted)", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>Customer</p>
+                          <p style={{ margin: "0 0 2px", fontWeight: 600, color: "var(--vdr-text)" }}>{orderDetail.shippingAddress?.shippingName || orderDetail.shippingName}</p>
+                          <p style={{ margin: 0, fontSize: 13, color: "var(--vdr-text)" }}>{orderDetail.customerEmail}</p>
+                          {orderDetail.customerPhone && (
+                            <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--vdr-text)" }}>{orderDetail.customerPhone}</p>
+                          )}
+                          <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--vdr-text-muted)", lineHeight: 1.5 }}>
                             {orderDetail.shippingAddress?.shippingStreet}<br />
                             {orderDetail.shippingAddress?.shippingCity}
                             {orderDetail.shippingAddress?.shippingLabel ? ` · ${orderDetail.shippingAddress.shippingLabel}` : ""}
@@ -308,10 +336,64 @@ export default function VendorOrdersPage() {
                                     <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--vdr-accent)", fontWeight: 800 }}>{item.trackingNumber}</p>
                                   </div>
                                 )}
+                                {item.fulfillmentStatus === 'canceled' && item.cancellationReason && (
+                                  <div style={{ marginTop: 8, padding: "8px 12px", background: "#fee2e2", borderRadius: 8, fontSize: 12, color: "#991b1b", border: "1px solid #fca5a5" }}>
+                                    <strong>Cancellation Reason:</strong> {item.cancellationReason}
+                                  </div>
+                                )}
                               </div>
                             </div>
 
-                            {nextStatus && (
+                            {item.fulfillmentStatus === 'pending' && (
+                              <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px dashed var(--vdr-border)" }}>
+                                {cancelItemId === item.id ? (
+                                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                    <input
+                                      className={p.searchInput}
+                                      style={{ flex: 1, height: 36, border: "1px solid #fca5a5", borderRadius: 8, padding: "0 12px" }}
+                                      placeholder="Reason for cancellation..."
+                                      value={cancelReason}
+                                      onChange={(e) => setCancelReason(e.target.value)}
+                                    />
+                                    <button
+                                      className={`${p.btn}`}
+                                      style={{ height: 36, padding: "0 16px", background: "#fee2e2", color: "#dc2626", border: "1px solid #fca5a5", fontWeight: 600, borderRadius: 8 }}
+                                      disabled={updating === item.id}
+                                      onClick={() => cancelItem(item.id)}
+                                    >
+                                      {updating === item.id ? "..." : "Confirm Cancel"}
+                                    </button>
+                                    <button
+                                      className={`${p.btn} ${p.btnOutline}`}
+                                      style={{ height: 36, padding: "0 16px", borderRadius: 8 }}
+                                      onClick={() => { setCancelItemId(null); setCancelReason(""); }}
+                                    >
+                                      Back
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                                    <button
+                                      className={`${p.btn} ${p.btnPrimary}`}
+                                      style={{ height: 40, padding: "0 24px", fontWeight: 700, borderRadius: 10 }}
+                                      disabled={updating === item.id}
+                                      onClick={() => updateFulfillment(item.id, item.fulfillmentStatus)}
+                                    >
+                                      {updating === item.id ? "Updating..." : `Mark as ${nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}`}
+                                    </button>
+                                    <button
+                                      className={`${p.btn}`}
+                                      style={{ height: 40, padding: "0 24px", background: "white", color: "#dc2626", border: "1.5px solid #fca5a5", fontWeight: 700, borderRadius: 10, marginLeft: "auto" }}
+                                      onClick={() => setCancelItemId(item.id)}
+                                    >
+                                      Cancel Item
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {nextStatus && item.fulfillmentStatus !== 'pending' && (
                               <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px dashed var(--vdr-border)", display: "flex", gap: 12, alignItems: "center" }}>
                                 {nextStatus === "shipped" && (
                                   <div style={{ flex: 1, display: "flex", gap: 8 }}>
