@@ -67,11 +67,11 @@ export default function VendorAnalyticsPage() {
         apiClient.get("/products/my/products", { params: { limit: 20 } })
       ]);
       setStats(statsRes.data);
-      // Using popularityScore as real Views and totalSold as real Purchases
+      // Using the new dedicated views and purchases fields
       setProducts((prodRes.data?.data || []).map(p => ({
         ...p,
-        views: p.popularityScore || 0,
-        purchases: p.totalSold || 0,
+        views: p.views || 0,
+        purchases: p.purchases || 0,
       })));
     } catch (err) {
       console.error("Failed to fetch analytics", err);

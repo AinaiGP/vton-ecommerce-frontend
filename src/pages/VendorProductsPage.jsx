@@ -376,8 +376,15 @@ export default function VendorProductsPage() {
 
   useEffect(() => {
     fetchOptions();
-    fetchProducts();
-  }, [page, catFilter, statusFilter]);
+  }, []);
+
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      fetchProducts();
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [page, catFilter, statusFilter, search]);
 
   const fetchOptions = async () => {
     try {
@@ -537,7 +544,7 @@ export default function VendorProductsPage() {
               className={p.searchInput}
               placeholder="Search products..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               onKeyDown={(e) => e.key === "Enter" && fetchProducts()}
             />
           </div>
@@ -621,8 +628,8 @@ export default function VendorProductsPage() {
                         <td><span className={`${p.badge} ${p.badgeDraft}`}>{pr.category?.name}</span></td>
                         <td style={{ fontWeight: 700 }}>{formatPrice(pr.basePrice)}</td>
                         <td>{pr.variants?.reduce((s, v) => s + v.physicalQuantity, 0) || 0}</td>
-                        <td style={{ fontWeight: 600, color: "var(--vdr-accent)" }}>{pr.totalSold || 0}</td>
-                        <td>{pr.popularityScore || 0}</td>
+                        <td style={{ fontWeight: 600, color: "var(--vdr-accent)" }}>{pr.purchases || 0}</td>
+                        <td>{pr.views || 0}</td>
                         <td>
                           <span className={`${p.badge} ${STATUS_BADGE[pr.status] || p.badgeDraft}`}>
                             <span className={p.badgeDot} />
