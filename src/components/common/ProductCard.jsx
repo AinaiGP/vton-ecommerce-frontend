@@ -118,19 +118,20 @@ export default function ProductCard({ product }) {
         {/* Summary Info (Colors + Sizes) */}
         <div className={styles.summaryInfo}>
           {colors.length > 0 && (
-            <div className={styles.colorSwatches}>
+            <div className={styles.badgeList}>
               {visibleColors.map((c) => (
                 <button
                   key={c.id}
-                  className={`${styles.colorSwatchBtn} ${activeColorId === c.id ? styles.colorSwatchBtnActive : ""}`}
-                  style={{ background: c.hexCode }}
+                  className={`${styles.badgeItem} ${activeColorId === c.id ? styles.badgeItemActive : ""}`}
                   onClick={(e) => {
                     e.preventDefault();
                     setActiveColorId(c.id);
                   }}
                   aria-label={c.name}
                   title={c.name}
-                />
+                >
+                  {c.name}
+                </button>
               ))}
               {remainingColorsCount > 0 && (
                 <span className={styles.colorsRemaining}>
@@ -141,12 +142,9 @@ export default function ProductCard({ product }) {
           )}
 
           {sizeRange && (
-            <>
-              {colors.length > 0 && (
-                <span className={styles.summarySep}>·</span>
-              )}
-              <span className={styles.summaryItem}>{sizeRange}</span>
-            </>
+            <div className={styles.badgeList}>
+              <span className={styles.badgeItem}>{sizeRange}</span>
+            </div>
           )}
         </div>
 
