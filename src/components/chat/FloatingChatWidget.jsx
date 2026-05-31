@@ -309,10 +309,14 @@ export default function FloatingChatWidget() {
         setMessages((prev) => [...prev, { role: "model", content: reply }]);
         setHistory(updatedHistory);
       } catch (err) {
-        const msg =
-          err?.response?.status === 503
-            ? "Sorry, I'm having trouble connecting. Please try again later."
-            : "Something went wrong. Please try again.";
+        let msg;
+        if (err?.response?.status === 401) {
+          msg = "Please log in to chat with the AINAI assistant.";
+        } else if (err?.response?.status === 503) {
+          msg = "Sorry, I'm having trouble connecting. Please try again later.";
+        } else {
+          msg = "Something went wrong. Please try again.";
+        }
         setError(msg);
         setLastFailedMessage(trimmed);
         setMessages((prev) => [
