@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ShoppingBag,
-  Eye,
   Heart,
   ArrowLeft,
   Truck,
@@ -12,10 +11,12 @@ import {
   Minus,
   MessageSquare,
   Star,
+  Sparkles,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import LoadingSpinner from "../components/common/LoadingSpinner";
+import VtonModal from "../components/vton/VtonModal";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import apiClient from "../utils/apiClient";
@@ -56,7 +57,7 @@ export default function ProductPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, userRole } = useAuth();
   const { refreshCartCount } = useCart();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -71,6 +72,10 @@ export default function ProductPage() {
   const [cartMessage, setCartMessage] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [wishlistLoading, setWishlistLoading] = useState(false);
+
+  // ── Virtual Try-On state ──────────────────────────────────────────────────
+  const [vtonOpen, setVtonOpen] = useState(false);
+  const [vtonMessage, setVtonMessage] = useState("");
 
   const [reviews, setReviews] = useState([]);
   const [reviewsTotal, setReviewsTotal] = useState(0);
@@ -172,6 +177,17 @@ export default function ProductPage() {
     );
   }, [product, selectedColor, selectedSize]);
 
+  /**
+   * Cloth image for VTON — prefer variant-specific image, fall back to first product image.
+   * variantImageLinks is populated when the API response includes relation data.
+   */
+  const clothImageUrl = useMemo(() => {
+    if (selectedVariant?.variantImageLinks?.[0]?.image?.s3Url) {
+      return selectedVariant.variantImageLinks[0].image.s3Url;
+    }
+    return product?.images?.[0]?.s3Url || null;
+  }, [selectedVariant, product]);
+
   const hasSelectedVariant = Boolean(selectedVariant);
   const availableQty = hasSelectedVariant
     ? (selectedVariant.physicalQuantity ?? 0) -
@@ -219,6 +235,28 @@ export default function ProductPage() {
     } finally {
       setAddingToCart(false);
     }
+  };
+
+  /**
+   * Handle Virtual Try-On button click.
+   * Guards: must be authenticated + customer role + variant selected.
+   */
+  const handleTryOnClick = () => {
+    if (!isAuthenticated) {
+      navigate("/auth", { state: { from: location } });
+      return;
+    }
+    if (userRole !== "customer") {
+      setVtonMessage("Virtual Try-On is available for customers only.");
+      setTimeout(() => setVtonMessage(""), 4000);
+      return;
+    }
+    if (!selectedColor || !selectedSize) {
+      setVtonMessage("Please select a color and size to try this on.");
+      setTimeout(() => setVtonMessage(""), 4000);
+      return;
+    }
+    setVtonOpen(true);
   };
 
   const handleWishlistToggle = async () => {
@@ -494,6 +532,26 @@ export default function ProductPage() {
               </button>
             </div>
 
+            {/* ── Virtual Try-On Button ── */}
+            <button
+              id="vton-try-on-btn"
+              className={styles.tryOnButton}
+              onClick={handleTryOnClick}
+            >
+              <Sparkles size={20} />
+              <span>Virtual Try-On</span>
+              <span className={styles.tryOnTag}>AI</span>
+            </button>
+
+            {vtonMessage && (
+              <p
+                className={`${styles.cartMessage} ${styles.cartMessageError}`}
+                role="alert"
+              >
+                {vtonMessage}
+              </p>
+            )}
+
             {cartMessage && (
               <p
                 className={`${styles.cartMessage} ${
@@ -582,6 +640,15 @@ export default function ProductPage() {
       </main>
 
       <Footer />
+
+      {/* ── Virtual Try-On Modal ── */}
+      <VtonModal
+        isOpen={vtonOpen}
+        onClose={() => setVtonOpen(false)}
+        clothImageUrl={clothImageUrl}
+        categorySlug={product?.category?.slug || null}
+        productId={product?.id || null}
+      />
     </div>
   );
 }
