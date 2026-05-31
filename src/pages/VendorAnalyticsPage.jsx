@@ -67,11 +67,11 @@ export default function VendorAnalyticsPage() {
         apiClient.get("/products/my/products", { params: { limit: 20 } })
       ]);
       setStats(statsRes.data);
-      // Using the new dedicated views and purchases fields
       setProducts((prodRes.data?.data || []).map(p => ({
         ...p,
         views: p.views || 0,
         purchases: p.purchases || 0,
+        tries: p.tries || 0,
       })));
     } catch (err) {
       console.error("Failed to fetch analytics", err);
@@ -91,7 +91,7 @@ export default function VendorAnalyticsPage() {
       },
       {
         label: "Purchases",
-        data: products.map(p => p.purchases * 10), // Scaled for visibility
+        data: products.map(p => p.purchases * 10),
         backgroundColor: "rgba(212,175,122,0.8)",
         borderRadius: 6,
       },
@@ -150,9 +150,9 @@ export default function VendorAnalyticsPage() {
                 <th>Product</th>
                 <th>Category</th>
                 <th>Views</th>
+                <th>Tries</th>
                 <th>Purchases</th>
                 <th>Conversion</th>
-                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -170,6 +170,7 @@ export default function VendorAnalyticsPage() {
                       <td style={{ fontWeight: 600 }}>{prod.name}</td>
                       <td>{prod.category?.name}</td>
                       <td style={{ color: "var(--vdr-text-muted)" }}>{prod.views}</td>
+                      <td style={{ color: "var(--vdr-text-muted)" }}>{prod.tries}</td>
                       <td style={{ fontWeight: 700, color: "#16a34a" }}>{prod.purchases}</td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

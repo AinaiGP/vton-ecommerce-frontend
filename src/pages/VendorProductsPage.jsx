@@ -581,15 +581,16 @@ export default function VendorProductsPage() {
                 <th>Category</th>
                 <th>Base Price</th>
                 <th>Stock</th>
-                <th>Sold</th>
                 <th>Views</th>
+                <th>Tries</th>
+                <th>Sold</th>
                 <th>Status</th>
                 <th style={{ width: 100 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="9" className={p.skeleton} style={{ height: 100 }}></td></tr>
+                <tr><td colSpan="10" className={p.skeleton} style={{ height: 100 }}></td></tr>
               ) : products.length === 0 ? (
                 <tr>
                   <td colSpan="9">
@@ -628,8 +629,9 @@ export default function VendorProductsPage() {
                         <td><span className={`${p.badge} ${p.badgeDraft}`}>{pr.category?.name}</span></td>
                         <td style={{ fontWeight: 700 }}>{formatPrice(pr.basePrice)}</td>
                         <td>{pr.variants?.reduce((s, v) => s + v.physicalQuantity, 0) || 0}</td>
-                        <td style={{ fontWeight: 600, color: "var(--vdr-accent)" }}>{pr.purchases || 0}</td>
                         <td>{pr.views || 0}</td>
+                        <td>{pr.tries || 0}</td>
+                        <td style={{ fontWeight: 600, color: "var(--vdr-accent)" }}>{pr.purchases || 0}</td>
                         <td>
                           <span className={`${p.badge} ${STATUS_BADGE[pr.status] || p.badgeDraft}`}>
                             <span className={p.badgeDot} />
