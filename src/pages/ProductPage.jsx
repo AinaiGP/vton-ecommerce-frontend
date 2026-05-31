@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ShoppingBag,
@@ -12,6 +12,8 @@ import {
   MessageSquare,
   Star,
   Sparkles,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
@@ -84,6 +86,17 @@ export default function ProductPage() {
 
   const [recommendations, setRecommendations] = useState([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const scrollRef = useRef(null);
+
+  const scrollRecommendations = (direction) => {
+    if (scrollRef.current) {
+      const scrollAmount = 300;
+      scrollRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth"
+      });
+    }
+  };
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -453,16 +466,17 @@ export default function ProductPage() {
                 {colors.map((color) => (
                   <button
                     key={color.id}
-                    className={`${styles.colorSwatch} ${
+                    className={`${styles.colorButton} ${
                       selectedColor === color.id ? styles.colorActive : ""
                     }`}
-                    style={{ background: color.hexCode }}
                     onClick={() => {
                       setSelectedColor(color.id);
                       setSelectedSize("");
                     }}
                     aria-label={color.name}
-                  />
+                  >
+                    {color.name}
+                  </button>
                 ))}
               </div>
             </div>
@@ -615,13 +629,33 @@ export default function ProductPage() {
         {/* Recommendations Section */}
         {!loadingRecommendations && recommendations.length > 0 && (
           <div className={styles.recommendationsSection}>
-            <h4 className={styles.detailsTitle}>You May Also Like</h4>
-            <div className={styles.recommendationsScroll}>
-              {recommendations.map((recProduct) => (
-                <div key={recProduct.id} className={styles.recommendationCardWrapper}>
-                  <ProductCard product={recProduct} />
-                </div>
-              ))}
+            <div className={styles.recommendationsHeader}>
+              <h4 className={styles.detailsTitle}>You May Also Like</h4>
+            </div>
+            <div className={styles.recommendationsContainer}>
+              <button 
+                className={`${styles.scrollBtn} ${styles.scrollBtnLeft}`} 
+                onClick={() => scrollRecommendations("left")}
+                aria-label="Scroll Left"
+              >
+                <ChevronLeft size={24} />
+              </button>
+              
+              <div className={styles.recommendationsScroll} ref={scrollRef}>
+                {recommendations.map((recProduct) => (
+                  <div key={recProduct.id} className={styles.recommendationCardWrapper}>
+                    <ProductCard product={recProduct} />
+                  </div>
+                ))}
+              </div>
+
+              <button 
+                className={`${styles.scrollBtn} ${styles.scrollBtnRight}`} 
+                onClick={() => scrollRecommendations("right")}
+                aria-label="Scroll Right"
+              >
+                <ChevronRight size={24} />
+              </button>
             </div>
           </div>
         )}

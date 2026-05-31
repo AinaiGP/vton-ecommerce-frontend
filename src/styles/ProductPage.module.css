@@ -312,28 +312,37 @@
 /* Colors */
 .colorOptions {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
-.colorSwatch {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-circle);
-  border: 2px solid transparent;
+.colorButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 var(--space-4);
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: var(--radius-md);
+  background: rgba(0,0,0,0.04);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--charcoal);
   cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.4);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.colorSwatch:hover {
-  transform: scale(1.1);
+.colorButton:hover {
+  background: rgba(0,0,0,0.08);
+  border-color: rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 .colorActive {
-  border-color: var(--charcoal);
-  box-shadow:
-    0 0 0 2px var(--white),
-    0 0 0 4px var(--charcoal);
+  background: var(--charcoal) !important;
+  border-color: var(--charcoal) !important;
+  color: var(--white) !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
 }
 
 /* Sizes */
@@ -344,37 +353,41 @@
 }
 
 .sizeButton {
-  min-width: 48px;
+  width: 44px;
   height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--ivory-dark);
-  border-radius: var(--radius-md);
-  background: var(--white);
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 50%;
+  background: rgba(0,0,0,0.04);
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   color: var(--charcoal);
   cursor: pointer;
-  transition: all var(--transition-fast);
-  padding: 0 var(--space-3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sizeButton:hover {
-  border-color: var(--burgundy);
-  color: var(--burgundy);
+  background: rgba(0,0,0,0.08);
+  border-color: rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 .sizeActive {
-  background: var(--burgundy);
-  border-color: var(--burgundy);
-  color: var(--white);
+  background: var(--charcoal) !important;
+  border-color: var(--charcoal) !important;
+  color: var(--white) !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+  transform: scale(1.05);
 }
 
 .sizeDisabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
-  text-decoration: line-through;
+  background: transparent;
+  color: var(--charcoal-muted);
+  border-color: var(--border-light);
 }
 
 /* ── Actions ── */
@@ -704,19 +717,76 @@
   border-top: var(--border-light);
 }
 
+.recommendationsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.recommendationsContainer {
+  position: relative;
+  width: 100%;
+}
+
+.scrollBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--charcoal);
+  transition: all 0.2s ease;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.scrollBtn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  transform: translateY(-50%) scale(1.05);
+}
+
+.scrollBtnLeft {
+  left: -22px;
+}
+
+.scrollBtnRight {
+  right: -22px;
+}
+
 .recommendationsScroll {
   display: flex;
   gap: var(--space-4);
   overflow-x: auto;
   padding-bottom: var(--space-4);
   scroll-behavior: smooth;
-  /* Hide scrollbar for clean look but keep it scrollable */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE/Edge */
 }
 
 .recommendationsScroll::-webkit-scrollbar {
-  display: none; /* Chrome/Safari/Opera */
+  height: 8px;
+}
+
+.recommendationsScroll::-webkit-scrollbar-track {
+  background: var(--ivory);
+  border-radius: 4px;
+}
+
+.recommendationsScroll::-webkit-scrollbar-thumb {
+  background: var(--charcoal-muted);
+  border-radius: 4px;
+}
+
+.recommendationsScroll::-webkit-scrollbar-thumb:hover {
+  background: var(--charcoal);
 }
 
 .recommendationCardWrapper {

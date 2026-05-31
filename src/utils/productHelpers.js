@@ -54,7 +54,7 @@ export function getUniqueSizes(product) {
     if (!size?.id || unique.has(size.id)) continue;
     unique.set(size.id, {
       id: size.id,
-      label: size.label,
+      label: size.label || size.name,
     });
   }
 
