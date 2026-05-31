@@ -714,7 +714,7 @@ export default function ProductPage() {
         isOpen={vtonOpen}
         onClose={() => setVtonOpen(false)}
         clothImageUrl={clothImageUrl}
-        categorySlug={product?.category?.slug || null}
+        clothType={product?.category?.bodyPart || 'overall'}
         productId={product?.id || null}
       />
     </div>

@@ -128,7 +128,7 @@ export default function VtonModal({
   isOpen,
   onClose,
   clothImageUrl,
-  categorySlug,
+  clothType,
   productId,
 }) {
   // ── Step ──────────────────────────────────────────────────────────────────
@@ -249,14 +249,14 @@ export default function VtonModal({
   // ─── Step 1: Generate Mask ────────────────────────────────────────────────
 
   const handleGenerateMask = async () => {
-    if (!personB64 || !categorySlug) return;
+    if (!personB64 || !clothType) return;
     setIsGeneratingMask(true);
     setMaskError(null);
 
     try {
       const res = await apiClient.post("/vton/generate-mask", {
         personImage: personB64,
-        categorySlug,
+        clothType,
       });
       const maskB64 = res.data?.maskImage;
       if (!maskB64) throw new Error("No mask returned from server.");
@@ -547,7 +547,7 @@ export default function VtonModal({
               isGeneratingMask={isGeneratingMask}
               maskError={maskError}
               personB64={personB64}
-              categorySlug={categorySlug}
+              clothType={clothType}
               onFileInputChange={onFileInputChange}
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
@@ -609,7 +609,7 @@ export default function VtonModal({
                   id="vton-generate-mask-btn"
                   className={styles.primaryBtn}
                   onClick={handleGenerateMask}
-                  disabled={!personB64 || !categorySlug || isGeneratingMask}
+                  disabled={!personB64 || !clothType || isGeneratingMask}
                 >
                   {isGeneratingMask ? (
                     <>
@@ -744,7 +744,7 @@ function StepUpload({
   isGeneratingMask,
   maskError,
   personB64,
-  categorySlug,
+  clothType,
   onFileInputChange,
   onDragOver,
   onDragLeave,
@@ -832,7 +832,7 @@ function StepUpload({
           </p>
         )}
 
-        {!categorySlug && personB64 && (
+        {!clothType && personB64 && (
           <p className={styles.infoBox}>
             <AlertCircle size={16} />
             This product does not have a supported category for try-on. Please contact support.
