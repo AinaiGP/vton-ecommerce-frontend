@@ -151,6 +151,7 @@ export default function VtonModal({
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);
   const undoStackRef = useRef([]);
+  const [undoStackLength, setUndoStackLength] = useState(0);
   const lastPointRef = useRef(null);
 
   // ── Step 3 state ─────────────────────────────────────────────────────────
@@ -195,6 +196,7 @@ export default function VtonModal({
     setBrushColor("white");
     setBrushSize(20);
     undoStackRef.current = [];
+    setUndoStackLength(0);
     lastPointRef.current = null;
     setProcessingMsgIndex(0);
     setTryonError(null);
@@ -286,6 +288,7 @@ export default function VtonModal({
       ctx.drawImage(img, 0, 0);
       // Save initial state for undo
       undoStackRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+      setUndoStackLength(1);
     };
     img.src = `data:image/png;base64,${originalMaskB64}`;
   }, [step, originalMaskB64]);
@@ -301,6 +304,7 @@ export default function VtonModal({
     if (undoStackRef.current.length > MAX_UNDO_STACK) {
       undoStackRef.current.shift();
     }
+    setUndoStackLength(undoStackRef.current.length);
   }, []);
 
   const drawOnCanvas = useCallback(
@@ -390,6 +394,7 @@ export default function VtonModal({
     if (!canvas || !prevState) return;
     const ctx = canvas.getContext("2d");
     ctx.putImageData(prevState, 0, 0);
+    setUndoStackLength(undoStackRef.current.length);
   };
 
   const handleResetMask = () => {
@@ -401,6 +406,7 @@ export default function VtonModal({
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
       undoStackRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+      setUndoStackLength(1);
     };
     img.src = `data:image/png;base64,${originalMaskB64}`;
   };
@@ -498,6 +504,7 @@ export default function VtonModal({
     setOriginalMaskB64(null);
     setMaskError(null);
     undoStackRef.current = [];
+    setUndoStackLength(0);
     setStep(1);
   };
 
@@ -558,7 +565,7 @@ export default function VtonModal({
               setBrushColor={setBrushColor}
               brushSize={brushSize}
               setBrushSize={setBrushSize}
-              undoStackLength={undoStackRef.current.length}
+              undoStackLength={undoStackLength}
               onCanvasMouseDown={onCanvasMouseDown}
               onCanvasMouseMove={onCanvasMouseMove}
               onCanvasMouseUp={onCanvasMouseUp}
