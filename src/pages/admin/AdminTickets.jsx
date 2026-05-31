@@ -413,9 +413,11 @@ function TicketChatModal({ ticket, onClose, onAction }) {
         </div>
       )}
 
-      <div className={t.ticketSplitContainer}>
-        {/* Header */}
-        <div className={t.modalHead}>
+      <div className={t.ticketSplitLayout}>
+        {/* Left: Conversation */}
+        <div className={t.ticketSplitMain}>
+          {/* Header */}
+          <div className={t.modalHead}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button className={t.backBtn} onClick={onClose} style={{ marginTop: 2 }}>
               <ChevronLeft size={18} /> Back
@@ -433,84 +435,80 @@ function TicketChatModal({ ticket, onClose, onAction }) {
           </div>
         </div>
 
-        {/* Split body */}
-        <div className={t.ticketSplitBody}>
-          {/* Left: Conversation */}
-          <div className={t.ticketSplitMain}>
-            <div className={t.ticketChatArea}>
-              <div className={t.ticketSysEvent}>
-                <span>Ticket opened · {ticket.createdAt}</span>
-              </div>
-              {ticket.messages.map((msg, i) => {
-                if (msg.isSystemMessage) {
-                  return (
-                    <div key={i} className={t.ticketSysEvent}>
-                      <span>{msg.text}</span>
-                    </div>
-                  );
-                }
-                const isAdminMsg = msg.from === "admin";
-                const avatarBg = roleAvatarColor(msg.senderRole);
+          <div className={t.ticketChatArea}>
+            <div className={t.ticketSysEvent}>
+              <span>Ticket opened · {ticket.createdAt}</span>
+            </div>
+            {ticket.messages.map((msg, i) => {
+              if (msg.isSystemMessage) {
                 return (
-                  <div
-                    key={i}
-                    className={`${t.ticketMsgRow} ${isAdminMsg ? t.ticketMsgRight : t.ticketMsgLeft}`}
-                  >
-                    {!isAdminMsg && (
-                      <div
-                        className={t.ticketMsgAvatar}
-                        style={{ background: avatarBg }}
-                      >
-                        {msg.senderAvatar ? (
-                          <img
-                            src={msg.senderAvatar}
-                            alt={msg.senderName}
-                            className={t.ticketAvatarImg}
-                          />
-                        ) : (
-                          getInitials(msg.senderName)
-                        )}
-                      </div>
-                    )}
-                    <div
-                      className={`${t.ticketBubble} ${isAdminMsg ? t.ticketBubbleAdmin : t.ticketBubbleUser}`}
-                    >
-                      <div className={t.ticketSenderLabel}>
-                        {msg.senderName}
-                        <span
-                          className={t.ticketSenderRole}
-                          data-role={msg.senderRole}
-                        >
-                          {roleLabel(msg.senderRole)}
-                        </span>
-                      </div>
-                      <p className={t.ticketBubbleText}>{msg.text}</p>
-                      <AttachmentList attachments={msg.attachments} />
-                      <span className={t.ticketBubbleTime}>{msg.time}</span>
-                    </div>
-                    {isAdminMsg && (
-                      <div
-                        className={t.ticketMsgAvatar}
-                        style={{ background: avatarBg }}
-                      >
-                        {msg.senderAvatar ? (
-                          <img
-                            src={msg.senderAvatar}
-                            alt={msg.senderName}
-                            className={t.ticketAvatarImg}
-                          />
-                        ) : (
-                          getInitials(msg.senderName)
-                        )}
-                      </div>
-                    )}
+                  <div key={i} className={t.ticketSysEvent}>
+                    <span>{msg.text}</span>
                   </div>
                 );
-              })}
-              <div ref={bottomRef} />
-            </div>
+              }
+              const isAdminMsg = msg.from === "admin";
+              const avatarBg = roleAvatarColor(msg.senderRole);
+              return (
+                <div
+                  key={i}
+                  className={`${t.ticketMsgRow} ${isAdminMsg ? t.ticketMsgRight : t.ticketMsgLeft}`}
+                >
+                  {!isAdminMsg && (
+                    <div
+                      className={t.ticketMsgAvatar}
+                      style={{ background: avatarBg }}
+                    >
+                      {msg.senderAvatar ? (
+                        <img
+                          src={msg.senderAvatar}
+                          alt={msg.senderName}
+                          className={t.ticketAvatarImg}
+                        />
+                      ) : (
+                        getInitials(msg.senderName)
+                      )}
+                    </div>
+                  )}
+                  <div
+                    className={`${t.ticketBubble} ${isAdminMsg ? t.ticketBubbleAdmin : t.ticketBubbleUser}`}
+                  >
+                    <div className={t.ticketSenderLabel}>
+                      {msg.senderName}
+                      <span
+                        className={t.ticketSenderRole}
+                        data-role={msg.senderRole}
+                      >
+                        {roleLabel(msg.senderRole)}
+                      </span>
+                    </div>
+                    <p className={t.ticketBubbleText}>{msg.text}</p>
+                    <AttachmentList attachments={msg.attachments} />
+                    <span className={t.ticketBubbleTime}>{msg.time}</span>
+                  </div>
+                  {isAdminMsg && (
+                    <div
+                      className={t.ticketMsgAvatar}
+                      style={{ background: avatarBg }}
+                    >
+                      {msg.senderAvatar ? (
+                        <img
+                          src={msg.senderAvatar}
+                          alt={msg.senderName}
+                          className={t.ticketAvatarImg}
+                        />
+                      ) : (
+                        getInitials(msg.senderName)
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <div ref={bottomRef} />
+          </div>
 
-            {!isTerminal ? (
+          {!isTerminal ? (
               <form className={t.ticketReplyBox} onSubmit={handleSend}>
                 {file && (
                   <div className={t.ticketFileChip}>
@@ -747,9 +745,8 @@ function TicketChatModal({ ticket, onClose, onAction }) {
             )}
           </div>
         </div>
-      </div>
-    </>
-  );
+      </>
+    );
 }
 
 export default function AdminTickets() {

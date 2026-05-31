@@ -1122,18 +1122,12 @@
   transform: translateX(18px);
 }
 
-/* "?"? Ticket Split Container (replaces old ticketChatModal) "?"? */
-.ticketSplitContainer {
+/* "?"? Ticket Split Layout "?"? */
+.ticketSplitLayout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 16px;
   width: 100%;
-  height: calc(100vh - 160px);
-  min-height: 600px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--adm-surface);
-  border: 1px solid var(--adm-border);
-  border-radius: 12px;
-  box-shadow: var(--adm-shadow-sm);
 }
 
 .backBtn {
@@ -1155,30 +1149,20 @@
   color: var(--adm-text);
 }
 
-.ticketSplitBody {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
 .ticketSplitMain {
-  flex: 1;
+  background: var(--adm-surface);
+  border: 1px solid var(--adm-border);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-right: 1px solid var(--adm-border);
-  min-width: 0;
+  box-shadow: var(--adm-shadow-sm);
 }
 
 .ticketSplitSide {
-  width: 290px;
-  flex-shrink: 0;
-  overflow-y: auto;
-  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--adm-bg);
 }
 
 /* Metadata cards in sidebar */
