@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Search,
   Filter,
@@ -178,6 +179,7 @@ const AGENT_LABEL_STYLES = {
 
 export default function SupportTickets() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -186,6 +188,8 @@ export default function SupportTickets() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [claimedByMe, setClaimedByMe] = useState(false);
   const [selected, setSelected] = useState(null);
   const [reply, setReply] = useState("");
   const [file, setFile] = useState(null);
@@ -210,6 +214,8 @@ export default function SupportTickets() {
     setLoading(true);
     const params = { page, limit };
     if (statusFilter) params.status = statusFilter;
+    if (typeFilter) params.type = typeFilter;
+    if (claimedByMe) params.claimedByMe = true;
     apiClient
       .get("/tech-support/support/tickets", { params })
       .then((r) => {
@@ -227,7 +233,7 @@ export default function SupportTickets() {
       })
       .catch(() => setError("Failed to load tickets."))
       .finally(() => setLoading(false));
-  }, [page, limit, statusFilter, search]);
+  }, [page, limit, statusFilter, typeFilter, claimedByMe, search, user?.id]);
 
   useEffect(() => {
     fetchTickets();
@@ -248,10 +254,23 @@ export default function SupportTickets() {
     try {
       const res = await apiClient.get(`/tech-support/support/tickets/${tk.id}`);
       setSelected(mapTicket(res.data, user?.id));
+      setSearchParams({ ticketId: tk.id }, { replace: true });
     } catch {
       setError("Failed to load ticket.");
     }
   };
+
+  useEffect(() => {
+    const tid = searchParams.get("ticketId");
+    if (tid && tickets.length > 0 && !selected) {
+      const tk = tickets.find((t) => t.id === tid);
+      if (tk) {
+        openTicket(tk);
+      }
+    } else if (!tid && selected) {
+      setSelected(null);
+    }
+  }, [searchParams, tickets, selected]);
 
   const refetchSelected = async (id) => {
     const res = await apiClient.get(`/tech-support/support/tickets/${id}`);
@@ -370,6 +389,8 @@ export default function SupportTickets() {
   const isTerminal = selected
     ? TERMINAL_STATUSES.includes(selected.status)
     : false;
+  const isClaimedByMe = selected && selected._raw.assigneeId === user?.id;
+  const hasAssignee = selected && selected._raw.assigneeId != null;
   const totalPages = Math.ceil(total / limit);
 
   return (
@@ -433,7 +454,7 @@ export default function SupportTickets() {
           <div className={p.splitMain}>
             <div className={p.panelHead}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                <button className={p.backBtn} onClick={() => setSelected(null)} style={{ marginTop: 2 }}>
+                <button className={p.backBtn} onClick={() => setSearchParams({}, { replace: true })} style={{ marginTop: 2 }}>
                   <ChevronLeft size={18} /> Back
                 </button>
                 <div>
@@ -568,7 +589,7 @@ export default function SupportTickets() {
             </div>
 
             {/* Reply box */}
-            {!isTerminal && (
+            {!isTerminal && isClaimedByMe && (
               <div className={p.ticketReply}>
                 {file && (
                   <div
@@ -588,12 +609,11 @@ export default function SupportTickets() {
                       style={{
                         background: "none",
                         border: "none",
-                        cursor: "pointer",
                         color: "var(--sup-text-muted)",
-                        display: "flex",
+                        cursor: "pointer",
                       }}
                     >
-                      <X size={11} />
+                      <X size={12} />
                     </button>
                   </div>
                 )}
@@ -867,6 +887,34 @@ export default function SupportTickets() {
                 </option>
               ))}
             </select>
+            <select
+              className={p.filterSelect}
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All Types</option>
+              <option value="GENERAL_INQUIRY">General Inquiry</option>
+              <option value="TECHNICAL_ISSUE">Technical Issue</option>
+              <option value="ACCOUNT_SUPPORT">Account Support</option>
+              <option value="ORDER_DISPUTE">Order Dispute</option>
+              <option value="RETURN_REQUEST">Return Request</option>
+              <option value="VENDOR_VIOLATION">Vendor Violation</option>
+            </select>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", cursor: "pointer", color: "var(--sup-text-main)" }}>
+              <input
+                type="checkbox"
+                checked={claimedByMe}
+                onChange={(e) => {
+                  setClaimedByMe(e.target.checked);
+                  setPage(1);
+                }}
+                style={{ cursor: "pointer" }}
+              />
+              Claimed by Me
+            </label>
             <span
               style={{
                 marginLeft: "auto",

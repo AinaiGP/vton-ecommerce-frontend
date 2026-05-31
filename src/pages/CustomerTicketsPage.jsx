@@ -288,7 +288,16 @@ function CreateModal({ onClose, onSubmit }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.subject.trim() || !form.description.trim()) return;
+    const sub = form.subject.trim();
+    const desc = form.description.trim();
+    
+    if (sub.length < 4 || sub.length > 100) {
+      return setError("Subject must be between 4 and 100 characters.");
+    }
+    if (desc.length < 5 || desc.length > 500) {
+      return setError("Description must be between 5 and 500 characters.");
+    }
+
     setSubmitting(true);
     setError(null);
     try {

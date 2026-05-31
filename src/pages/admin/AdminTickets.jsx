@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useAuth } from "../../context/AuthContext";
 import {
   MessageSquare,
   Search,
@@ -260,7 +261,7 @@ function AttachmentList({ attachments }) {
   );
 }
 
-function TicketChatModal({ ticket, onClose, onAction }) {
+function TicketChatModal({ ticket, onClose, onAction, user }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const [sending, setSending] = useState(false);
@@ -293,6 +294,8 @@ function TicketChatModal({ ticket, onClose, onAction }) {
   }, [ticket.messages]);
 
   const isTerminal = TERMINAL_STATUSES.includes(ticket.status);
+  const isClaimedByMe = ticket.assigneeId === user?.id;
+  const hasAssignee = ticket.assigneeId != null;
   const canClaim = ticket.status === "ESCALATED";
   const canResolve = !isTerminal && ticket.status !== "PENDING";
   const canClose = !isTerminal;
@@ -508,62 +511,68 @@ function TicketChatModal({ ticket, onClose, onAction }) {
             <div ref={bottomRef} />
           </div>
 
-          {!isTerminal ? (
-              <form className={t.ticketReplyBox} onSubmit={handleSend}>
-                {file && (
-                  <div className={t.ticketFileChip}>
-                    <Paperclip size={12} />
-                    <span>{file.name}</span>
-                    <button type="button" onClick={() => setFile(null)}>
-                      <X size={11} />
-                    </button>
-                  </div>
-                )}
-                <div className={t.ticketReplyRow}>
+          {!isTerminal && isClaimedByMe && (
+            <form className={t.ticketReplyBox} onSubmit={handleSend}>
+              {file && (
+                <div className={t.ticketFileChip}>
+                  <Paperclip size={12} />
+                  <span>{file.name}</span>
                   <button
                     type="button"
-                    className={t.ticketAttachBtn}
-                    onClick={() => fileRef.current?.click()}
-                    title="Attach image"
+                    onClick={() => setFile(null)}
+                    className={t.ticketFileChipClose}
                   >
-                    <Paperclip size={16} />
+                    <X size={12} />
                   </button>
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+                <label className={t.ticketAttachBtn}>
+                  <Paperclip size={16} />
                   <input
                     type="file"
-                    ref={fileRef}
                     style={{ display: "none" }}
                     accept="image/jpeg,image/png,image/webp,image/gif"
                     onChange={(e) => setFile(e.target.files[0] || null)}
                   />
-                  <textarea
-                    className={t.ticketReplyInput}
-                    rows={2}
-                    placeholder="Reply as Admin…"
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend(e);
-                      }
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    className={t.ticketSendBtn}
-                    disabled={(!text.trim() && !file) || sending}
-                  >
-                    <Send size={15} />
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className={t.ticketClosedBanner}>
-                <CheckCircle size={14} />
-                This ticket is{" "}
-                {STATUS_CFG[ticket.status]?.label?.toLowerCase() || "closed"}.
+                </label>
+                <textarea
+                  className={t.ticketReplyInput}
+                  rows={2}
+                  placeholder="Reply as Admin…"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend(e);
+                    }
+                  }}
+                />
+                <button
+                  type="submit"
+                  className={t.ticketSendBtn}
+                  disabled={(!text.trim() && !file) || sending}
+                >
+                  <Send size={15} />
+                </button>
               </div>
-            )}
+            </form>
+          )}
+          {!isTerminal && !isClaimedByMe && (
+            <div className={t.ticketClosedBanner} style={{ background: "#f8fafc", color: "var(--adm-text-muted)", borderTop: "1px solid var(--adm-border)" }}>
+              {hasAssignee
+                ? "This ticket is claimed by another admin or support agent."
+                : "You need to claim this ticket before you can reply."}
+            </div>
+          )}
+          {isTerminal && (
+            <div className={t.ticketClosedBanner}>
+              <CheckCircle size={14} />
+              This ticket is{" "}
+              {STATUS_CFG[ticket.status]?.label?.toLowerCase() || "closed"}.
+            </div>
+          )}
           </div>
 
           {/* Right: Metadata sidebar */}
@@ -750,6 +759,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
 }
 
 export default function AdminTickets() {
+  const { user } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -866,6 +876,7 @@ export default function AdminTickets() {
           ticket={active}
           onClose={() => setActive(null)}
           onAction={handleAction}
+          user={user}
         />
       ) : (
         <>

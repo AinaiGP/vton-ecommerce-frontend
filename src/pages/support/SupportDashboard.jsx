@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Ticket, ArrowRight } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import SupportLayout from "../../components/support/SupportLayout";
 import apiClient from "../../utils/apiClient";
 import { useAuth } from "../../context/AuthContext";
@@ -44,6 +44,7 @@ const PRIORITY_LABEL = {
 
 export default function SupportDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [recentTickets, setRecentTickets] = useState([]);
   const [stats, setStats] = useState({ total: 0, mine: 0, pending: 0, inProgress: 0, escalated: 0, resolved: 0 });
@@ -136,7 +137,11 @@ export default function SupportDashboard() {
                 </tr>
               ) : (
                 recentTickets.map((tk) => (
-                  <tr key={tk.id}>
+                  <tr 
+                    key={tk.id} 
+                    onClick={() => navigate(`/support/tickets?ticketId=${tk.id}`)}
+                    style={{ cursor: "pointer" }}
+                  >
                     <td style={{ fontWeight: 700, color: "var(--sup-accent)", fontSize: 12, fontFamily: "monospace" }}>
                       {tk.id.slice(0, 8)}…
                     </td>
