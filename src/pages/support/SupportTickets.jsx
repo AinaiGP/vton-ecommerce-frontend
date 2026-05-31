@@ -109,7 +109,6 @@ function assigneeLabel(raw, userId) {
 
 function mapTicket(raw, userId) {
   const messages = (raw.messages || [])
-    .filter((m) => !m.isSystemMessage)
     .map((m) => {
       const legacy = extractLegacyAttachment(m.content);
       const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
@@ -136,6 +135,7 @@ function mapTicket(raw, userId) {
           name: url.split("/").pop() || "Attachment",
           isImage: isImageUrl(url),
         })),
+        isSystemMessage: m.isSystemMessage,
       };
     });
 
@@ -457,69 +457,80 @@ export default function SupportTickets() {
                   No messages yet.
                 </p>
               )}
-              {selected.messages.map((m, i) => (
-                <div
-                  key={i}
-                  className={`${p.msgRow} ${m.from === "agent" ? p.mine : ""}`}
-                >
-                  <div className={p.msgAvat}>
-                    {m.senderAvatar ? (
-                      <img
-                        src={m.senderAvatar}
-                        alt={m.senderName}
-                        className={p.msgAvatarImg}
-                      />
-                    ) : (
-                      getInitials(m.senderName)
-                    )}
-                  </div>
-                  <div>
-                    <span className={p.msgSender}>{m.senderName}</span>
-                    <div className={p.msgBubble}>
-                      {m.text}
-                      {m.attachments?.map((att) =>
-                        att.isImage ? (
-                          <a
-                            key={att.url}
-                            href={att.url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <img
-                              src={att.url}
-                              alt={att.name}
-                              style={{
-                                display: "block",
-                                maxWidth: 160,
-                                maxHeight: 120,
-                                marginTop: 6,
-                                borderRadius: 6,
-                                objectFit: "cover",
-                              }}
-                            />
-                          </a>
-                        ) : (
-                          <a
-                            key={att.url}
-                            href={att.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              display: "block",
-                              fontSize: 11,
-                              opacity: 0.8,
-                              marginTop: 4,
-                            }}
-                          >
-                            📎 {att.name}
-                          </a>
-                        ),
+              {selected.messages.map((m, i) => {
+                if (m.isSystemMessage) {
+                  return (
+                    <div key={i} style={{ textAlign: "center", margin: "10px 0" }}>
+                      <span style={{ background: "rgba(0,0,0,0.05)", padding: "4px 12px", borderRadius: "12px", fontSize: "11px", color: "var(--sup-text-muted)" }}>
+                        {m.text}
+                      </span>
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    key={i}
+                    className={`${p.msgRow} ${m.from === "agent" ? p.mine : ""}`}
+                  >
+                    <div className={p.msgAvat}>
+                      {m.senderAvatar ? (
+                        <img
+                          src={m.senderAvatar}
+                          alt={m.senderName}
+                          className={p.msgAvatarImg}
+                        />
+                      ) : (
+                        getInitials(m.senderName)
                       )}
                     </div>
-                    <span className={p.msgTime}>{m.time}</span>
+                    <div>
+                      <span className={p.msgSender}>{m.senderName}</span>
+                      <div className={p.msgBubble}>
+                        {m.text}
+                        {m.attachments?.map((att) =>
+                          att.isImage ? (
+                            <a
+                              key={att.url}
+                              href={att.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <img
+                                src={att.url}
+                                alt={att.name}
+                                style={{
+                                  display: "block",
+                                  maxWidth: 160,
+                                  maxHeight: 120,
+                                  marginTop: 6,
+                                  borderRadius: 6,
+                                  objectFit: "cover",
+                                }}
+                              />
+                            </a>
+                          ) : (
+                            <a
+                              key={att.url}
+                              href={att.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                display: "block",
+                                fontSize: 11,
+                                opacity: 0.8,
+                                marginTop: 4,
+                              }}
+                            >
+                              📎 {att.name}
+                            </a>
+                          ),
+                        )}
+                      </div>
+                      <span className={p.msgTime}>{m.time}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div ref={bottomRef} />
             </div>
 

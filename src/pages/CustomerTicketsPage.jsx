@@ -91,7 +91,6 @@ function supportAvatarColor(role) {
 /* ─── Map a backend ticket to UI ─── */
 function mapTicket(ticket) {
   const messages = (ticket.messages || [])
-    .filter((m) => !m.isSystemMessage)
     .map((m) => {
       const legacy = extractLegacyAttachment(m.content);
       const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
@@ -121,6 +120,7 @@ function mapTicket(ticket) {
         senderName,
         senderRole,
         senderAvatar,
+        isSystemMessage: m.isSystemMessage,
       };
     });
 
@@ -553,6 +553,13 @@ function TicketDetail({ ticket, onBack, onReply, onCancel, onImageClick }) {
           <span>Ticket created · {ticket.created}</span>
         </div>
         {ticket.messages.map((msg, i) => {
+          if (msg.isSystemMessage) {
+            return (
+              <div key={i} className={styles.sysEvent}>
+                <span>{msg.text}</span>
+              </div>
+            );
+          }
           const isMe = msg.from === "customer";
           const avatarBg = isMe
             ? "var(--burgundy, #7c3aed)"

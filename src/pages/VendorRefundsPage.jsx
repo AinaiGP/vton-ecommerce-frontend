@@ -74,6 +74,7 @@ const mapReturnTicket = (ticket) => ({
   messages: ticket.messages || [],
   amount: ticket.refundAmount || 0,
   quantity: ticket.returnQuantity || 1,
+  supportInvited: ticket.supportInvited,
 });
 
 function AttachmentList({ attachments, onImageClick }) {
@@ -383,6 +384,21 @@ export default function VendorRefundsPage() {
     }
   };
 
+  const handleInviteSupport = async () => {
+    setSending(true);
+    try {
+      await apiClient.patch(`/vendors/support/tickets/${selected.id}/invite`);
+      showToast("Support invited to join the ticket.");
+      const updatedRes = await apiClient.get(`/vendors/support/tickets/${selected.id}`);
+      setSelected(mapReturnTicket(updatedRes.data));
+      await fetchRefunds();
+    } catch (err) {
+      showToast("Failed to invite support.", false);
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleConfirmReceived = async (condition, defectNote) => {
     setSending(true);
     try {
@@ -576,6 +592,16 @@ export default function VendorRefundsPage() {
                 style={{ display: "flex", alignItems: "center", gap: 6 }}
               >
                 <Package size={14} /> Confirm Item Received
+              </button>
+            )}
+            {selected.status !== "COMPLETED" && selected.status !== "CANCELED" && !selected.supportInvited && (
+              <button
+                className={`${p.btn} ${p.btnPrimary}`}
+                onClick={handleInviteSupport}
+                disabled={sending}
+                style={{ background: "var(--burgundy, #7c3aed)", borderColor: "var(--burgundy, #7c3aed)", color: "white", marginLeft: 10, display: "flex", alignItems: "center", gap: 6 }}
+              >
+                Invite Support
               </button>
             )}
           </div>

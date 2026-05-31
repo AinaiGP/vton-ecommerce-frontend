@@ -130,7 +130,6 @@ function extractLegacyAttachment(content) {
 
 function mapTicket(ticket) {
   const messages = (ticket.messages || [])
-    .filter((m) => !m.isSystemMessage)
     .map((m) => {
       const legacy = extractLegacyAttachment(m.content);
       const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
@@ -159,6 +158,7 @@ function mapTicket(ticket) {
         senderId,
         senderRole,
         senderAvatar: sender?.avatarUrl || null,
+        isSystemMessage: m.isSystemMessage,
       };
     });
 
@@ -408,6 +408,13 @@ function TicketChatModal({ ticket, onClose, onAction }) {
                 <span>Ticket opened · {ticket.createdAt}</span>
               </div>
               {ticket.messages.map((msg, i) => {
+                if (msg.isSystemMessage) {
+                  return (
+                    <div key={i} className={t.ticketSysEvent}>
+                      <span>{msg.text}</span>
+                    </div>
+                  );
+                }
                 const isAdminMsg = msg.from === "admin";
                 const avatarBg = roleAvatarColor(msg.senderRole);
                 return (

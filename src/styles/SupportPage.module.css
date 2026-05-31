@@ -619,6 +619,8 @@
   background: var(--sup-surface);
   border: 1px solid var(--sup-border);
   border-bottom-left-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .mine .msgBubble {
   background: var(--sup-accent);

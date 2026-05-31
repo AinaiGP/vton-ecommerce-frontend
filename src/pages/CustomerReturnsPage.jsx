@@ -81,25 +81,34 @@ function mapReturnTicket(ticket) {
           hour: "2-digit",
           minute: "2-digit",
         }),
+        createdAt: m.createdAt,
+        senderRole: m.senderRole,
+        senderName:
+          m.sender?.profile?.companyName ||
+          m.sender?.profile?.fullName ||
+          m.sender?.email ||
+          "Vendor",
+        senderAvatar: m.sender?.profile?.avatarUrl,
         attachments,
+        isSystemMessage: m.isSystemMessage,
       };
-    });
+    })
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
   return {
-    id:         ticket.id,
-    orderId:    ticket.orderId || "—",
-    product:    ticket.subject || "Return Request",
-    reason:     ticket.returnReason || "—",
-    status:     ticket.status, // raw enum value
-    created:    new Date(ticket.createdAt).toLocaleDateString("en-US", {
-      month: "short", day: "numeric", year: "numeric",
+    id: ticket.id,
+    product: ticket.orderItem?.productVariant?.product?.name || "Product",
+    orderId: ticket.order?.id,
+    vendorName: ticket.counterparty?.profile?.companyName || "Vendor",
+    reason: ticket.subject,
+    status: ticket.status,
+    created: new Date(ticket.createdAt).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     }),
-    updated:    new Date(ticket.updatedAt).toLocaleString("en-US", {
-      month: "short", day: "numeric",
-    }),
-    vendorName: "Vendor",
     messages,
-    _raw: ticket,
+    supportInvited: ticket.supportInvited,
   };
 }
 
@@ -410,19 +419,20 @@ function CreateReturnModal({ onClose, onSubmit, myOrders }) {
 }
 
 /* ─── Return Detail (chat) ─── */
-function ReturnDetail({ ret, onBack, onReply, onCancel, onImageClick }) {
-  const [text, setText] = useState("");
-  const [file, setFile] = useState(null);
-  const [sending, setSending] = useState(false);
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [canceling, setCanceling] = useState(false);
-  const fileRef = useRef(null);
-  const isClosed =
-    ret.status === "RESOLVED" ||
-    ret.status === "CLOSED" ||
-    ret.status === "CANCELED";
+function ReturnDetail({ ret, onBack, onReply, onCancel, onImageClick, onInviteSupport }) {
+    const [text, setText] = useState("");
+    const [file, setFile] = useState(null);
+    const [sending, setSending] = useState(false);
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [canceling, setCanceling] = useState(false);
+    const [inviting, setInviting] = useState(false);
+    const fileRef = useRef(null);
+    const isClosed =
+      ret.status === "RESOLVED" ||
+      ret.status === "CLOSED" ||
+      ret.status === "CANCELED";
 
-  const handleSend = async (e) => {
+    const handleSend = async (e) => {
     e.preventDefault();
     if (!text.trim() && !file) return;
     setSending(true);
@@ -457,6 +467,20 @@ function ReturnDetail({ ret, onBack, onReply, onCancel, onImageClick }) {
           </p>
         </div>
         <StatusBadge status={ret.status} />
+        {!isClosed && !ret.supportInvited && (
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={async () => {
+              setInviting(true);
+              await onInviteSupport(ret.id);
+              setInviting(false);
+            }}
+            disabled={inviting}
+            style={{ marginLeft: 12, background: "var(--burgundy, #7c3aed)", borderColor: "var(--burgundy, #7c3aed)", color: "white" }}
+          >
+            {inviting ? "Inviting..." : "Invite Support"}
+          </button>
+        )}
         {!isClosed && (ret.status === "OPEN" || ret.status === "AWAITING_RESPONSE") && (
           <button
             className={`${styles.btn} ${styles.btnOutline} ${styles.btnSm}`}
@@ -512,6 +536,13 @@ function ReturnDetail({ ret, onBack, onReply, onCancel, onImageClick }) {
           <span>Return request submitted · {ret.created}</span>
         </div>
         {ret.messages.map((msg, i) => {
+          if (msg.isSystemMessage) {
+            return (
+              <div key={i} className={styles.sysEvent}>
+                <span>{msg.text}</span>
+              </div>
+            );
+          }
           const isMe = msg.from === "customer";
           return (
             <div
@@ -721,7 +752,6 @@ export default function CustomerReturnsPage() {
   const handleReply = async (ticketId, text, file) => {
     let attachmentUrl = null;
 
-    // If there is a file, upload it to the attachment endpoint first
     if (file) {
       try {
         const formData = new FormData();
@@ -743,13 +773,34 @@ export default function CustomerReturnsPage() {
       attachments: attachmentUrl ? [attachmentUrl] : undefined,
     });
 
-    // Refetch the ticket to get updated messages
     const res = await apiClient.get(`/customers/support/tickets/${ticketId}`);
     const updatedReturn = mapReturnTicket(res.data);
     setSelected(updatedReturn);
     setReturns((prev) =>
       prev.map((r) => (r.id === ticketId ? updatedReturn : r)),
     );
+  };
+
+  const handleCancel = async (id) => {
+    try {
+      await apiClient.patch(`/customers/support/tickets/${id}/cancel`);
+      await refetchReturns();
+      const res = await apiClient.get(`/customers/support/tickets/${id}`);
+      setSelected(mapReturnTicket(res.data));
+    } catch (err) {
+      console.error("Failed to cancel return:", err);
+    }
+  };
+
+  const handleInviteSupport = async (id) => {
+    try {
+      await apiClient.patch(`/customers/support/tickets/${id}/invite`);
+      const res = await apiClient.get(`/customers/support/tickets/${id}`);
+      setSelected(mapReturnTicket(res.data));
+      await refetchReturns();
+    } catch (err) {
+      console.error("Failed to invite support:", err);
+    }
   };
 
   if (view === "detail" && selected) {
@@ -761,16 +812,8 @@ export default function CustomerReturnsPage() {
             ret={selected}
             onBack={() => setView("list")}
             onReply={handleReply}
-            onCancel={async (id) => {
-              try {
-                await apiClient.patch(`/customers/support/tickets/${id}/cancel`);
-                await refetchReturns();
-                const res = await apiClient.get(`/customers/support/tickets/${id}`);
-                setSelected(mapReturnTicket(res.data));
-              } catch (err) {
-                console.error("Failed to cancel return:", err);
-              }
-            }}
+            onCancel={handleCancel}
+            onInviteSupport={handleInviteSupport}
             onImageClick={(url) => setFullscreenImage(url)}
           />
         </div>
