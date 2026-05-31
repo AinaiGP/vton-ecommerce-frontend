@@ -13,6 +13,8 @@ import {
   User,
   Copy,
   Check,
+  ChevronLeft,
+  AlertCircle,
 } from "lucide-react";
 import AdminLayout from "../../components/admin/AdminLayout";
 import apiClient, { multipartClient } from "../../utils/apiClient";
@@ -187,6 +189,7 @@ function mapTicket(ticket) {
     messages,
     assigneeId: ticket.assigneeId,
     assigneeRole: ticket.assigneeRole,
+    _raw: ticket,
   };
 }
 
@@ -265,6 +268,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
   const [showResolve, setShowResolve] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
+  const [showUninvitedModal, setShowUninvitedModal] = useState(false);
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
 
@@ -274,6 +278,14 @@ function TicketChatModal({ ticket, onClose, onAction }) {
       setCopiedId(key);
       setTimeout(() => setCopiedId(null), 1500);
     });
+  };
+
+  const isUninvited = () => {
+    if (ticket && (ticket._raw?.type === "RETURN_REQUEST" || ticket._raw?.type === "ORDER_DISPUTE") && !ticket._raw?.supportInvited) {
+      setShowUninvitedModal(true);
+      return true;
+    }
+    return false;
   };
 
   useEffect(() => {
@@ -287,6 +299,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
 
   const handleSend = async (e) => {
     e.preventDefault();
+    if (isUninvited()) return;
     if (!text.trim() && !file) return;
     setSending(true);
     try {
@@ -314,6 +327,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
   };
 
   const handleClaim = async () => {
+    if (isUninvited()) return;
     setActionLoading(true);
     try {
       await apiClient.patch(`/admin/support/tickets/${ticket.id}/claim`);
@@ -324,6 +338,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
   };
 
   const handleResolve = async () => {
+    if (isUninvited()) return;
     setActionLoading(true);
     try {
       await apiClient.patch(`/admin/support/tickets/${ticket.id}/resolve`, {
@@ -337,6 +352,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
   };
 
   const handleClose = async () => {
+    if (isUninvited()) return;
     setActionLoading(true);
     try {
       await apiClient.patch(`/admin/support/tickets/${ticket.id}/close`);
@@ -377,26 +393,44 @@ function TicketChatModal({ ticket, onClose, onAction }) {
   ].filter(Boolean);
 
   return (
-    <div className={t.modalBackdrop} onClick={onClose}>
-      <div
-        className={`${t.modal} ${t.ticketSplitModal}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className={t.modalHead}>
-          <div className={t.ticketChatHeadInfo}>
-            <h2 className={t.modalTitle}>{ticket.subject}</h2>
-            <div className={t.ticketChatMeta}>
-              <StatusBadge status={ticket.status} />
-              {ticket.priority && <PriorityBadge priority={ticket.priority} />}
-              <span className={t.pageInfo}>
-                {ticket.typeLabel} · {ticket.createdAt}
-              </span>
+    <>
+      {showUninvitedModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowUninvitedModal(false)}>
+          <div style={{ background: "white", padding: 24, borderRadius: 12, maxWidth: 400, width: "100%" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <div style={{ background: "#fee2e2", color: "#dc2626", padding: 8, borderRadius: "50%" }}>
+                <AlertCircle size={24} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Action Not Allowed</h3>
+            </div>
+            <p style={{ color: "var(--adm-text-muted)", fontSize: 14, lineHeight: 1.5, marginBottom: 24 }}>
+              You haven't been invited to this ticket yet. Customers and vendors must explicitly request support before you can interfere in their return or dispute.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button className={`${t.btn} ${t.btnPrimary}`} onClick={() => setShowUninvitedModal(false)}>Understood</button>
             </div>
           </div>
-          <button className={t.modalClose} onClick={onClose}>
-            <X size={18} />
-          </button>
+        </div>
+      )}
+
+      <div className={t.ticketSplitContainer}>
+        {/* Header */}
+        <div className={t.modalHead}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button className={t.backBtn} onClick={onClose} style={{ marginTop: 2 }}>
+              <ChevronLeft size={18} /> Back
+            </button>
+            <div className={t.ticketChatHeadInfo}>
+              <h2 className={t.modalTitle}>{ticket.subject}</h2>
+              <div className={t.ticketChatMeta}>
+                <StatusBadge status={ticket.status} />
+                {ticket.priority && <PriorityBadge priority={ticket.priority} />}
+                <span className={t.pageInfo}>
+                  {ticket.typeLabel} · {ticket.createdAt}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Split body */}
@@ -714,7 +748,7 @@ function TicketChatModal({ ticket, onClose, onAction }) {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -830,7 +864,15 @@ export default function AdminTickets() {
         </div>
       )}
 
-      <div className={t.toolbar}>
+      {active ? (
+        <TicketChatModal
+          ticket={active}
+          onClose={() => setActive(null)}
+          onAction={handleAction}
+        />
+      ) : (
+        <>
+          <div className={t.toolbar}>
         <div className={t.toolbarLeft}>
           <div className={t.searchBox}>
             <Search size={14} className={t.searchIcon} />
@@ -956,7 +998,13 @@ export default function AdminTickets() {
                       )}
                     </td>
                     <td>
-                      <StatusBadge status={tk.status} />
+                      {(tk._raw?.type === "RETURN_REQUEST" || tk._raw?.type === "ORDER_DISPUTE") && !tk._raw?.supportInvited ? (
+                        <span className={t.badge} style={{ background: "#f1f5f9", color: "#64748b", border: "1px solid #cbd5e1" }}>
+                          Customer & Vendor
+                        </span>
+                      ) : (
+                        <StatusBadge status={tk.status} />
+                      )}
                     </td>
                     <td className={t.ticketRoleCell}>
                       {tk.creatorRole?.toLowerCase().replace(/_/g, " ") || "—"}
@@ -1043,13 +1091,7 @@ export default function AdminTickets() {
           </div>
         )}
       </div>
-
-      {active && (
-        <TicketChatModal
-          ticket={active}
-          onClose={() => setActive(null)}
-          onAction={handleAction}
-        />
+      </>
       )}
     </AdminLayout>
   );

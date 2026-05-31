@@ -11,6 +11,7 @@ import {
   ArrowUpRight,
   Copy,
   Check,
+  ChevronLeft,
 } from "lucide-react";
 import SupportLayout from "../../components/support/SupportLayout";
 import { useAuth } from "../../context/AuthContext";
@@ -192,6 +193,7 @@ export default function SupportTickets() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
+  const [showUninvitedModal, setShowUninvitedModal] = useState(false);
 
   const copyToClipboard = (value, key) => {
     if (!value) return;
@@ -258,7 +260,16 @@ export default function SupportTickets() {
     fetchTickets();
   };
 
+  const isUninvited = () => {
+    if (selected && (selected._raw.type === "RETURN_REQUEST" || selected._raw.type === "ORDER_DISPUTE") && !selected._raw.supportInvited) {
+      setShowUninvitedModal(true);
+      return true;
+    }
+    return false;
+  };
+
   const sendReply = async () => {
+    if (isUninvited()) return;
     if (!selected || (!reply.trim() && !file)) return;
     setSending(true);
     try {
@@ -291,6 +302,7 @@ export default function SupportTickets() {
   };
 
   const handleClaim = async () => {
+    if (isUninvited()) return;
     if (!selected) return;
     setActionLoading(true);
     try {
@@ -306,6 +318,7 @@ export default function SupportTickets() {
   };
 
   const handleEscalate = async () => {
+    if (isUninvited()) return;
     if (!selected) return;
     setActionLoading(true);
     try {
@@ -321,6 +334,7 @@ export default function SupportTickets() {
   };
 
   const handleResolve = async () => {
+    if (isUninvited()) return;
     if (!selected) return;
     setActionLoading(true);
     try {
@@ -337,6 +351,7 @@ export default function SupportTickets() {
   };
 
   const handleClose = async () => {
+    if (isUninvited()) return;
     if (!selected) return;
     setActionLoading(true);
     try {
@@ -392,34 +407,58 @@ export default function SupportTickets() {
         </div>
       )}
 
+      {showUninvitedModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowUninvitedModal(false)}>
+          <div style={{ background: "white", padding: 24, borderRadius: 12, maxWidth: 400, width: "100%" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <div style={{ background: "#fee2e2", color: "#dc2626", padding: 8, borderRadius: "50%" }}>
+                <AlertCircle size={24} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Action Not Allowed</h3>
+            </div>
+            <p style={{ color: "var(--sup-text-muted)", fontSize: 14, lineHeight: 1.5, marginBottom: 24 }}>
+              You haven't been invited to this ticket yet. Customers and vendors must explicitly request support before you can interfere in their return or dispute.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button className={`${p.btn} ${p.btnPrimary}`} onClick={() => setShowUninvitedModal(false)}>Understood</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selected ? (
         /* ── Ticket Detail Split View ── */
         <div className={p.splitLayout}>
           {/* Left: conversation */}
           <div className={p.splitMain}>
             <div className={p.panelHead}>
-              <div>
-                <p
-                  style={{
-                    fontSize: 12,
-                    color: "var(--sup-text-muted)",
-                    marginBottom: 4,
-                  }}
-                >
-                  <span style={{ fontWeight: 700, color: "var(--sup-accent)" }}>
-                    {selected.id.slice(0, 8)}…
-                  </span>{" "}
-                  · {selected.user}
-                </p>
-                <h2
-                  style={{
-                    font: "700 16px/1.3 Inter, sans-serif",
-                    color: "var(--sup-text)",
-                    margin: 0,
-                  }}
-                >
-                  {selected.subject}
-                </h2>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <button className={p.backBtn} onClick={() => setSelected(null)} style={{ marginTop: 2 }}>
+                  <ChevronLeft size={18} /> Back
+                </button>
+                <div>
+                  <p
+                    style={{
+                      fontSize: 12,
+                      color: "var(--sup-text-muted)",
+                      marginBottom: 4,
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, color: "var(--sup-accent)" }}>
+                      {selected.id.slice(0, 8)}…
+                    </span>{" "}
+                    · {selected.user}
+                  </p>
+                  <h2
+                    style={{
+                      font: "700 16px/1.3 Inter, sans-serif",
+                      color: "var(--sup-text)",
+                      margin: 0,
+                    }}
+                  >
+                    {selected.subject}
+                  </h2>
+                </div>
               </div>
               <div
                 style={{
@@ -434,12 +473,6 @@ export default function SupportTickets() {
                 >
                   {STATUS_LABEL[selected.status] || selected.status}
                 </span>
-                <button
-                  className={`${p.btn} ${p.btnGhost} ${p.btnSm}`}
-                  onClick={() => setSelected(null)}
-                >
-                  <X size={14} />
-                </button>
               </div>
             </div>
 
@@ -940,11 +973,17 @@ export default function SupportTickets() {
                         {tk.subject}
                       </td>
                       <td>
-                        <span
-                          className={`${p.badge} ${p[STATUS_MAP[tk.status]] || p.bOpen}`}
-                        >
-                          {STATUS_LABEL[tk.status] || tk.status}
-                        </span>
+                        {(tk._raw.type === "RETURN_REQUEST" || tk._raw.type === "ORDER_DISPUTE") && !tk._raw.supportInvited ? (
+                          <span className={p.badge} style={{ background: "#f1f5f9", color: "#64748b", border: "1px solid #cbd5e1" }}>
+                            Customer & Vendor
+                          </span>
+                        ) : (
+                          <span
+                            className={`${p.badge} ${p[STATUS_MAP[tk.status]] || p.bOpen}`}
+                          >
+                            {STATUS_LABEL[tk.status] || tk.status}
+                          </span>
+                        )}
                       </td>
                       <td>
                         <span

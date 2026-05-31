@@ -610,10 +610,10 @@
 }
 
 .msgBubble {
-  max-width: 65%;
-  padding: 10px 14px;
+  max-width: 85%;
+  padding: 12px 16px;
   border-radius: 14px;
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--sup-text);
   background: var(--sup-surface);
@@ -1168,6 +1168,26 @@
   word-break: break-all;
   line-height: 1.5;
   white-space: normal;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--sup-text-muted);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  margin-bottom: 12px;
+}
+.backBtn:hover {
+  background: var(--sup-border);
+  color: var(--sup-text);
 }
 
 /* ── Responsive ── */
