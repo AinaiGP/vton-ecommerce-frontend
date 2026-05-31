@@ -693,3 +693,33 @@
   font-size: var(--text-sm);
   color: var(--charcoal-muted);
 }
+
+/* ── Recommendations ── */
+.recommendationsSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-10);
+  padding-top: var(--space-8);
+  border-top: var(--border-light);
+}
+
+.recommendationsScroll {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  padding-bottom: var(--space-4);
+  scroll-behavior: smooth;
+  /* Hide scrollbar for clean look but keep it scrollable */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.recommendationsScroll::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
+}
+
+.recommendationCardWrapper {
+  min-width: 240px;
+  flex-shrink: 0;
+}

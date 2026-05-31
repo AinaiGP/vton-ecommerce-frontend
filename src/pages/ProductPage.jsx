@@ -17,6 +17,7 @@ import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import VtonModal from "../components/vton/VtonModal";
+import ProductCard from "../components/common/ProductCard";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import apiClient from "../utils/apiClient";
@@ -81,6 +82,8 @@ export default function ProductPage() {
   const [reviewsTotal, setReviewsTotal] = useState(0);
   const [averageRating, setAverageRating] = useState(null);
 
+  const [recommendations, setRecommendations] = useState([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -124,6 +127,23 @@ export default function ProductPage() {
     };
 
     fetchProduct();
+  }, [id, retryKey]);
+
+  useEffect(() => {
+    if (!id) return;
+    const fetchRecommendations = async () => {
+      setLoadingRecommendations(true);
+      try {
+        const response = await apiClient.get(`/products/${id}/recommendations?limit=8`);
+        setRecommendations(Array.isArray(response.data) ? response.data : []);
+      } catch (err) {
+        console.error("Failed to fetch recommendations:", err);
+        setRecommendations([]);
+      } finally {
+        setLoadingRecommendations(false);
+      }
+    };
+    fetchRecommendations();
   }, [id, retryKey]);
 
   useEffect(() => {
@@ -589,53 +609,67 @@ export default function ProductPage() {
                 {selectedVariant?.sku && <li>SKU: {selectedVariant.sku}</li>}
               </ul>
             </div>
-            
-            {/* Reviews Section */}
-            <div className={styles.detailsSection} style={{ marginTop: 40 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <h4 className={styles.detailsTitle} style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
-                  <MessageSquare size={20} /> Customer Reviews
-                </h4>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <StarRow value={Math.round(averageRating || 0)} size={18} />
-                  <strong>{(averageRating || 0).toFixed(1)}</strong>
-                  <span style={{ color: "var(--charcoal-muted)", fontSize: 14 }}>
-                    ({reviewsTotal} reviews)
-                  </span>
+          </div>
+        </div>
+
+        {/* Recommendations Section */}
+        {!loadingRecommendations && recommendations.length > 0 && (
+          <div className={styles.recommendationsSection}>
+            <h4 className={styles.detailsTitle}>You May Also Like</h4>
+            <div className={styles.recommendationsScroll}>
+              {recommendations.map((recProduct) => (
+                <div key={recProduct.id} className={styles.recommendationCardWrapper}>
+                  <ProductCard product={recProduct} />
                 </div>
-              </div>
-              {reviews.length === 0 ? (
-                <div style={{ padding: "30px 0", textAlign: "center", color: "var(--charcoal-muted)" }}>
-                  <MessageSquare size={24} style={{ marginBottom: 12, opacity: 0.5 }} />
-                  <p>No reviews yet.</p>
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {reviews.map((review) => (
-                    <div key={review.id} style={{ padding: 16, background: "var(--ivory)", borderRadius: 8 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          {review.avatar ? (
-                            <img src={review.avatar} alt={review.author} style={{ width: 40, height: 40, borderRadius: "50%" }} />
-                          ) : (
-                            <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--charcoal)", color: "var(--ivory)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>
-                              {(review.author || "C")[0]}
-                            </div>
-                          )}
-                          <div>
-                            <p style={{ margin: 0, fontWeight: "600", color: "var(--charcoal)" }}>{review.author}</p>
-                            <p style={{ margin: 0, fontSize: 12, color: "var(--charcoal-muted)" }}>{review.date}</p>
-                          </div>
-                        </div>
-                        <StarRow value={review.rating} />
-                      </div>
-                      <p style={{ margin: 0, color: "var(--charcoal-muted)", lineHeight: 1.5, fontSize: 14 }}>{review.comment}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
+              ))}
             </div>
           </div>
+        )}
+
+        {/* Reviews Section */}
+        <div className={styles.detailsSection} style={{ marginTop: 40 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h4 className={styles.detailsTitle} style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+              <MessageSquare size={20} /> Customer Reviews
+            </h4>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <StarRow value={Math.round(averageRating || 0)} size={18} />
+              <strong>{(averageRating || 0).toFixed(1)}</strong>
+              <span style={{ color: "var(--charcoal-muted)", fontSize: 14 }}>
+                ({reviewsTotal} reviews)
+              </span>
+            </div>
+          </div>
+          {reviews.length === 0 ? (
+            <div style={{ padding: "30px 0", textAlign: "center", color: "var(--charcoal-muted)" }}>
+              <MessageSquare size={24} style={{ marginBottom: 12, opacity: 0.5 }} />
+              <p>No reviews yet.</p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {reviews.map((review) => (
+                <div key={review.id} style={{ padding: 16, background: "var(--ivory)", borderRadius: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      {review.avatar ? (
+                        <img src={review.avatar} alt={review.author} style={{ width: 40, height: 40, borderRadius: "50%" }} />
+                      ) : (
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--charcoal)", color: "var(--ivory)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>
+                          {(review.author || "C")[0]}
+                        </div>
+                      )}
+                      <div>
+                        <p style={{ margin: 0, fontWeight: "600", color: "var(--charcoal)" }}>{review.author}</p>
+                        <p style={{ margin: 0, fontSize: 12, color: "var(--charcoal-muted)" }}>{review.date}</p>
+                      </div>
+                    </div>
+                    <StarRow value={review.rating} />
+                  </div>
+                  <p style={{ margin: 0, color: "var(--charcoal-muted)", lineHeight: 1.5, fontSize: 14 }}>{review.comment}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </main>
 
