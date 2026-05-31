@@ -156,6 +156,7 @@ export default function VtonModal({
   // ── Step 3 state ─────────────────────────────────────────────────────────
   const [processingMsgIndex, setProcessingMsgIndex] = useState(0);
   const [tryonError, setTryonError] = useState(null);
+  const [usedOriginalMask, setUsedOriginalMask] = useState(false);
   const processingIntervalRef = useRef(null);
 
   // ── Step 4 state ─────────────────────────────────────────────────────────
@@ -197,6 +198,7 @@ export default function VtonModal({
     lastPointRef.current = null;
     setProcessingMsgIndex(0);
     setTryonError(null);
+    setUsedOriginalMask(false);
     setResultB64(null);
     if (processingIntervalRef.current) {
       clearInterval(processingIntervalRef.current);
@@ -412,6 +414,7 @@ export default function VtonModal({
   // ─── Step 2 → 3: Proceed to run-tryon ────────────────────────────────────
 
   const handleProceedToTryon = async (useOriginalMask = false) => {
+    setUsedOriginalMask(useOriginalMask);
     setTryonError(null);
     setStep(3);
 
@@ -464,6 +467,10 @@ export default function VtonModal({
     } finally {
       clearInterval(processingIntervalRef.current);
     }
+  };
+
+  const handleRetryInference = () => {
+    handleProceedToTryon(usedOriginalMask);
   };
 
   // ─── Step 4: Download result ──────────────────────────────────────────────
@@ -662,21 +669,22 @@ export default function VtonModal({
             <>
               <div className={styles.footerLeft}>
                 <button
-                  id="vton-retry-btn"
+                  id="vton-start-over-btn"
                   className={styles.secondaryBtn}
                   onClick={handleRetry}
                 >
-                  <RefreshCw size={16} />
-                  Try Again
+                  <RotateCcw size={16} />
+                  Start Over
                 </button>
               </div>
               <div className={styles.footerRight}>
                 <button
-                  id="vton-close-error-btn"
-                  className={styles.dangerBtn}
-                  onClick={handleClose}
+                  id="vton-retry-btn"
+                  className={styles.primaryBtn}
+                  onClick={handleRetryInference}
                 >
-                  Close
+                  <RefreshCw size={16} />
+                  Retry Generation
                 </button>
               </div>
             </>
