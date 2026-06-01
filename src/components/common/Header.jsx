@@ -24,6 +24,7 @@ import {
   LayoutGrid,
   Ticket,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import AinaiLogo from "./AinaiLogo";
 import { useAuth } from "../../context/AuthContext";
@@ -180,6 +181,11 @@ export default function Header() {
       label: lang === "ar" ? "تذاكر الدعم" : "Tickets",
       to: "/tickets",
     },
+    {
+      icon: Sparkles,
+      label: lang === "ar" ? "تجربة افتراضية" : "Virtual Try-On",
+      to: "/my-account?openVton=true",
+    },
   ];
 
   const handleImgError = () => {
@@ -285,6 +291,14 @@ export default function Header() {
                   >
                     <Shirt size={14} />{" "}
                     {lang === "ar" ? "خزانتي" : "My Wardrobe"}
+                  </Link>
+                  <Link
+                    to="/my-account?openVton=true"
+                    className={styles.dropdownItem}
+                    onClick={() => setActiveDropdown(null)}
+                  >
+                    <Sparkles size={14} />{" "}
+                    {lang === "ar" ? "تجربة افتراضية" : "Virtual Try-On"}
                   </Link>
                   <Link
                     to="/tickets"

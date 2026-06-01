@@ -18,14 +18,17 @@ import {
   AlertCircle,
   Loader2,
   Images,
+  Zap,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import { useAuth } from "../context/AuthContext";
+import { useSubscription } from "../context/SubscriptionContext";
 import apiClient, { multipartClient } from "../utils/apiClient";
 import styles from "../styles/CustomerProfile.module.css";
 import OTPVerificationModal from "../components/common/OTPVerificationModal";
-import { useNavigate } from "react-router-dom";
+import CancelSubscriptionModal from "../components/modal/CancelSubscriptionModal";
+import { useNavigate, Link } from "react-router-dom";
 
 /* ─── Password strength ─── */
 function StrengthMeter({ password }) {
@@ -251,11 +254,13 @@ const TABS = [
   { id: "phones", label: "Phones", icon: Phone },
   { id: "addresses", label: "Addresses", icon: MapPin },
   { id: "photos", label: "My Photos", icon: Images },
+  { id: "subscription", label: "Subscription", icon: Zap },
 ];
 
 /* ─── Main page ─── */
 export default function CustomerProfilePage() {
   const { user, updateUser, logout } = useAuth();
+  const { subscription, isPro, refreshSubscription } = useSubscription();
   const navigate = useNavigate();
   const fileRef = useRef(null);
   const photoInputRef = useRef(null);
@@ -294,6 +299,10 @@ export default function CustomerProfilePage() {
   const [profilePhotos, setProfilePhotos] = useState([]);
   const [photosLoading, setPhotosLoading] = useState(false);
   const [photoUploadLoading, setPhotoUploadLoading] = useState(false);
+
+  /* Subscription */
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancellingSub, setCancellingSub] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -624,6 +633,36 @@ export default function CustomerProfilePage() {
       fetchProfile();
     } catch (err) {
       showAlert("error", "Failed to set primary address.");
+    }
+  };
+
+  /* Subscription Functions */
+  const handleCancelSubscription = async () => {
+    setCancellingSub(true);
+    try {
+      await apiClient.post("/subscriptions/cancel");
+      await refreshSubscription();
+      setShowCancelModal(false);
+      showAlert("success", "Subscription cancelled. You will retain access until the end of your billing cycle.");
+    } catch (err) {
+      console.error("Failed to cancel subscription", err);
+      showAlert("error", "An error occurred while cancelling your subscription.");
+    } finally {
+      setCancellingSub(false);
+    }
+  };
+
+  const handleResumeSubscription = async () => {
+    setCancellingSub(true);
+    try {
+      await apiClient.post("/subscriptions/resume");
+      await refreshSubscription();
+      showAlert("success", "Subscription resumed successfully.");
+    } catch (err) {
+      console.error("Failed to resume subscription", err);
+      showAlert("error", "An error occurred while resuming your subscription.");
+    } finally {
+      setCancellingSub(false);
     }
   };
 
@@ -1145,6 +1184,94 @@ export default function CustomerProfilePage() {
             </div>
           </div>
         )}
+
+        {/* ── Subscription Tab ── */}
+        {activeTab === "subscription" && (
+          <div className={styles.panel}>
+            <div className={styles.panelHead}>
+              <h2 className={styles.panelTitle}>Subscription Details</h2>
+              <p className={styles.panelSub}>
+                Manage your AINAI Pro subscription and billing.
+              </p>
+            </div>
+            <div className={styles.panelBody}>
+              {!isPro ? (
+                <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                  <Zap size={48} style={{ color: "var(--gold)", marginBottom: 16 }} />
+                  <h3 style={{ fontSize: 20, marginBottom: 8, fontFamily: "var(--font-serif)" }}>Unlock AINAI Pro</h3>
+                  <p style={{ color: "var(--charcoal-muted)", marginBottom: 24, maxWidth: 400, margin: "0 auto 24px" }}>
+                    Get access to unlimited Virtual Try-Ons, priority support, and premium AI features.
+                  </p>
+                  <Link to="/subscribe" className={`${styles.btn} ${styles.btnPrimary}`}>
+                    Upgrade to Pro
+                  </Link>
+                </div>
+              ) : (
+                <div className={styles.subCard} style={{ background: "rgba(0,0,0,0.02)", padding: 24, borderRadius: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ background: "rgba(212, 163, 115, 0.2)", padding: 12, borderRadius: 12, color: "var(--gold)" }}>
+                        <Zap size={24} />
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>AINAI Pro</h3>
+                        <span style={{ fontSize: 13, color: "var(--charcoal-muted)" }}>
+                          {subscription?.isCancelled ? "Cancels at end of billing cycle" : "Active (Renews monthly)"}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 700 }}>
+                      200 EGP<span style={{ fontSize: 14, color: "var(--charcoal-muted)", fontWeight: 400 }}>/mo</span>
+                    </div>
+                  </div>
+
+                  <div style={{ borderTop: "1px solid var(--ivory-dark)", borderBottom: "1px solid var(--ivory-dark)", padding: "16px 0", marginBottom: 24 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                      <span style={{ color: "var(--charcoal-muted)" }}>Current Period Ends:</span>
+                      <strong style={{ color: "var(--charcoal)" }}>{new Date(subscription?.expiresAt).toLocaleDateString()}</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "var(--charcoal-muted)" }}>Status:</span>
+                      <strong style={{ color: subscription?.isCancelled ? "#ef4444" : "#22c55e" }}>
+                        {subscription?.isCancelled ? "Canceled" : "Active"}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {!subscription?.isCancelled ? (
+                    <div>
+                      <button 
+                        className={`${styles.btn}`} 
+                        onClick={() => setShowCancelModal(true)}
+                        disabled={cancellingSub}
+                        style={{ width: "100%", background: "transparent", color: "#ef4444", border: "1.5px solid #ef4444" }}
+                      >
+                        {cancellingSub ? "Processing..." : "Cancel Subscription"}
+                      </button>
+                      <p style={{ fontSize: 13, color: "var(--charcoal-muted)", textAlign: "center", marginTop: 12 }}>
+                        You will retain Pro features until the end of your billing cycle.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <button 
+                        className={`${styles.btn} ${styles.btnPrimary}`} 
+                        onClick={handleResumeSubscription}
+                        disabled={cancellingSub}
+                        style={{ width: "100%" }}
+                      >
+                        {cancellingSub ? "Processing..." : "Resume Subscription"}
+                      </button>
+                      <p style={{ fontSize: 13, color: "var(--charcoal-muted)", textAlign: "center", marginTop: 12 }}>
+                        Your subscription will continue without interruption.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {phoneModal !== null && (
@@ -1171,14 +1298,21 @@ export default function CustomerProfilePage() {
       )}
       {showVerify && (
         <OTPVerificationModal
+          isOpen={showVerify}
           email={pendingEmail}
           onVerify={handleVerifyEmail}
-          onClose={() => setShowVerify(false)}
           onResend={handleResendEmailOTP}
-          title="Verify Email Change"
-          subtitle="We've sent a 6-digit code to"
+          onClose={() => setShowVerify(false)}
         />
       )}
+
+      <CancelSubscriptionModal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleCancelSubscription}
+        isCancelling={cancellingSub}
+        expiryDate={subscription?.expiresAt}
+      />
 
       <Footer />
     </div>

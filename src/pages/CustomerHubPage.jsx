@@ -28,6 +28,9 @@ import VtonModal from "../components/vton/VtonModal";
 
 /* ─── Page sections ─── */
 import { useSubscription } from "../context/SubscriptionContext";
+import { useLocation, useNavigate } from "react-router-dom";
+import WelcomeProModal from "../components/modal/WelcomeProModal";
+import CancelSubscriptionModal from "../components/modal/CancelSubscriptionModal";
 
 const CUSTOMER_PAGES = [
   {
@@ -115,10 +118,27 @@ export default function CustomerHubPage() {
   const [loading, setLoading] = useState(true);
   const [vtonOpen, setVtonOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   useEffect(() => {
+    if (location.state?.subscriptionSuccess) {
+      setShowWelcomeModal(true);
+      // Clear the state so it doesn't show again on refresh
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+
+    const queryParams = new URLSearchParams(location.search);
+    if (queryParams.get("openVton") === "true") {
+      setVtonOpen(true);
+      // Remove query param to avoid reopening on refresh
+      navigate(location.pathname, { replace: true });
+    }
+
     fetchHubData();
-  }, []);
+  }, [location, navigate]);
 
   const fetchHubData = async () => {
     setLoading(true);
@@ -149,14 +169,26 @@ export default function CustomerHubPage() {
   };
 
   const handleCancelSubscription = async () => {
-    if (!window.confirm("Are you sure you want to cancel your Pro subscription? You will keep access until the end of your billing cycle.")) return;
-    
     setCancelling(true);
     try {
       await apiClient.post("/subscriptions/cancel");
       await refreshSubscription();
+      setShowCancelModal(false);
     } catch (err) {
       console.error("Failed to cancel subscription", err);
+      alert("An error occurred. Please try again.");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleResumeSubscription = async () => {
+    setCancelling(true); // Using cancelling state for the loading spinner
+    try {
+      await apiClient.post("/subscriptions/resume");
+      await refreshSubscription();
+    } catch (err) {
+      console.error("Failed to resume subscription", err);
       alert("An error occurred. Please try again.");
     } finally {
       setCancelling(false);
@@ -324,13 +356,28 @@ export default function CustomerHubPage() {
                 <div className={styles.subActions}>
                   <button 
                     className={styles.cancelBtn} 
-                    onClick={handleCancelSubscription}
+                    onClick={() => setShowCancelModal(true)}
                     disabled={cancelling}
                   >
                     {cancelling ? "Cancelling..." : "Cancel Subscription"}
                   </button>
                   <p className={styles.cancelNotice}>
                     You will retain Pro features until {new Date(subscription.expiresAt).toLocaleDateString()}.
+                  </p>
+                </div>
+              )}
+
+              {isPro && subscription.isCancelled && (
+                <div className={styles.subActions}>
+                  <button 
+                    className={styles.resumeBtn} 
+                    onClick={handleResumeSubscription}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? "Processing..." : "Resume Subscription"}
+                  </button>
+                  <p className={styles.resumeNotice}>
+                    Your subscription will continue without interruption.
                   </p>
                 </div>
               )}
@@ -371,6 +418,19 @@ export default function CustomerHubPage() {
         isOpen={vtonOpen}
         onClose={() => setVtonOpen(false)}
         mode="standalone"
+      />
+
+      <WelcomeProModal 
+        isOpen={showWelcomeModal}
+        onClose={() => setShowWelcomeModal(false)}
+      />
+
+      <CancelSubscriptionModal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleCancelSubscription}
+        isCancelling={cancelling}
+        expiryDate={subscription?.expiresAt}
       />
     </div>
   );
