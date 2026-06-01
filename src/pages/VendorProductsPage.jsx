@@ -235,11 +235,16 @@ function ProductModal({ product, options, onClose, onSave, onManageImages, onPub
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Main Product Image *</p>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={(e) => setForm({ ...form, mainImage: e.target.files[0] })}
-                    />
+                    <label className={`${p.btn} ${p.btnOutline}`} style={{ display: "inline-flex", width: "fit-content", cursor: "pointer", alignItems: "center", gap: 6 }}>
+                      <ImagePlus size={16} />
+                      {form.mainImage ? form.mainImage.name : "Upload Image"}
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        style={{ display: "none" }}
+                        onChange={(e) => setForm({ ...form, mainImage: e.target.files[0] })}
+                      />
+                    </label>
                     <p style={{ margin: 0, fontSize: 12, color: "var(--vdr-text-muted)" }}>This will be the primary image for the product listing.</p>
                   </div>
                 )}
@@ -291,12 +296,21 @@ function ProductModal({ product, options, onClose, onSave, onManageImages, onPub
                         </td>
                         {form._new && (
                           <td>
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              style={{ width: 120, fontSize: 11 }}
-                              onChange={(e) => updateVariant(idx, "image", e.target.files[0])}
-                            />
+                            <label className={`${p.btn} ${p.btnOutline}`} style={{ fontSize: 11, padding: "4px 8px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                              <ImagePlus size={12} />
+                              {v.image ? "Change" : "Upload"}
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                style={{ display: "none" }}
+                                onChange={(e) => updateVariant(idx, "image", e.target.files[0])}
+                              />
+                            </label>
+                            {v.image && (
+                              <div style={{ fontSize: 10, color: "var(--vdr-text-muted)", marginTop: 4, maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {v.image.name}
+                              </div>
+                            )}
                           </td>
                         )}
                         {!form._new && <td style={{ textAlign: "center", fontWeight: 700 }}>{v.totalSold || 0}</td>}

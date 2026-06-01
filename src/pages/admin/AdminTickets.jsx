@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
   MessageSquare,
@@ -59,6 +60,17 @@ const PRIORITY_CFG = {
   NORMAL: { color: "#ca8a04", bg: "#fef9c3", label: "Normal" },
   HIGH: { color: "#dc2626", bg: "#fee2e2", label: "High" },
   URGENT: { color: "#7c3aed", bg: "#f5f3ff", label: "Urgent" },
+};
+
+const TYPE_CFG = {
+  GENERAL_SUPPORT: { color: "#0369a1", bg: "#e0f2fe", label: "General Support" },
+  GENERAL_INQUIRY: { color: "#0369a1", bg: "#e0f2fe", label: "General Inquiry" },
+  SYSTEM_BUG: { color: "#b91c1c", bg: "#fee2e2", label: "System Bug" },
+  TECHNICAL_ISSUE: { color: "#b91c1c", bg: "#fee2e2", label: "Technical Issue" },
+  ORDER_DISPUTE: { color: "#c2410c", bg: "#ffedd5", label: "Order Dispute" },
+  RETURN_REQUEST: { color: "#4d7c0f", bg: "#ecfccb", label: "Return Request" },
+  ACCOUNT_SUPPORT: { color: "#6d28d9", bg: "#ede9fe", label: "Account Support" },
+  VENDOR_VIOLATION: { color: "#be123c", bg: "#ffe4e6", label: "Vendor Violation" },
 };
 
 const TERMINAL_STATUSES = ["RESOLVED", "CLOSED", "CANCELED"];
@@ -224,8 +236,34 @@ function PriorityBadge({ priority }) {
     label: priority,
   };
   return (
-    <span className={t.badge} style={{ background: c.bg, color: c.color }}>
+    <span className={t.badge} style={{ background: c.bg, color: c.color, border: `1px solid ${c.color}30` }}>
       {c.label}
+    </span>
+  );
+}
+
+function TypeBadge({ type, typeLabel }) {
+  const c = TYPE_CFG[type] || {
+    color: "#475569",
+    bg: "#f8fafc",
+    label: typeLabel || type,
+  };
+  return (
+    <span className={t.badge} style={{ background: c.bg, color: c.color, border: `1px solid ${c.color}30` }}>
+      {c.label}
+    </span>
+  );
+}
+
+function RoleBadge({ role }) {
+  if (!role) return "—";
+  const norm = role.toLowerCase().replace(/_/g, " ");
+  const isVendor = norm.includes("vendor");
+  const bg = isVendor ? "#fef3c7" : "#e0e7ff";
+  const color = isVendor ? "#d97706" : "#4338ca";
+  return (
+    <span className={t.badge} style={{ background: bg, color, border: `1px solid ${color}30`, textTransform: "capitalize" }}>
+      {norm}
     </span>
   );
 }
@@ -429,9 +467,13 @@ function TicketChatModal({ ticket, onClose, onAction, user }) {
               <h2 className={t.modalTitle}>{ticket.subject}</h2>
               <div className={t.ticketChatMeta}>
                 <StatusBadge status={ticket.status} />
-                {ticket.priority && <PriorityBadge priority={ticket.priority} />}
-                <span className={t.pageInfo}>
-                  {ticket.typeLabel} · {ticket.createdAt}
+                <TypeBadge type={ticket._raw?.type || ticket.type} typeLabel={ticket.typeLabel || ticket.type} />
+                <span className={t.pageInfo} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: "monospace", color: "var(--adm-text)" }}>#{ticket.id}</span>
+                  <button onClick={() => copyToClipboard(ticket.id, "ticketId")} className={t.actionBtn} style={{ padding: 2, height: "auto", width: "auto" }} title="Copy ID">
+                    {copiedId === "ticketId" ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
+                  </button>
+                  · {ticket.createdAt}
                 </span>
               </div>
             </div>
@@ -760,6 +802,8 @@ function TicketChatModal({ ticket, onClose, onAction, user }) {
 
 export default function AdminTickets() {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -834,6 +878,13 @@ export default function AdminTickets() {
       fetchTickets();
     }
   };
+
+  useEffect(() => {
+    if (location.state?.openTicketId) {
+      openTicket({ id: location.state.openTicketId });
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state?.openTicketId]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -924,7 +975,23 @@ export default function AdminTickets() {
               </option>
             ))}
           </select>
-          <label className={t.ticketEscalatedCheck}>
+          <label 
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "4px 12px",
+              background: escalatedOnly ? "var(--adm-accent-light)" : "#f1f5f9",
+              color: escalatedOnly ? "var(--adm-accent)" : "#64748b",
+              borderRadius: 20,
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+              border: `1px solid ${escalatedOnly ? "var(--adm-accent)" : "#cbd5e1"}`,
+              transition: "all 0.2s",
+              userSelect: "none"
+            }}
+          >
             <input
               type="checkbox"
               checked={escalatedOnly}
@@ -932,10 +999,28 @@ export default function AdminTickets() {
                 setEscalatedOnly(e.target.checked);
                 setPage(1);
               }}
+              style={{ display: "none" }}
             />
-            Escalated only
+            {escalatedOnly && <Check size={14} />}
+            Escalated Only
           </label>
-          <label className={t.ticketEscalatedCheck}>
+          <label 
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "4px 12px",
+              background: claimedByMe ? "var(--adm-accent-light)" : "#f1f5f9",
+              color: claimedByMe ? "var(--adm-accent)" : "#64748b",
+              borderRadius: 20,
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+              border: `1px solid ${claimedByMe ? "var(--adm-accent)" : "#cbd5e1"}`,
+              transition: "all 0.2s",
+              userSelect: "none"
+            }}
+          >
             <input
               type="checkbox"
               checked={claimedByMe}
@@ -943,8 +1028,10 @@ export default function AdminTickets() {
                 setClaimedByMe(e.target.checked);
                 setPage(1);
               }}
+              style={{ display: "none" }}
             />
-            Claimed by me
+            {claimedByMe && <Check size={14} />}
+            Claimed by Me
           </label>
         </div>
         <span className={t.pageInfo}>{total} tickets</span>
@@ -958,7 +1045,6 @@ export default function AdminTickets() {
                 <th>#</th>
                 <th>Subject</th>
                 <th>Type</th>
-                <th>Priority</th>
                 <th>Status</th>
                 <th>Creator Role</th>
                 <th>Assignee</th>
@@ -995,15 +1081,10 @@ export default function AdminTickets() {
                     <td>{(page - 1) * limit + i + 1}</td>
                     <td className={t.ticketSubjectCell}>{tk.subject}</td>
                     <td className={t.ticketTypeCell}>
-                      {TICKET_TYPES.find((tp) => tp.value === tk.type)?.label ||
-                        tk.type}
-                    </td>
-                    <td>
-                      {tk.priority ? (
-                        <PriorityBadge priority={tk.priority} />
-                      ) : (
-                        "—"
-                      )}
+                      <TypeBadge 
+                        type={tk.type} 
+                        typeLabel={TICKET_TYPES.find((tp) => tp.value === tk.type)?.label} 
+                      />
                     </td>
                     <td>
                       {(tk._raw?.type === "RETURN_REQUEST" || tk._raw?.type === "ORDER_DISPUTE") && !tk._raw?.supportInvited ? (
@@ -1015,7 +1096,7 @@ export default function AdminTickets() {
                       )}
                     </td>
                     <td className={t.ticketRoleCell}>
-                      {tk.creatorRole?.toLowerCase().replace(/_/g, " ") || "—"}
+                      <RoleBadge role={tk.creatorRole} />
                     </td>
                     <td className={t.ticketTypeCell}>
                       {tk.assigneeId ? (

@@ -111,7 +111,8 @@ export default function SupportDashboard() {
                 <th>ID</th>
                 <th>Subject</th>
                 <th>Status</th>
-                <th>Priority</th>
+                <th>Type</th>
+                <th>Creator</th>
                 <th>Assigned</th>
                 <th>Updated</th>
               </tr>
@@ -120,14 +121,14 @@ export default function SupportDashboard() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <td key={j}><div className={p.skel} style={{ height: 14, borderRadius: 6 }} /></td>
                     ))}
                   </tr>
                 ))
               ) : recentTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <div className={p.emptyState}>
                       <div className={p.emptyIcon}><Ticket size={22} /></div>
                       <h3 className={p.emptyTitle}>No tickets yet</h3>
@@ -153,13 +154,16 @@ export default function SupportDashboard() {
                         {STATUS_LABEL[tk.status] || tk.status}
                       </span>
                     </td>
-                    <td>
-                      <span className={`${p.badge} ${p[PRIORITY_MAP[tk.priority]] || p.pMed}`}>
-                        {PRIORITY_LABEL[tk.priority] || tk.priority}
-                      </span>
+                    <td style={{ fontSize: 12, color: "var(--sup-text-muted)" }}>
+                      {tk.type?.replace(/_/g, " ")}
+                    </td>
+                    <td style={{ fontSize: 12, color: "var(--sup-text-muted)", textTransform: "capitalize" }}>
+                      {tk.creatorRole?.toLowerCase() || "User"}
                     </td>
                     <td style={{ fontSize: 12, color: "var(--sup-text-muted)" }}>
-                      {tk.assigneeId ? "Assigned" : "Unassigned"}
+                      {tk.assigneeId 
+                        ? (tk.assigneeRole === 'admin' ? "Admin Claimed" : "Support Claimed") 
+                        : "Unassigned"}
                     </td>
                     <td style={{ fontSize: 12, color: "var(--sup-text-subtle)" }}>
                       {new Date(tk.updatedAt || tk.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}

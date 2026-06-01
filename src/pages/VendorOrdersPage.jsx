@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Search,
   Eye,
@@ -14,6 +15,7 @@ import VendorLayout from "../components/vendor/VendorLayout";
 import p from "../styles/VendorPage.module.css";
 import apiClient from "../utils/apiClient";
 import { formatPrice } from "../utils/formatPrice";
+import ConfirmModal from "../components/common/ConfirmModal";
 
 const TABS = [
   { label: "All", value: "All" },
@@ -54,8 +56,25 @@ export default function VendorOrdersPage() {
   const [orderDetail, setOrderDetail] = useState(null);
   const [tracking, setTracking] = useState("");
   const [updating, setUpdating] = useState(null); // itemId
-  const [cancelItemId, setCancelItemId] = useState(null);
-  const [cancelReason, setCancelReason] = useState("");
+  
+  const [actionModal, setActionModal] = useState({
+    isOpen: false,
+    type: null, // "process", "cancel"
+    item: null,
+    nextStatus: null,
+    quantity: 1,
+    tracking: "",
+    reason: "",
+  });
+  
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.openOrderId) {
+      setViewOrderId(location.state.openOrderId);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     fetchOrders();
@@ -94,26 +113,51 @@ export default function VendorOrdersPage() {
     }
   };
 
-  const updateFulfillment = async (itemId, currentStatus) => {
+  const handleActionClick = (item, actionType) => {
     const nextMap = { pending: "processing", processing: "shipped", shipped: "delivered" };
-    const nextStatus = nextMap[currentStatus];
-    if (!nextStatus) return;
+    const nextStatus = nextMap[item.fulfillmentStatus];
 
-    if (nextStatus === "shipped" && !tracking) {
-      alert("Tracking number is required for shipping.");
-      return;
+    if (actionType === "process") {
+      if (nextStatus === "shipped" || item.quantity > 1) {
+        setActionModal({
+          isOpen: true,
+          type: "process",
+          item,
+          nextStatus,
+          quantity: item.quantity,
+          tracking: "",
+          reason: "",
+        });
+        return;
+      }
+      updateFulfillment(item.id, nextStatus, item.quantity, "");
+    } else if (actionType === "cancel") {
+      setActionModal({
+        isOpen: true,
+        type: "cancel",
+        item,
+        nextStatus: null,
+        quantity: item.quantity,
+        tracking: "",
+        reason: "",
+      });
     }
+  };
+
+  const updateFulfillment = async (itemId, nextStatus, quantity, trackingNumber) => {
+    if (!nextStatus) return;
 
     setUpdating(itemId);
     try {
       await apiClient.patch(`/vendors/orders/${orderDetail.id}/items/${itemId}/fulfillment`, {
         status: nextStatus,
-        trackingNumber: nextStatus === "shipped" ? tracking : undefined,
-        carrierName: nextStatus === "shipped" ? "Standard" : undefined
+        trackingNumber: trackingNumber || undefined,
+        carrierName: nextStatus === "shipped" ? "Standard" : undefined,
+        quantity: quantity !== actionModal?.item?.quantity ? quantity : undefined,
       });
       fetchOrderDetail(orderDetail.id);
       fetchOrders();
-      setTracking("");
+      closeModal();
     } catch (err) {
       console.error("Update failed", err);
     } finally {
@@ -121,25 +165,37 @@ export default function VendorOrdersPage() {
     }
   };
 
-  const cancelItem = async (itemId) => {
-    if (!cancelReason.trim()) {
+  const cancelItem = async (itemId, reason, quantity) => {
+    if (!reason.trim()) {
       alert("Cancellation reason is required.");
       return;
     }
     setUpdating(itemId);
     try {
       await apiClient.patch(`/vendors/orders/${orderDetail.id}/items/${itemId}/cancel`, {
-        reason: cancelReason
+        reason: reason,
+        quantity: quantity !== actionModal?.item?.quantity ? quantity : undefined,
       });
       fetchOrderDetail(orderDetail.id);
       fetchOrders();
-      setCancelItemId(null);
-      setCancelReason("");
+      closeModal();
     } catch (err) {
       console.error("Cancellation failed", err);
       alert(err?.response?.data?.message || "Failed to cancel item.");
     } finally {
       setUpdating(null);
+    }
+  };
+
+  const closeModal = () => {
+    setActionModal({ isOpen: false, type: null, item: null, nextStatus: null, quantity: 1, tracking: "", reason: "" });
+  };
+
+  const confirmModalAction = () => {
+    if (actionModal.type === "process") {
+      updateFulfillment(actionModal.item.id, actionModal.nextStatus, actionModal.quantity, actionModal.tracking);
+    } else if (actionModal.type === "cancel") {
+      cancelItem(actionModal.item.id, actionModal.reason, actionModal.quantity);
     }
   };
 
@@ -346,79 +402,40 @@ export default function VendorOrdersPage() {
 
                             {item.fulfillmentStatus === 'pending' && (
                               <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px dashed var(--vdr-border)" }}>
-                                {cancelItemId === item.id ? (
-                                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                    <input
-                                      className={p.searchInput}
-                                      style={{ flex: 1, height: 36, border: "1px solid #fca5a5", borderRadius: 8, padding: "0 12px" }}
-                                      placeholder="Reason for cancellation..."
-                                      value={cancelReason}
-                                      onChange={(e) => setCancelReason(e.target.value)}
-                                    />
-                                    <button
-                                      className={`${p.btn}`}
-                                      style={{ height: 36, padding: "0 16px", background: "#fee2e2", color: "#dc2626", border: "1px solid #fca5a5", fontWeight: 600, borderRadius: 8 }}
-                                      disabled={updating === item.id}
-                                      onClick={() => cancelItem(item.id)}
-                                    >
-                                      {updating === item.id ? "..." : "Confirm Cancel"}
-                                    </button>
-                                    <button
-                                      className={`${p.btn} ${p.btnOutline}`}
-                                      style={{ height: 36, padding: "0 16px", borderRadius: 8 }}
-                                      onClick={() => { setCancelItemId(null); setCancelReason(""); }}
-                                    >
-                                      Back
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                                    <button
-                                      className={`${p.btn} ${p.btnPrimary}`}
-                                      style={{ height: 40, padding: "0 24px", fontWeight: 700, borderRadius: 10 }}
-                                      disabled={updating === item.id}
-                                      onClick={() => updateFulfillment(item.id, item.fulfillmentStatus)}
-                                    >
-                                      {updating === item.id ? "Updating..." : `Mark as ${nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}`}
-                                    </button>
-                                    <button
-                                      className={`${p.btn}`}
-                                      style={{ height: 40, padding: "0 24px", background: "white", color: "#dc2626", border: "1.5px solid #fca5a5", fontWeight: 700, borderRadius: 10, marginLeft: "auto" }}
-                                      onClick={() => setCancelItemId(item.id)}
-                                    >
-                                      Cancel Item
-                                    </button>
-                                  </div>
-                                )}
+                                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                                  <button
+                                    className={`${p.btn} ${p.btnPrimary}`}
+                                    style={{ height: 40, padding: "0 24px", fontWeight: 700, borderRadius: 10 }}
+                                    disabled={updating === item.id}
+                                    onClick={() => handleActionClick(item, "process")}
+                                  >
+                                    {updating === item.id ? "Updating..." : `Mark as Processing`}
+                                  </button>
+                                  <button
+                                    className={`${p.btn}`}
+                                    style={{ height: 40, padding: "0 24px", background: "white", color: "#dc2626", border: "1.5px solid #fca5a5", fontWeight: 700, borderRadius: 10, marginLeft: "auto" }}
+                                    onClick={() => handleActionClick(item, "cancel")}
+                                  >
+                                    Cancel Item
+                                  </button>
+                                </div>
                               </div>
                             )}
 
                             {nextStatus && item.fulfillmentStatus !== 'pending' && (
                               <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px dashed var(--vdr-border)", display: "flex", gap: 12, alignItems: "center" }}>
-                                {nextStatus === "shipped" && (
-                                  <div style={{ flex: 1, display: "flex", gap: 8 }}>
-                                    <div className={p.searchBox} style={{ flex: 1, height: 40, border: "1.5px solid var(--vdr-border)" }}>
-                                      <Truck size={14} className={p.searchIcon} />
-                                      <input
-                                        className={p.searchInput}
-                                        style={{ fontSize: 13 }}
-                                        placeholder="Tracking Number..."
-                                        value={tracking}
-                                        onChange={(e) => setTracking(e.target.value)}
-                                      />
-                                    </div>
-                                  </div>
-                                )}
                                 <button
                                   className={`${p.btn} ${p.btnPrimary}`}
                                   style={{ height: 40, padding: "0 24px", marginLeft: "auto", fontWeight: 700, borderRadius: 10 }}
                                   disabled={updating === item.id}
-                                  onClick={() => updateFulfillment(item.id, item.fulfillmentStatus)}
+                                  onClick={() => handleActionClick(item, "process")}
                                 >
                                   {updating === item.id ? "Updating..." : `Mark as ${nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}`}
                                 </button>
                               </div>
                             )}
+
+
                           </div>
                         );
                       })}
@@ -433,6 +450,70 @@ export default function VendorOrdersPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={actionModal.isOpen}
+        onClose={closeModal}
+        onConfirm={confirmModalAction}
+        title={actionModal.type === "cancel" ? "Cancel Item" : `Mark as ${actionModal.nextStatus?.charAt(0).toUpperCase()}${actionModal.nextStatus?.slice(1)}`}
+        confirmText={actionModal.type === "cancel" ? "Confirm Cancel" : "Confirm"}
+        isDanger={actionModal.type === "cancel"}
+        loading={updating === actionModal.item?.id}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {actionModal.item && actionModal.item.quantity > 1 && (
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', fontSize: '14px' }}>
+                Quantity to {actionModal.type === "cancel" ? "cancel" : "process"}
+              </label>
+              <input
+                type="number"
+                min="1"
+                max={actionModal.item.quantity}
+                value={actionModal.quantity}
+                onChange={(e) => setActionModal({ ...actionModal, quantity: parseInt(e.target.value) || 1 })}
+                className={p.searchInput}
+                style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid var(--vdr-border)', borderRadius: '8px' }}
+              />
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--vdr-text-muted)' }}>
+                Max available: {actionModal.item.quantity}
+              </p>
+            </div>
+          )}
+
+          {actionModal.type === "cancel" && (
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', fontSize: '14px' }}>
+                Cancellation Reason
+              </label>
+              <input
+                type="text"
+                placeholder="Reason for cancellation..."
+                value={actionModal.reason}
+                onChange={(e) => setActionModal({ ...actionModal, reason: e.target.value })}
+                className={p.searchInput}
+                style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid #fca5a5', borderRadius: '8px' }}
+              />
+            </div>
+          )}
+
+          {actionModal.type === "process" && actionModal.nextStatus === "shipped" && (
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', fontSize: '14px' }}>
+                Tracking Number (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="Enter tracking number..."
+                value={actionModal.tracking}
+                onChange={(e) => setActionModal({ ...actionModal, tracking: e.target.value })}
+                className={p.searchInput}
+                style={{ width: '100%', height: '40px', padding: '0 12px', border: '1px solid var(--vdr-border)', borderRadius: '8px' }}
+              />
+            </div>
+          )}
+        </div>
+      </ConfirmModal>
     </VendorLayout>
   );
 }

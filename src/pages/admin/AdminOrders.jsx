@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { ShoppingCart, Search, Eye, X, Package, AlertTriangle } from "lucide-react";
 import AdminLayout from "../../components/admin/AdminLayout";
 import apiClient from "../../utils/apiClient";
@@ -252,6 +253,15 @@ export default function AdminOrdersPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [activeOrderId, setActiveOrderId] = useState(null);
   const [error, setError] = useState(null);
+  
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.openOrderId) {
+      setActiveOrderId(location.state.openOrderId);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const fetchOrders = useCallback(() => {
     setLoading(true);

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Package, ArrowRight, ArrowUpRight, Zap, DollarSign, Clock, ShoppingBag, CheckCircle2, AlertCircle } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import VendorLayout from "../components/vendor/VendorLayout";
 import p from "../styles/VendorPage.module.css";
 import apiClient from "../utils/apiClient";
 import { formatPrice } from "../utils/formatPrice";
 
 export default function VendorDashboardPage() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
@@ -145,7 +146,11 @@ export default function VendorDashboardPage() {
                   </tr>
                 ) : (
                   recentOrders.map((ord) => (
-                    <tr key={ord.id}>
+                    <tr 
+                      key={ord.id}
+                      onClick={() => navigate('/vendor/orders', { state: { openOrderId: ord.id } })}
+                      style={{ cursor: "pointer" }}
+                    >
                       <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>
                         #{ord.orderNumber}
                       </td>

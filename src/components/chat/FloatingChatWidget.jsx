@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../utils/apiClient";
 import { formatPrice, getProductImage } from "../../utils/productHelpers";
 import styles from "../../styles/FloatingChatWidget.module.css";
+import ConfirmModal from "../common/ConfirmModal";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -267,6 +268,7 @@ export default function FloatingChatWidget() {
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState(null);
   const [lastFailedMessage, setLastFailedMessage] = useState(null);
+  const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -338,19 +340,20 @@ export default function FloatingChatWidget() {
   };
 
   const handleNewChat = () => {
-    if (
-      messages.length > 1 &&
-      !window.confirm(
-        "Start a new chat? This will clear the current conversation.",
-      )
-    ) {
+    if (messages.length > 1) {
+      setShowNewChatConfirm(true);
       return;
     }
+    confirmNewChat();
+  };
+
+  const confirmNewChat = () => {
     setMessages([WELCOME_MESSAGE]);
     setHistory([]);
     setInputValue("");
     setError(null);
     setLastFailedMessage(null);
+    setShowNewChatConfirm(false);
   };
 
   const handleKeyDown = (e) => {
@@ -448,6 +451,16 @@ export default function FloatingChatWidget() {
           </svg>
         )}
       </button>
+
+      <ConfirmModal
+        isOpen={showNewChatConfirm}
+        onClose={() => setShowNewChatConfirm(false)}
+        onConfirm={confirmNewChat}
+        title="Start a new chat?"
+        message="This will clear the current conversation. Do you want to proceed?"
+        confirmText="Start New Chat"
+        isDanger={true}
+      />
     </div>
   );
 }

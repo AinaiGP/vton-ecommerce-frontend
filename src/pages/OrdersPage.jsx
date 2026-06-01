@@ -261,17 +261,19 @@ function CancelItemModal({ order, item, onConfirm, onClose, loading, error }) {
             </p>
           </div>
 
-          <div className={t.formGroup} style={{ marginBottom: 16 }}>
-            <label className={t.label}>Quantity to cancel</label>
-            <input
-              type="number"
-              className={t.input}
-              min={1}
-              max={item.qty}
-              value={quantity}
-              onChange={(e) => setQuantity(Number(e.target.value))}
-            />
-          </div>
+          {item.qty > 1 && (
+            <div className={t.formGroup} style={{ marginBottom: 16 }}>
+              <label className={t.label}>Quantity to cancel</label>
+              <input
+                type="number"
+                className={t.input}
+                min={1}
+                max={item.qty}
+                value={quantity}
+                onChange={(e) => setQuantity(Number(e.target.value))}
+              />
+            </div>
+          )}
 
           <div className={t.formGroup} style={{ marginBottom: 20 }}>
             <label className={t.label}>Reason for Cancellation *</label>

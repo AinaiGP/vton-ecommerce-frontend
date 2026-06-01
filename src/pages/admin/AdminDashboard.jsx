@@ -10,6 +10,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import AdminLayout from "../../components/admin/AdminLayout";
+import { useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import { formatPrice } from "../../utils/formatPrice";
 import t from "../../styles/AdminTable.module.css";
@@ -26,8 +27,28 @@ const ORDER_STATUS_CLASS = {
   returned: t.badgeSuspended,
 };
 
+const TICKET_STATUS_CLASS = {
+  PENDING: t.badgePending,
+  OPEN: t.badgePending,
+  IN_PROGRESS: t.badgeProcessing,
+  AWAITING_RESPONSE: t.badgeProcessing,
+  ESCALATED: t.badgeProcessing,
+  RESOLVED: t.badgeActive,
+  CLOSED: t.badgeSuspended,
+  CANCELED: t.badgeCancelled,
+};
+
 function StatusBadge({ status }) {
   const cls = ORDER_STATUS_CLASS[status] || t.badgePending;
+  return (
+    <span className={`${t.badge} ${cls}`}>
+      {status?.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+function TicketStatusBadge({ status }) {
+  const cls = TICKET_STATUS_CLASS[status] || t.badgePending;
   return (
     <span className={`${t.badge} ${cls}`}>
       {status?.replace(/_/g, " ")}
@@ -55,6 +76,7 @@ const KPI_CARDS = (s) => [
 ];
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
@@ -68,6 +90,7 @@ export default function AdminDashboard() {
   }, []);
 
   const kpiCards = stats ? KPI_CARDS(stats) : [];
+  const recentTickets = stats?.recentTickets ?? [];
   const recentOrders = stats?.recentOrders ?? [];
   const topProducts = stats?.topProducts ?? [];
 
@@ -106,10 +129,59 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Bottom row: Recent Orders + Top Products */}
-      <div className={t.chartGrid2}>
-        {/* Recent Orders */}
-        <div className={t.chartCard}>
+      {/* Recent Tickets - Full Width */}
+      <div className={t.chartCard} style={{ marginTop: 24 }}>
+          <div className={t.chartHead}>
+            <div>
+              <h3 className={t.chartTitle}>Recent Tickets</h3>
+              <p className={t.chartSubtitle}>Latest support requests</p>
+            </div>
+          </div>
+          {loading ? (
+            <div>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <span key={i} className={`${t.skeleton} ${t.skeletonRow}`} />
+              ))}
+            </div>
+          ) : recentTickets.length === 0 ? (
+            <div className={t.emptyState}>
+              <div className={t.emptyIcon}><TicketCheck size={24} /></div>
+              <h3 className={t.emptyTitle}>No tickets yet</h3>
+            </div>
+          ) : (
+            <div className={t.tableWrap}>
+              <table className={t.table}>
+                <thead>
+                  <tr>
+                    <th>Ticket ID</th>
+                    <th>Subject</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentTickets.map((tk) => (
+                    <tr 
+                      key={tk.id} 
+                      onClick={() => navigate('/admin/tickets', { state: { openTicketId: tk.id } })} 
+                      style={{ cursor: "pointer" }}
+                    >
+                      <td><span style={{ fontFamily: "monospace" }}>{tk.id.slice(0, 8)}</span></td>
+                      <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tk.subject}</td>
+                      <td>{tk.type?.replace(/_/g, " ")}</td>
+                      <td><TicketStatusBadge status={tk.status} /></td>
+                      <td>{fmt(tk.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+      {/* Recent Orders - Full Width */}
+      <div className={t.chartCard} style={{ marginTop: 24 }}>
           <div className={t.chartHead}>
             <div>
               <h3 className={t.chartTitle}>Recent Orders</h3>
@@ -141,7 +213,11 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {recentOrders.map((o) => (
-                    <tr key={o.id}>
+                    <tr 
+                      key={o.id} 
+                      onClick={() => navigate('/admin/orders', { state: { openOrderId: o.id } })} 
+                      style={{ cursor: "pointer" }}
+                    >
                       <td>{o.orderNumber}</td>
                       <td>{o.customerEmail}</td>
                       <td>{formatPrice(o.total)}</td>
@@ -155,8 +231,8 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* Top Products */}
-        <div className={t.chartCard}>
+      {/* Top Products - Full Width */}
+      <div className={t.chartCard} style={{ marginTop: 24 }}>
           <div className={t.chartHead}>
             <div>
               <h3 className={t.chartTitle}>Top Products</h3>
@@ -186,7 +262,11 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {topProducts.map((p) => (
-                    <tr key={p.id}>
+                    <tr 
+                      key={p.id} 
+                      onClick={() => navigate(`/product/${p.id}`)} 
+                      style={{ cursor: "pointer" }}
+                    >
                       <td>
                         <span className={t.avatarName}>{p.name}</span>
                         <span className={t.avatarSub}>{p.vendorName}</span>
@@ -200,7 +280,6 @@ export default function AdminDashboard() {
             </div>
           )}
         </div>
-      </div>
     </AdminLayout>
   );
 }

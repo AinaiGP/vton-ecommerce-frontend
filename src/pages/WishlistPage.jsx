@@ -7,11 +7,13 @@ import styles from "../styles/WishlistPage.module.css";
 import apiClient from "../utils/apiClient";
 import { useCart } from "../context/CartContext";
 import { formatPrice, getVariantImage } from "../utils/productHelpers";
+import ConfirmModal from "../components/common/ConfirmModal";
 
 export default function WishlistPage() {
   const [items, setItems] = useState([]);
   const [added, setAdded] = useState({});
   const [loading, setLoading] = useState(true);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const { addToCart } = useCart();
 
   useEffect(() => {
@@ -65,8 +67,12 @@ export default function WishlistPage() {
     }
   };
 
+  const handleClearClick = () => {
+    setShowClearConfirm(true);
+  };
+
   const clearAll = async () => {
-    if (!window.confirm("Clear your entire wishlist?")) return;
+    setShowClearConfirm(false);
     setLoading(true);
     for (const item of items) {
       try {
@@ -95,7 +101,7 @@ export default function WishlistPage() {
           {items.length > 0 && (
             <button
               className={styles.clearBtn}
-              onClick={clearAll}
+              onClick={handleClearClick}
               disabled={loading}
             >
               Clear all
@@ -181,6 +187,16 @@ export default function WishlistPage() {
         )}
       </main>
       <Footer />
+
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        onConfirm={clearAll}
+        title="Clear Wishlist"
+        message="Are you sure you want to clear your entire wishlist? This action cannot be undone."
+        confirmText="Yes, clear it"
+        isDanger={true}
+      />
     </div>
   );
 }

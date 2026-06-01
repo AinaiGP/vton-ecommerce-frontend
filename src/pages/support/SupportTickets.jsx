@@ -57,6 +57,43 @@ const PRIORITY_LABEL = {
 
 const TERMINAL_STATUSES = ["RESOLVED", "CLOSED", "CANCELED"];
 
+const TYPE_CFG = {
+  GENERAL_SUPPORT: { color: "#0369a1", bg: "#e0f2fe", label: "General Support" },
+  GENERAL_INQUIRY: { color: "#0369a1", bg: "#e0f2fe", label: "General Inquiry" },
+  SYSTEM_BUG: { color: "#b91c1c", bg: "#fee2e2", label: "System Bug" },
+  TECHNICAL_ISSUE: { color: "#b91c1c", bg: "#fee2e2", label: "Technical Issue" },
+  ORDER_DISPUTE: { color: "#c2410c", bg: "#ffedd5", label: "Order Dispute" },
+  RETURN_REQUEST: { color: "#4d7c0f", bg: "#ecfccb", label: "Return Request" },
+  ACCOUNT_SUPPORT: { color: "#6d28d9", bg: "#ede9fe", label: "Account Support" },
+  VENDOR_VIOLATION: { color: "#be123c", bg: "#ffe4e6", label: "Vendor Violation" },
+};
+
+function TypeBadge({ type, typeLabel }) {
+  const c = TYPE_CFG[type] || {
+    color: "#475569",
+    bg: "#f8fafc",
+    label: typeLabel || type,
+  };
+  return (
+    <span className={p.badge} style={{ background: c.bg, color: c.color, border: `1px solid ${c.color}30` }}>
+      {c.label}
+    </span>
+  );
+}
+
+function RoleBadge({ role }) {
+  if (!role) return "—";
+  const norm = role.toLowerCase().replace(/_/g, " ");
+  const isVendor = norm.includes("vendor");
+  const bg = isVendor ? "#fef3c7" : "#e0e7ff";
+  const color = isVendor ? "#d97706" : "#4338ca";
+  return (
+    <span className={p.badge} style={{ background: bg, color, border: `1px solid ${color}30`, textTransform: "capitalize" }}>
+      {norm}
+    </span>
+  );
+}
+
 function isImageUrl(url) {
   return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url);
 }
@@ -103,10 +140,10 @@ function profileKeyLabel(role) {
 function assigneeLabel(raw, userId) {
   if (!raw.assigneeId) return { text: "Unassigned", style: "unassigned" };
   if (String(raw.assigneeRole || "").toUpperCase() === "ADMIN")
-    return { text: "Admin handling", style: "admin" };
+    return { text: "Admin Claimed", style: "admin" };
   if (raw.assigneeId === userId)
-    return { text: "Claimed by you", style: "mine" };
-  return { text: "Claimed by agent", style: "other" };
+    return { text: "Support Claimed (You)", style: "mine" };
+  return { text: "Support Claimed", style: "other" };
 }
 
 function mapTicket(raw, userId) {
@@ -151,6 +188,7 @@ function mapTicket(raw, userId) {
         : "Customer",
     status: raw.status,
     priority: raw.priority || "NORMAL",
+    type: raw.type?.replace(/_/g, " "),
     updated: new Date(raw.updatedAt).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -463,11 +501,17 @@ export default function SupportTickets() {
                       fontSize: 12,
                       color: "var(--sup-text-muted)",
                       marginBottom: 4,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6
                     }}
                   >
-                    <span style={{ fontWeight: 700, color: "var(--sup-accent)" }}>
-                      {selected.id.slice(0, 8)}…
-                    </span>{" "}
+                    <span style={{ fontFamily: "monospace", color: "var(--sup-text)" }}>
+                      #{selected.id}
+                    </span>
+                    <button onClick={() => copyToClipboard(selected.id, "ticketId")} className={p.actionBtn} style={{ padding: 2, height: "auto", width: "auto" }} title="Copy ID">
+                      {copiedId === "ticketId" ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
+                    </button>
                     · {selected.user}
                   </p>
                   <h2
@@ -494,6 +538,7 @@ export default function SupportTickets() {
                 >
                   {STATUS_LABEL[selected.status] || selected.status}
                 </span>
+                <TypeBadge type={selected._raw?.type || selected.type} typeLabel={selected.typeLabel || selected.type} />
               </div>
             </div>
 
@@ -514,74 +559,91 @@ export default function SupportTickets() {
               {selected.messages.map((m, i) => {
                 if (m.isSystemMessage) {
                   return (
-                    <div key={i} style={{ textAlign: "center", margin: "10px 0" }}>
-                      <span style={{ background: "rgba(0,0,0,0.05)", padding: "4px 12px", borderRadius: "12px", fontSize: "11px", color: "var(--sup-text-muted)" }}>
-                        {m.text}
-                      </span>
+                    <div key={i} className={p.msgSysEvent}>
+                      <span>{m.text}</span>
                     </div>
                   );
                 }
+                const isAgent = m.from === "agent";
                 return (
                   <div
                     key={i}
-                    className={`${p.msgRow} ${m.from === "agent" ? p.mine : ""}`}
+                    className={`${p.msgRow} ${isAgent ? p.mine : ""}`}
                   >
-                    <div className={p.msgAvat}>
-                      {m.senderAvatar ? (
-                        <img
-                          src={m.senderAvatar}
-                          alt={m.senderName}
-                          className={p.msgAvatarImg}
-                        />
-                      ) : (
-                        getInitials(m.senderName)
-                      )}
-                    </div>
-                    <div>
-                      <span className={p.msgSender}>{m.senderName}</span>
-                      <div className={p.msgBubble}>
-                        {m.text}
-                        {m.attachments?.map((att) =>
-                          att.isImage ? (
-                            <a
-                              key={att.url}
-                              href={att.url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <img
-                                src={att.url}
-                                alt={att.name}
-                                style={{
-                                  display: "block",
-                                  maxWidth: 160,
-                                  maxHeight: 120,
-                                  marginTop: 6,
-                                  borderRadius: 6,
-                                  objectFit: "cover",
-                                }}
-                              />
-                            </a>
-                          ) : (
-                            <a
-                              key={att.url}
-                              href={att.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{
-                                display: "block",
-                                fontSize: 11,
-                                opacity: 0.8,
-                                marginTop: 4,
-                              }}
-                            >
-                              📎 {att.name}
-                            </a>
-                          ),
+                    {!isAgent && (
+                      <div className={p.msgAvat}>
+                        {m.senderAvatar ? (
+                          <img
+                            src={m.senderAvatar}
+                            alt={m.senderName}
+                            className={p.msgAvatarImg}
+                          />
+                        ) : (
+                          getInitials(m.senderName)
                         )}
                       </div>
-                      <span className={p.msgTime}>{m.time}</span>
+                    )}
+                    <div className={`${p.msgBubble} ${isAgent ? p.msgBubbleMine : p.msgBubbleUser}`}>
+                      <div className={p.msgSender}>
+                        {m.senderName}
+                        <span className={p.msgRole}>
+                          {m.senderRole || (isAgent ? "Agent" : "User")}
+                        </span>
+                      </div>
+                      <p style={{ margin: "0 0 6px 0", lineHeight: 1.4 }}>{m.text}</p>
+                      {m.attachments?.map((att) =>
+                        att.isImage ? (
+                          <a
+                            key={att.url}
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <img
+                              src={att.url}
+                              alt={att.name}
+                              style={{
+                                display: "block",
+                                maxWidth: 160,
+                                maxHeight: 120,
+                                marginTop: 6,
+                                borderRadius: 6,
+                                objectFit: "cover",
+                              }}
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            key={att.url}
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: "block",
+                              fontSize: 11,
+                              opacity: 0.8,
+                              marginTop: 4,
+                            }}
+                          >
+                            📎 {att.name}
+                          </a>
+                        ),
+                      )}
+                      <span className={p.msgTime} style={{ display: "block", marginTop: 4, opacity: 0.7 }}>{m.time}</span>
                     </div>
+                    {isAgent && (
+                      <div className={p.msgAvat} style={{ background: "var(--sup-accent-light)", color: "var(--sup-accent)" }}>
+                        {m.senderAvatar ? (
+                          <img
+                            src={m.senderAvatar}
+                            alt={m.senderName}
+                            className={p.msgAvatarImg}
+                          />
+                        ) : (
+                          getInitials(m.senderName)
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -903,7 +965,23 @@ export default function SupportTickets() {
               <option value="RETURN_REQUEST">Return Request</option>
               <option value="VENDOR_VIOLATION">Vendor Violation</option>
             </select>
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", cursor: "pointer", color: "var(--sup-text-main)" }}>
+            <label 
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "4px 12px",
+                background: claimedByMe ? "var(--sup-accent-light)" : "#f1f5f9",
+                color: claimedByMe ? "var(--sup-accent)" : "#64748b",
+                borderRadius: 20,
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+                border: `1px solid ${claimedByMe ? "var(--sup-accent)" : "#cbd5e1"}`,
+                transition: "all 0.2s",
+                userSelect: "none"
+              }}
+            >
               <input
                 type="checkbox"
                 checked={claimedByMe}
@@ -911,8 +989,9 @@ export default function SupportTickets() {
                   setClaimedByMe(e.target.checked);
                   setPage(1);
                 }}
-                style={{ cursor: "pointer" }}
+                style={{ display: "none" }}
               />
+              {claimedByMe && <Check size={14} />}
               Claimed by Me
             </label>
             <span
@@ -930,11 +1009,11 @@ export default function SupportTickets() {
             <table className={p.table}>
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>User</th>
+                  <th>#</th>
+                  <th>Creator</th>
                   <th>Subject</th>
                   <th>Status</th>
-                  <th>Priority</th>
+                  <th>Type</th>
                   <th>Assigned</th>
                   <th>Updated</th>
                   <th>Action</th>
@@ -969,7 +1048,7 @@ export default function SupportTickets() {
                     </td>
                   </tr>
                 ) : (
-                  tickets.map((tk) => (
+                  tickets.map((tk, idx) => (
                     <tr
                       key={tk.id}
                       className={p.clickable}
@@ -978,12 +1057,11 @@ export default function SupportTickets() {
                       <td
                         style={{
                           fontWeight: 700,
-                          color: "var(--sup-accent)",
-                          fontSize: 12,
-                          fontFamily: "monospace",
+                          color: "var(--sup-text-main)",
+                          fontSize: 13,
                         }}
                       >
-                        {tk.id.slice(0, 8)}…
+                        {(page - 1) * limit + idx + 1}
                       </td>
                       <td>
                         <div className={p.avatarCell}>
@@ -1000,12 +1078,7 @@ export default function SupportTickets() {
                             >
                               {tk.user}
                             </span>
-                            <span
-                              className={`${p.badge} ${tk.role === "Vendor" ? p.rVendor : p.rCustomer}`}
-                              style={{ fontSize: 10 }}
-                            >
-                              {tk.role}
-                            </span>
+                            <RoleBadge role={tk.role} />
                           </div>
                         </div>
                       </td>
@@ -1034,11 +1107,7 @@ export default function SupportTickets() {
                         )}
                       </td>
                       <td>
-                        <span
-                          className={`${p.badge} ${p[PRIORITY_MAP[tk.priority]] || p.pMed}`}
-                        >
-                          {PRIORITY_LABEL[tk.priority] || tk.priority}
-                        </span>
+                        <TypeBadge type={tk._raw.type} typeLabel={tk.type} />
                       </td>
                       <td>
                         <span
@@ -1061,13 +1130,14 @@ export default function SupportTickets() {
                       </td>
                       <td>
                         <button
-                          className={`${p.btn} ${p.btnGhost} ${p.btnSm}`}
+                          className={`${p.actionBtn} ${p.approve}`}
+                          title="Open Ticket"
                           onClick={(e) => {
                             e.stopPropagation();
                             openTicket(tk);
                           }}
                         >
-                          Open
+                          <ArrowUpRight size={15} />
                         </button>
                       </td>
                     </tr>
