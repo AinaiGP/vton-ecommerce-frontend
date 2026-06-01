@@ -24,6 +24,14 @@ import p from "../styles/VendorPage.module.css";
 import apiClient from "../utils/apiClient";
 import { formatPrice } from "../utils/formatPrice";
 
+const STATUS_BADGE = {
+  pending: p.badgePending,
+  processing: p.badgeProcessing,
+  shipped: p.badgeShipped,
+  delivered: p.badgeDelivered,
+  canceled: p.badgeCancelled,
+};
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -204,8 +212,8 @@ export default function VendorEarningsPage() {
                 <tr><td colSpan="5" style={{ textAlign: "center", padding: 32 }}>No orders yet.</td></tr>
               ) : (
                 payments.map((o) => {
-                  const status = o.displayFulfillmentStatus || "pending";
-                  const badgeCls = status === "delivered" ? p.badgeDelivered : status === "shipped" ? p.badgeShipped : status === "canceled" ? p.badgeCancelled : p.badgePending;
+                  const status = o.displayFulfillmentStatus || o.status || "pending";
+                  const badgeCls = STATUS_BADGE[status.toLowerCase()] || p.badgePending;
                   return (
                     <tr key={o.id}>
                       <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>#{o.orderNumber}</td>

@@ -6,6 +6,14 @@ import p from "../styles/VendorPage.module.css";
 import apiClient from "../utils/apiClient";
 import { formatPrice } from "../utils/formatPrice";
 
+const STATUS_BADGE = {
+  pending: p.badgePending,
+  processing: p.badgeProcessing,
+  shipped: p.badgeShipped,
+  delivered: p.badgeDelivered,
+  canceled: p.badgeCancelled,
+};
+
 export default function VendorDashboardPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -158,7 +166,8 @@ export default function VendorDashboardPage() {
                       <td>{ord.itemCount} items</td>
                       <td style={{ fontWeight: 600 }}>{formatPrice(ord.vendorSubtotal)}</td>
                       <td>
-                        <span className={`${p.badge} ${p.badgeActive}`}>
+                        <span className={`${p.badge} ${STATUS_BADGE[(ord.displayFulfillmentStatus || ord.status || "pending").toLowerCase()] || p.badgePending}`}>
+                          <span className={p.badgeDot} />
                           {ord.displayFulfillmentStatus || ord.status || "pending"}
                         </span>
                       </td>
