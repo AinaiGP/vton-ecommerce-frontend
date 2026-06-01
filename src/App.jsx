@@ -26,6 +26,7 @@ const CheckoutPage = lazy(() => import("./pages/CheckoutPage"));
 const CustomerTicketsPage = lazy(() => import("./pages/CustomerTicketsPage"));
 const CustomerReturnsPage = lazy(() => import("./pages/CustomerReturnsPage"));
 const CustomerHubPage = lazy(() => import("./pages/CustomerHubPage"));
+const SubscribePage = lazy(() => import("./pages/SubscribePage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 // Vendor
@@ -348,6 +349,14 @@ function App() {
             element={
               <CustomerRoute>
                 <CustomerHubPage />
+              </CustomerRoute>
+            }
+          />
+          <Route
+            path="/subscribe"
+            element={
+              <CustomerRoute>
+                <SubscribePage />
               </CustomerRoute>
             }
           />

@@ -628,3 +628,49 @@
   display: flex; align-items: center; justify-content: center;
   font-size: 16px; font-weight: 800;
 }
+
+/* Go Pro Link */
+.goProLink {
+  background: linear-gradient(135deg, rgba(212, 163, 115, 0.1), rgba(179, 139, 89, 0.2));
+  color: var(--gold) !important;
+  border: 1px solid rgba(179, 139, 89, 0.3);
+  font-weight: 700;
+}
+.goProLink:hover {
+  background: linear-gradient(135deg, rgba(212, 163, 115, 0.2), rgba(179, 139, 89, 0.3)) !important;
+  color: var(--gold-dark) !important;
+}
+.goProIcon {
+  color: var(--gold);
+}
+
+/* Pro Badges */
+.proBadgeMini {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--gold);
+  color: white;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  z-index: 10;
+  pointer-events: none;
+}
+[data-dark="1"] .proBadgeMini { border-color: #1e1612; }
+
+.proBadgeTag {
+  display: inline-block;
+  margin-left: 6px;
+  background: linear-gradient(135deg, var(--gold), #d4a373);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 10px;
+  vertical-align: middle;
+}

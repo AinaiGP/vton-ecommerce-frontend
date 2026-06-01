@@ -477,3 +477,157 @@
     justify-content: center;
   }
 }
+
+/* Subscription Section */
+.subSection {
+  margin-top: 40px;
+}
+
+.subCard {
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+  border: 1px solid var(--ivory-dark);
+}
+
+[data-dark="1"] .subCard {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.subHeader {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.subIconWrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(212, 163, 115, 0.1), rgba(179, 139, 89, 0.2));
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.subTitleWrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.subTitle {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.subBadge {
+  background: rgba(0, 0, 0, 0.05);
+  color: #666;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
+  letter-spacing: 1px;
+}
+
+.subBadge.activeBadge {
+  background: rgba(212, 163, 115, 0.15);
+  color: var(--gold);
+}
+
+.subDetails {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  background: rgba(0, 0, 0, 0.02);
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+[data-dark="1"] .subDetails {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.subInfoItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.subLabel {
+  font-size: 13px;
+  color: #666;
+}
+
+[data-dark="1"] .subLabel {
+  color: #aaa;
+}
+
+.subValue {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+[data-dark="1"] .subValue {
+  color: var(--ivory);
+}
+
+.subActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ivory-dark);
+}
+
+[data-dark="1"] .subActions {
+  border-top-color: rgba(255, 255, 255, 0.05);
+}
+
+.cancelBtn {
+  background: transparent;
+  color: #dc2626;
+  border: 1px solid #dc2626;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancelBtn:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.cancelBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-dark="1"] .cancelBtn {
+  color: #f87171;
+  border-color: #f87171;
+}
+
+[data-dark="1"] .cancelBtn:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.cancelNotice {
+  font-size: 13px;
+  color: #666;
+  margin: 0;
+}
+
+[data-dark="1"] .cancelNotice {
+  color: #aaa;
+}

@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import apiClient from "../../utils/apiClient";
 import styles from "../../styles/VtonModal.module.css";
+import UpgradeModal from "../modal/UpgradeModal";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -179,6 +180,8 @@ export default function VtonModal({
 
   // ── Step 4 state ─────────────────────────────────────────────────────────
   const [resultB64, setResultB64] = useState(null);
+
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // ─── Fetch cloth image as base64 when modal opens ─────────────────────────
 
@@ -700,10 +703,15 @@ export default function VtonModal({
       setResultB64(resultImage);
       setStep(4);
     } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Virtual try-on failed. Please try again.";
+      let msg = err?.message || "Virtual try-on failed. Please try again.";
+      if (err?.response?.data?.limitReached) {
+        msg = err.response.data.message;
+        if (!err.response.data.isPro) {
+          setShowUpgradeModal(true);
+        }
+      } else if (err?.response?.data?.message) {
+        msg = err.response.data.message;
+      }
       setTryonError(Array.isArray(msg) ? msg[0] : msg);
     } finally {
       clearInterval(processingIntervalRef.current);
@@ -984,6 +992,12 @@ export default function VtonModal({
           )}
         </footer>
       </div>
+
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        feature="Virtual Try-On"
+      />
     </div>
   );
 }

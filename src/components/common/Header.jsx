@@ -29,12 +29,14 @@ import AinaiLogo from "./AinaiLogo";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
+import { useSubscription } from "../../context/SubscriptionContext";
 import styles from "../../styles/Header.module.css";
 
 export default function Header() {
   const { isAuthenticated, user, userRole, logout } = useAuth();
   const { cartCount } = useCart();
   const { t, lang, toggleLanguage } = useLanguage();
+  const { isPro } = useSubscription();
   const navigate = useNavigate();
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -219,6 +221,19 @@ export default function Header() {
             >
               {t("common.shop")}
             </NavLink>
+
+            {/* Subscribe / Go Pro Link */}
+            {(!isAuthenticated || (isCustomer && !isPro)) && (
+              <NavLink
+                to="/subscribe"
+                className={({ isActive }) =>
+                  `${styles.navLink} ${styles.goProLink} ${isActive ? styles.active : ""}`
+                }
+              >
+                <Zap size={14} className={styles.goProIcon} /> 
+                {lang === "ar" ? "اشترك برو" : "Go Pro"}
+              </NavLink>
+            )}
 
             {/* My Account Dropdown - Customer Only */}
             {isCustomer && (
@@ -422,6 +437,11 @@ export default function Header() {
                   aria-label="Account menu"
                   aria-expanded={profileOpen}
                 >
+                  {isPro && (
+                    <div className={styles.proBadgeMini} title="AINAI Pro">
+                      <Zap size={10} />
+                    </div>
+                  )}
                   {profilePhoto ? (
                     <img
                       src={profilePhoto}
@@ -457,6 +477,9 @@ export default function Header() {
                         <p className={styles.avatarDropName}>
                           {getFullName() ||
                             (lang === "ar" ? "المستخدم" : "User")}
+                          {isPro && (
+                            <span className={styles.proBadgeTag}>PRO</span>
+                          )}
                         </p>
                         <p className={styles.avatarDropEmail}>
                           {user?.email || ""}

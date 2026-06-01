@@ -27,6 +27,8 @@ import { useAuth } from "../context/AuthContext";
 import VtonModal from "../components/vton/VtonModal";
 
 /* ─── Page sections ─── */
+import { useSubscription } from "../context/SubscriptionContext";
+
 const CUSTOMER_PAGES = [
   {
     group: "My Account",
@@ -107,10 +109,12 @@ const CUSTOMER_PAGES = [
 
 export default function CustomerHubPage() {
   const { user } = useAuth();
+  const { subscription, isPro, refreshSubscription } = useSubscription();
   const [stats, setStats] = useState({ orders: 0, tickets: 0, wardrobe: 0 });
   const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [vtonOpen, setVtonOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     fetchHubData();
@@ -141,6 +145,21 @@ export default function CustomerHubPage() {
       console.error("Failed to fetch hub data", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!window.confirm("Are you sure you want to cancel your Pro subscription? You will keep access until the end of your billing cycle.")) return;
+    
+    setCancelling(true);
+    try {
+      await apiClient.post("/subscriptions/cancel");
+      await refreshSubscription();
+    } catch (err) {
+      console.error("Failed to cancel subscription", err);
+      alert("An error occurred. Please try again.");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -265,6 +284,59 @@ export default function CustomerHubPage() {
             </div>
           </aside>
         </div>
+
+        {/* Subscription Management Section */}
+        {subscription && (
+          <section className={styles.subSection}>
+            <div className={styles.subCard}>
+              <div className={styles.subHeader}>
+                <div className={styles.subIconWrap}>
+                  <Zap size={24} className={styles.subIcon} />
+                </div>
+                <div className={styles.subTitleWrap}>
+                  <h2 className={styles.subTitle}>AINAI Pro Subscription</h2>
+                  <span className={`${styles.subBadge} ${isPro ? styles.activeBadge : ""}`}>
+                    {isPro ? "ACTIVE" : "EXPIRED"}
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.subDetails}>
+                <div className={styles.subInfoItem}>
+                  <span className={styles.subLabel}>Status:</span>
+                  <span className={styles.subValue}>
+                    {subscription.isCancelled && isPro
+                      ? "Cancels at end of billing cycle"
+                      : isPro 
+                      ? "Active (Renews monthly)"
+                      : "Expired"}
+                  </span>
+                </div>
+                <div className={styles.subInfoItem}>
+                  <span className={styles.subLabel}>Current Period Ends:</span>
+                  <span className={styles.subValue}>
+                    {new Date(subscription.expiresAt).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+
+              {isPro && !subscription.isCancelled && (
+                <div className={styles.subActions}>
+                  <button 
+                    className={styles.cancelBtn} 
+                    onClick={handleCancelSubscription}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? "Cancelling..." : "Cancel Subscription"}
+                  </button>
+                  <p className={styles.cancelNotice}>
+                    You will retain Pro features until {new Date(subscription.expiresAt).toLocaleDateString()}.
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* AI Features Section */}
         <section className={styles.aiSection}>

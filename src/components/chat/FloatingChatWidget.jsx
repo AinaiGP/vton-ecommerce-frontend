@@ -5,6 +5,7 @@ import apiClient from "../../utils/apiClient";
 import { formatPrice, getProductImage } from "../../utils/productHelpers";
 import styles from "../../styles/FloatingChatWidget.module.css";
 import ConfirmModal from "../common/ConfirmModal";
+import UpgradeModal from "../modal/UpgradeModal";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -269,6 +270,7 @@ export default function FloatingChatWidget() {
   const [error, setError] = useState(null);
   const [lastFailedMessage, setLastFailedMessage] = useState(null);
   const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -312,7 +314,14 @@ export default function FloatingChatWidget() {
         setHistory(updatedHistory);
       } catch (err) {
         let msg;
-        if (err?.response?.status === 401) {
+        if (err?.response?.data?.limitReached) {
+          msg = err.response.data.message;
+          if (!err.response.data.isPro) {
+            setShowUpgradeModal(true);
+          }
+        } else if (err?.response?.data?.sessionLimitReached) {
+          msg = err.response.data.message;
+        } else if (err?.response?.status === 401) {
           msg = "Please log in to chat with the AINAI assistant.";
         } else if (err?.response?.status === 503) {
           msg = "Sorry, I'm having trouble connecting. Please try again later.";
@@ -460,6 +469,12 @@ export default function FloatingChatWidget() {
         message="This will clear the current conversation. Do you want to proceed?"
         confirmText="Start New Chat"
         isDanger={true}
+      />
+
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        feature="chatbot messages"
       />
     </div>
   );
