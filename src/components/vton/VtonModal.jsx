@@ -147,12 +147,20 @@ export default function VtonModal({
   // ── Step 2 state ─────────────────────────────────────────────────────────
   const [originalMaskB64, setOriginalMaskB64] = useState(null);
   const [brushColor, setBrushColor] = useState("white");
-  const [brushSize, setBrushSize] = useState(20);
+  const [brushSize, setBrushSize] = useState(24);
+  // maskCanvasRef: invisible offscreen canvas storing the true B&W mask
+  const maskCanvasRef = useRef(null);
+  // canvasRef: the visible overlay canvas (50% opacity strokes over the photo)
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);
   const undoStackRef = useRef([]);
   const [undoStackLength, setUndoStackLength] = useState(0);
-  const lastPointRef = useRef(null);
+  // Snapshot of display canvas taken at stroke start (for redraw-per-move)
+  const strokeStartDisplayRef = useRef(null);
+  // All points in the current stroke (for redrawing from scratch on each move)
+  const strokePathRef = useRef([]);
+  // Last point on the mask canvas (for incremental mask drawing)
+  const lastMaskPointRef = useRef(null);
 
   // ── Step 3 state ─────────────────────────────────────────────────────────
   const [processingMsgIndex, setProcessingMsgIndex] = useState(0);
@@ -194,10 +202,12 @@ export default function VtonModal({
     setMaskError(null);
     setOriginalMaskB64(null);
     setBrushColor("white");
-    setBrushSize(20);
+    setBrushSize(24);
     undoStackRef.current = [];
     setUndoStackLength(0);
-    lastPointRef.current = null;
+    strokeStartDisplayRef.current = null;
+    strokePathRef.current = [];
+    lastMaskPointRef.current = null;
     setProcessingMsgIndex(0);
     setTryonError(null);
     setUsedOriginalMask(false);
@@ -273,33 +283,64 @@ export default function VtonModal({
     }
   };
 
-  // ─── Step 2: Initialize Canvas when mask arrives ─────────────────────────
+  // ─── Step 2: Initialize both canvases when mask arrives ──────────────────
 
   useEffect(() => {
     if (step !== 2 || !originalMaskB64 || !canvasRef.current) return;
 
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
+    const maskImg = new Image();
+    maskImg.onload = () => {
+      const w = maskImg.naturalWidth;
+      const h = maskImg.naturalHeight;
 
-    const img = new Image();
-    img.onload = () => {
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      ctx.drawImage(img, 0, 0);
-      // Save initial state for undo
-      undoStackRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+      // ── Offscreen mask canvas (full B&W, what we send to AI) ──
+      if (!maskCanvasRef.current) {
+        maskCanvasRef.current = document.createElement("canvas");
+      }
+      const maskCanvas = maskCanvasRef.current;
+      maskCanvas.width = w;
+      maskCanvas.height = h;
+      const maskCtx = maskCanvas.getContext("2d");
+      maskCtx.drawImage(maskImg, 0, 0);
+
+      // ── Visible overlay canvas (transparent initially, draws on top of photo) ──
+      const displayCanvas = canvasRef.current;
+      displayCanvas.width = w;
+      displayCanvas.height = h;
+      const displayCtx = displayCanvas.getContext("2d");
+      // Start completely transparent — the photo shows through the CSS background
+      displayCtx.clearRect(0, 0, w, h);
+
+      // Draw the AI mask as a semi-transparent overlay so user sees initial state
+      // White mask pixels → semi-transparent white; black → semi-transparent black
+      displayCtx.globalAlpha = 0.45;
+      displayCtx.drawImage(maskImg, 0, 0);
+      displayCtx.globalAlpha = 1;
+
+      // Save initial undo state (from the offscreen mask)
+      undoStackRef.current = [maskCtx.getImageData(0, 0, w, h)];
       setUndoStackLength(1);
     };
-    img.src = `data:image/png;base64,${originalMaskB64}`;
+    maskImg.src = `data:image/png;base64,${originalMaskB64}`;
   }, [step, originalMaskB64]);
 
   // ─── Step 2: Canvas drawing ───────────────────────────────────────────────
+  //
+  // Strategy: two-canvas system
+  //   maskCanvas  (offscreen) — full-opacity B&W, this is what we send to AI
+  //   canvasRef   (visible)   — 50% opacity overlay drawn on top of the photo
+  //
+  // Opacity-accumulation fix:
+  //   On mousedown  → snapshot the current display canvas state
+  //   On mousemove  → restore the snapshot, then replay the ENTIRE stroke path
+  //                   at 50% opacity in ONE drawImage / drawPath call
+  //   This means a stroke always stays at exactly 50% no matter how long you drag.
 
   const saveUndoState = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const state = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const maskCanvas = maskCanvasRef.current;
+    if (!maskCanvas) return;
+    const maskCtx = maskCanvas.getContext("2d");
+    const state = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
     undoStackRef.current.push(state);
     if (undoStackRef.current.length > MAX_UNDO_STACK) {
       undoStackRef.current.shift();
@@ -307,29 +348,32 @@ export default function VtonModal({
     setUndoStackLength(undoStackRef.current.length);
   }, []);
 
-  const drawOnCanvas = useCallback(
-    (x, y) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
+  /** Redraw the current stroke path onto a context at the given opacity */
+  const replayStrokePath = useCallback(
+    (ctx, opacity) => {
+      const pts = strokePathRef.current;
+      if (pts.length === 0) return;
+      ctx.save();
+      ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = "source-over";
+      ctx.lineWidth = brushSize * 2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = brushColor;
       ctx.fillStyle = brushColor;
-      ctx.beginPath();
-
-      if (lastPointRef.current) {
-        // Draw a line from last point to current for smooth strokes
-        ctx.lineWidth = brushSize * 2;
-        ctx.lineCap = "round";
-        ctx.strokeStyle = brushColor;
-        ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-      } else {
-        ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+      if (pts.length === 1) {
+        ctx.beginPath();
+        ctx.arc(pts[0].x, pts[0].y, brushSize, 0, Math.PI * 2);
         ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) {
+          ctx.lineTo(pts[i].x, pts[i].y);
+        }
+        ctx.stroke();
       }
-
-      lastPointRef.current = { x, y };
+      ctx.restore();
     },
     [brushColor, brushSize]
   );
@@ -344,33 +388,117 @@ export default function VtonModal({
     };
   };
 
+  /**
+   * startStroke — called on mousedown/touchstart
+   * Snapshots the current display canvas state, then draws the first dot.
+   */
+  const startStroke = useCallback((x, y) => {
+    const displayCanvas = canvasRef.current;
+    const maskCanvas = maskCanvasRef.current;
+    if (!displayCanvas || !maskCanvas) return;
+
+    // Snapshot display canvas state BEFORE this stroke begins
+    const displayCtx = displayCanvas.getContext("2d");
+    strokeStartDisplayRef.current = displayCtx.getImageData(
+      0, 0, displayCanvas.width, displayCanvas.height
+    );
+
+    // Start collecting points for this stroke
+    strokePathRef.current = [{ x, y }];
+    lastMaskPointRef.current = null;
+
+    // Draw first dot at 50% opacity on display canvas
+    replayStrokePath(displayCtx, 0.5);
+
+    // Draw full-opacity dot on mask canvas
+    const maskCtx = maskCanvas.getContext("2d");
+    maskCtx.save();
+    maskCtx.globalAlpha = 1;
+    maskCtx.globalCompositeOperation = "source-over";
+    maskCtx.fillStyle = brushColor;
+    maskCtx.beginPath();
+    maskCtx.arc(x, y, brushSize, 0, Math.PI * 2);
+    maskCtx.fill();
+    maskCtx.restore();
+    lastMaskPointRef.current = { x, y };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brushColor, brushSize, replayStrokePath]);
+
+  /**
+   * continueStroke — called on mousemove/touchmove
+   * Restores pre-stroke snapshot then replays ENTIRE stroke path at 50%
+   * so opacity never accumulates beyond 50% within one stroke.
+   */
+  const continueStroke = useCallback((x, y) => {
+    const displayCanvas = canvasRef.current;
+    const maskCanvas = maskCanvasRef.current;
+    if (!displayCanvas || !maskCanvas) return;
+
+    // Append new point
+    strokePathRef.current.push({ x, y });
+
+    // Display: restore snapshot → replay full path at 50%
+    const displayCtx = displayCanvas.getContext("2d");
+    if (strokeStartDisplayRef.current) {
+      displayCtx.putImageData(strokeStartDisplayRef.current, 0, 0);
+    }
+    replayStrokePath(displayCtx, 0.5);
+
+    // Mask: incremental segment at full opacity
+    const maskCtx = maskCanvas.getContext("2d");
+    if (lastMaskPointRef.current) {
+      maskCtx.save();
+      maskCtx.globalAlpha = 1;
+      maskCtx.globalCompositeOperation = "source-over";
+      maskCtx.lineWidth = brushSize * 2;
+      maskCtx.lineCap = "round";
+      maskCtx.lineJoin = "round";
+      maskCtx.strokeStyle = brushColor;
+      maskCtx.beginPath();
+      maskCtx.moveTo(lastMaskPointRef.current.x, lastMaskPointRef.current.y);
+      maskCtx.lineTo(x, y);
+      maskCtx.stroke();
+      maskCtx.restore();
+    }
+    lastMaskPointRef.current = { x, y };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brushColor, brushSize, replayStrokePath]);
+
+  /**
+   * endStroke — called on mouseup/touchend
+   * Clears transient stroke state.
+   */
+  const endStroke = useCallback(() => {
+    strokePathRef.current = [];
+    strokeStartDisplayRef.current = null;
+    lastMaskPointRef.current = null;
+  }, []);
+
   const onCanvasMouseDown = (e) => {
     isDrawingRef.current = true;
-    lastPointRef.current = null;
     saveUndoState();
     const { x, y } = getCanvasPoint(canvasRef.current, e.clientX, e.clientY);
-    drawOnCanvas(x, y);
+    startStroke(x, y);
   };
 
   const onCanvasMouseMove = (e) => {
     if (!isDrawingRef.current) return;
     const { x, y } = getCanvasPoint(canvasRef.current, e.clientX, e.clientY);
-    drawOnCanvas(x, y);
+    continueStroke(x, y);
   };
 
   const onCanvasMouseUp = () => {
     isDrawingRef.current = false;
-    lastPointRef.current = null;
+    endStroke();
   };
 
   const onCanvasTouchStart = (e) => {
     e.preventDefault();
     isDrawingRef.current = true;
-    lastPointRef.current = null;
     saveUndoState();
     const touch = e.touches[0];
     const { x, y } = getCanvasPoint(canvasRef.current, touch.clientX, touch.clientY);
-    drawOnCanvas(x, y);
+    startStroke(x, y);
   };
 
   const onCanvasTouchMove = (e) => {
@@ -378,42 +506,65 @@ export default function VtonModal({
     if (!isDrawingRef.current) return;
     const touch = e.touches[0];
     const { x, y } = getCanvasPoint(canvasRef.current, touch.clientX, touch.clientY);
-    drawOnCanvas(x, y);
+    continueStroke(x, y);
   };
 
   const onCanvasTouchEnd = () => {
     isDrawingRef.current = false;
-    lastPointRef.current = null;
+    endStroke();
   };
 
   const handleUndo = () => {
     if (undoStackRef.current.length <= 1) return;
     undoStackRef.current.pop();
-    const prevState = undoStackRef.current[undoStackRef.current.length - 1];
-    const canvas = canvasRef.current;
-    if (!canvas || !prevState) return;
-    const ctx = canvas.getContext("2d");
-    ctx.putImageData(prevState, 0, 0);
+    const prevMaskState = undoStackRef.current[undoStackRef.current.length - 1];
+    const maskCanvas = maskCanvasRef.current;
+    const displayCanvas = canvasRef.current;
+    if (!maskCanvas || !prevMaskState) return;
+
+    // Restore offscreen mask
+    const maskCtx = maskCanvas.getContext("2d");
+    maskCtx.putImageData(prevMaskState, 0, 0);
+
+    // Re-render display canvas from the restored mask at 50% opacity
+    const displayCtx = displayCanvas.getContext("2d");
+    displayCtx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
+    displayCtx.globalAlpha = 0.5;
+    displayCtx.drawImage(maskCanvas, 0, 0);
+    displayCtx.globalAlpha = 1;
+
     setUndoStackLength(undoStackRef.current.length);
   };
 
   const handleResetMask = () => {
-    if (!originalMaskB64 || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
+    if (!originalMaskB64 || !canvasRef.current || !maskCanvasRef.current) return;
     const img = new Image();
     img.onload = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
-      undoStackRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+      const maskCanvas = maskCanvasRef.current;
+      const displayCanvas = canvasRef.current;
+
+      // Reset offscreen mask
+      const maskCtx = maskCanvas.getContext("2d");
+      maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+      maskCtx.drawImage(img, 0, 0);
+
+      // Reset display canvas to 50% opacity initial state
+      const displayCtx = displayCanvas.getContext("2d");
+      displayCtx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
+      displayCtx.globalAlpha = 0.45;
+      displayCtx.drawImage(img, 0, 0);
+      displayCtx.globalAlpha = 1;
+
+      undoStackRef.current = [maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height)];
       setUndoStackLength(1);
     };
     img.src = `data:image/png;base64,${originalMaskB64}`;
   };
 
   const getCanvasB64 = () => {
-    if (!canvasRef.current) return originalMaskB64;
-    const dataUrl = canvasRef.current.toDataURL("image/png");
+    // Always export from the offscreen mask (full B&W, no transparency)
+    if (!maskCanvasRef.current) return originalMaskB64;
+    const dataUrl = maskCanvasRef.current.toDataURL("image/png");
     return dataUrl.split(",")[1];
   };
 
@@ -560,6 +711,7 @@ export default function VtonModal({
             <StepMaskEditor
               styles={styles}
               personPreviewUrl={personPreviewUrl}
+              clothImageUrl={clothImageUrl}
               canvasRef={canvasRef}
               brushColor={brushColor}
               setBrushColor={setBrushColor}
@@ -872,6 +1024,7 @@ function StepUpload({
 function StepMaskEditor({
   styles,
   personPreviewUrl,
+  clothImageUrl,
   canvasRef,
   brushColor,
   setBrushColor,
@@ -888,12 +1041,12 @@ function StepMaskEditor({
   onReset,
 }) {
   return (
-    <div>
-      {/* Brush toolbar */}
+    <div className={styles.editorRoot}>
+      {/* ── Brush Toolbar ── */}
       <div className={styles.brushToolbar} role="toolbar" aria-label="Mask editing tools">
         {/* Brush color */}
         <div className={styles.brushGroup}>
-          <span className={styles.brushGroupLabel}>Brush</span>
+          <span className={styles.brushGroupLabel}>Paint</span>
           <button
             id="vton-brush-white"
             className={[
@@ -904,10 +1057,11 @@ function StepMaskEditor({
               .filter(Boolean)
               .join(" ")}
             onClick={() => setBrushColor("white")}
-            title="Add to try-on (white)"
+            title="Mark garment area (white)"
             aria-pressed={brushColor === "white"}
           >
             <Paintbrush size={14} />
+            <span>Include</span>
           </button>
           <button
             id="vton-brush-black"
@@ -919,10 +1073,11 @@ function StepMaskEditor({
               .filter(Boolean)
               .join(" ")}
             onClick={() => setBrushColor("black")}
-            title="Remove from try-on (black)"
+            title="Remove from garment area (black)"
             aria-pressed={brushColor === "black"}
           >
             <Eraser size={14} />
+            <span>Exclude</span>
           </button>
         </div>
 
@@ -935,13 +1090,13 @@ function StepMaskEditor({
             id="vton-brush-size"
             type="range"
             min={5}
-            max={60}
+            max={80}
             value={brushSize}
             onChange={(e) => setBrushSize(Number(e.target.value))}
             className={styles.sizeSlider}
             aria-label="Brush size"
           />
-          <span className={styles.sizeValue}>{brushSize}</span>
+          <span className={styles.sizeValue}>{brushSize}px</span>
         </div>
 
         <div className={styles.toolbarDivider} />
@@ -952,7 +1107,7 @@ function StepMaskEditor({
           className={styles.toolbarBtn}
           onClick={onUndo}
           disabled={undoStackLength <= 1}
-          title="Undo"
+          title="Undo last stroke"
         >
           <Undo2 size={14} />
           Undo
@@ -961,53 +1116,62 @@ function StepMaskEditor({
           id="vton-reset-mask"
           className={styles.toolbarBtn}
           onClick={onReset}
-          title="Reset to generated mask"
+          title="Reset to AI-generated mask"
         >
           <RotateCcw size={14} />
           Reset
         </button>
       </div>
 
-      {/* Two-panel layout */}
-      <div className={styles.editorLayout} style={{ marginTop: "1rem" }}>
-        {/* Left: person photo reference */}
-        <div className={styles.editorPanel}>
-          <p className={styles.editorPanelLabel}>Your Photo</p>
-          <img
-            src={personPreviewUrl}
-            alt="Your photo reference"
-            className={styles.editorImg}
-          />
+      {/* ── Photo + Overlay Canvas ── */}
+      <div className={styles.overlayEditorWrapper}>
+        {/* The actual person photo as background */}
+        <img
+          src={personPreviewUrl}
+          alt="Your photo"
+          className={styles.overlayPhoto}
+          draggable={false}
+        />
+        {/* Transparent canvas overlay — draws at 50% opacity on top of photo */}
+        <canvas
+          id="vton-mask-canvas"
+          ref={canvasRef}
+          className={styles.overlayCanvas}
+          onMouseDown={onCanvasMouseDown}
+          onMouseMove={onCanvasMouseMove}
+          onMouseUp={onCanvasMouseUp}
+          onMouseLeave={onCanvasMouseUp}
+          onTouchStart={onCanvasTouchStart}
+          onTouchMove={onCanvasTouchMove}
+          onTouchEnd={onCanvasTouchEnd}
+          aria-label="Mask editor — paint directly on the photo"
+        />
+        {/* Legend chip — bottom-left */}
+        <div className={styles.overlayLegend}>
+          <span className={styles.legendWhite} />
+          <span className={styles.legendText}>Include</span>
+          <span className={styles.legendBlack} />
+          <span className={styles.legendText}>Exclude</span>
         </div>
 
-        {/* Right: editable mask canvas */}
-        <div className={styles.editorPanel}>
-          <p className={styles.editorPanelLabel}>
-            <Sparkles size={14} />
-            Mask (AI Generated)
-          </p>
-          <div className={styles.canvasWrapper}>
-            <canvas
-              id="vton-mask-canvas"
-              ref={canvasRef}
-              className={styles.canvas}
-              onMouseDown={onCanvasMouseDown}
-              onMouseMove={onCanvasMouseMove}
-              onMouseUp={onCanvasMouseUp}
-              onMouseLeave={onCanvasMouseUp}
-              onTouchStart={onCanvasTouchStart}
-              onTouchMove={onCanvasTouchMove}
-              onTouchEnd={onCanvasTouchEnd}
-              aria-label="Editable mask canvas — paint to adjust try-on area"
+        {/* Garment reference card — top-right */}
+        {clothImageUrl && (
+          <div className={styles.garmentRefCard}>
+            <span className={styles.garmentRefLabel}>Trying on</span>
+            <img
+              src={clothImageUrl}
+              alt="Garment reference"
+              className={styles.garmentRefImg}
+              draggable={false}
             />
           </div>
-          <p className={styles.editorHint}>
-            ⬜ White = garment area &nbsp; ⬛ Black = keep as-is
-            <br />
-            Paint to adjust the mask, then click &quot;Looks Good&quot;.
-          </p>
-        </div>
+        )}
       </div>
+
+      <p className={styles.editorHint}>
+        Paint <strong>white</strong> over the garment area to include it, <strong>black</strong> to exclude it.
+        Strokes appear at 50% opacity so you can see the photo beneath.
+      </p>
     </div>
   );
 }
