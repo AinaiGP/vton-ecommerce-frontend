@@ -175,6 +175,74 @@
   align-items: start;
 }
 
+/* Standalone Mode: two equal upload columns */
+.standaloneUploadGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.clothTypeSelect {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--ivory-dark);
+  font-size: var(--text-base);
+  color: var(--charcoal);
+  background: white;
+  margin-top: 16px;
+  cursor: pointer;
+  outline: none;
+  font-family: var(--font-sans);
+}
+.clothTypeSelect:focus {
+  border-color: var(--gold);
+}
+
+.wardrobeSelector {
+  margin-top: 16px;
+}
+
+.wardrobeSelectorTitle {
+  font-size: var(--text-sm);
+  color: var(--charcoal-muted);
+  margin: 0 0 8px 0;
+}
+
+.wardrobeList {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.wardrobeList::-webkit-scrollbar {
+  height: 6px;
+}
+.wardrobeList::-webkit-scrollbar-thumb {
+  background: var(--ivory-dark);
+  border-radius: 3px;
+}
+
+.wardrobeThumbnail {
+  width: 60px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  background: var(--ivory);
+  flex-shrink: 0;
+}
+
+.wardrobeThumbnail:hover {
+  border-color: var(--gold);
+  transform: translateY(-2px);
+}
+
+
 .uploadZone {
   border: var(--border-dashed);
   border-radius: var(--radius-lg);
@@ -307,6 +375,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
 }
 
 .clothThumbnailImg {
@@ -331,6 +400,15 @@
   color: var(--charcoal-muted);
   line-height: var(--leading-relaxed);
   margin: 0;
+}
+
+@media (max-width: 768px) {
+  .uploadLayout {
+    grid-template-columns: 1fr;
+  }
+  .standaloneUploadGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ─── Step 2: Mask Editor ───────────────────────────────────────────────────── */

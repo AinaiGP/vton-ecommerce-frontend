@@ -130,6 +130,7 @@ export default function VtonModal({
   clothImageUrl,
   clothType,
   productId,
+  mode = "product", // "product" | "standalone"
 }) {
   // ── Step ──────────────────────────────────────────────────────────────────
   const [step, setStep] = useState(1);
@@ -141,6 +142,14 @@ export default function VtonModal({
   const [clothB64, setClothB64] = useState(null);
   const [clothFetchError, setClothFetchError] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  
+  // Standalone mode states
+  const [clothFile, setClothFile] = useState(null);
+  const [clothPreviewUrl, setClothPreviewUrl] = useState(null);
+  const [selectedClothType, setSelectedClothType] = useState("");
+  const [isClothDragOver, setIsClothDragOver] = useState(false);
+  const [wardrobeItems, setWardrobeItems] = useState([]);
+
   const [isGeneratingMask, setIsGeneratingMask] = useState(false);
   const [maskError, setMaskError] = useState(null);
 
@@ -173,8 +182,12 @@ export default function VtonModal({
 
   // ─── Fetch cloth image as base64 when modal opens ─────────────────────────
 
+  // ─── Fetch cloth image as base64 when modal opens (product mode) ──────────
+
   useEffect(() => {
-    if (!isOpen || !clothImageUrl) return;
+    if (!isOpen || mode === "standalone") return;
+    if (!clothImageUrl) return;
+    
     setClothFetchError(false);
     setClothB64(null);
 
@@ -186,7 +199,18 @@ export default function VtonModal({
         );
         setClothFetchError(true);
       });
-  }, [isOpen, clothImageUrl]);
+  }, [isOpen, clothImageUrl, mode]);
+
+  // ─── Fetch wardrobe items when modal opens in standalone mode ─────────────
+  useEffect(() => {
+    if (!isOpen || mode !== "standalone") return;
+    apiClient.get("/customers/wardrobe", { params: { limit: 50, page: 1 } })
+      .then((res) => {
+        const data = res.data?.data || res.data || [];
+        setWardrobeItems(data);
+      })
+      .catch(console.error);
+  }, [isOpen, mode]);
 
   // ─── Reset all state when modal closes ───────────────────────────────────
 
@@ -196,8 +220,12 @@ export default function VtonModal({
     setPersonPreviewUrl(null);
     setPersonB64(null);
     setClothB64(null);
+    setClothFile(null);
+    setClothPreviewUrl(null);
+    setSelectedClothType("");
     setClothFetchError(false);
     setIsDragOver(false);
+    setIsClothDragOver(false);
     setIsGeneratingMask(false);
     setMaskError(null);
     setOriginalMaskB64(null);
@@ -256,17 +284,73 @@ export default function VtonModal({
     if (file) handleFileSelect(file);
   };
 
+  // ─── Step 1: Handle standalone garment file selection ──────────────────────
+
+  const handleClothFileSelect = useCallback(async (file) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    setClothFile(file);
+    setClothPreviewUrl(URL.createObjectURL(file));
+    setMaskError(null);
+    try {
+      const b64 = await fileToBase64(file);
+      setClothB64(b64);
+    } catch {
+      setMaskError("Failed to read garment image file. Please try another.");
+    }
+  }, []);
+
+  const onClothFileInputChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) handleClothFileSelect(file);
+  };
+
+  const onClothDragOver = (e) => {
+    e.preventDefault();
+    setIsClothDragOver(true);
+  };
+
+  const onClothDragLeave = () => setIsClothDragOver(false);
+
+  const onClothDrop = (e) => {
+    e.preventDefault();
+    setIsClothDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleClothFileSelect(file);
+  };
+
+  const handleWardrobeItemSelect = async (item) => {
+    setClothFile(null); // Clear file upload state
+    setClothPreviewUrl(item.imageUrl);
+    
+    let type = "upper";
+    if (item.category === "bottoms") type = "lower";
+    if (item.category === "dresses") type = "overall";
+    if (item.category === "outerwear") type = "upper";
+    setSelectedClothType(type);
+
+    setMaskError(null);
+    try {
+      const b64 = await urlToBase64(item.imageUrl);
+      setClothB64(b64);
+    } catch {
+      setMaskError("Failed to load garment from wardrobe. Please try another.");
+    }
+  };
+
   // ─── Step 1: Generate Mask ────────────────────────────────────────────────
 
   const handleGenerateMask = async () => {
-    if (!personB64 || !clothType) return;
+    const activeClothType = mode === "standalone" ? selectedClothType : clothType;
+    if (!personB64 || !activeClothType) return;
+    if (mode === "standalone" && !clothB64) return;
+    
     setIsGeneratingMask(true);
     setMaskError(null);
 
     try {
       const res = await apiClient.post("/vton/generate-mask", {
         personImage: personB64,
-        clothType,
+        clothType: activeClothType,
       });
       const maskB64 = res.data?.maskImage;
       if (!maskB64) throw new Error("No mask returned from server.");
@@ -584,7 +668,7 @@ export default function VtonModal({
 
     // Resolve cloth image base64 — try cached, then fetch, then fail gracefully
     let clothImageB64 = clothB64;
-    if (!clothImageB64 && clothImageUrl && !clothFetchError) {
+    if (!clothImageB64 && clothImageUrl && mode !== "standalone" && !clothFetchError) {
       try {
         clothImageB64 = await urlToBase64(clothImageUrl);
         setClothB64(clothImageB64);
@@ -609,7 +693,7 @@ export default function VtonModal({
         personImage: personB64,
         clothImage: clothImageB64,
         maskImage: maskB64,
-        ...(productId ? { productId } : {}),
+        ...(mode === "product" && productId ? { productId } : {}),
       });
       const resultImage = res.data?.resultImage;
       if (!resultImage) throw new Error("No result image returned.");
@@ -651,7 +735,9 @@ export default function VtonModal({
     // Go back to step 1 for a fresh start
     setPersonFile(null);
     setPersonPreviewUrl(null);
-    setPersonB64(null);
+    setClothFile(null);
+    setClothPreviewUrl(null);
+    setClothB64(null);
     setOriginalMaskB64(null);
     setMaskError(null);
     undoStackRef.current = [];
@@ -692,18 +778,29 @@ export default function VtonModal({
           {step === 1 && (
             <StepUpload
               styles={styles}
+              mode={mode}
               personPreviewUrl={personPreviewUrl}
-              clothImageUrl={clothImageUrl}
+              clothImageUrl={mode === "standalone" ? clothPreviewUrl : clothImageUrl}
               isDragOver={isDragOver}
               isGeneratingMask={isGeneratingMask}
               maskError={maskError}
               personB64={personB64}
-              clothType={clothType}
+              clothB64={clothB64}
+              clothType={mode === "standalone" ? selectedClothType : clothType}
               onFileInputChange={onFileInputChange}
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
               onDrop={onDrop}
               onGenerateMask={handleGenerateMask}
+              // standalone props
+              isClothDragOver={isClothDragOver}
+              onClothFileInputChange={onClothFileInputChange}
+              onClothDragOver={onClothDragOver}
+              onClothDragLeave={onClothDragLeave}
+              onClothDrop={onClothDrop}
+              setSelectedClothType={setSelectedClothType}
+              wardrobeItems={wardrobeItems}
+              onSelectWardrobeItem={handleWardrobeItemSelect}
             />
           )}
 
@@ -711,7 +808,7 @@ export default function VtonModal({
             <StepMaskEditor
               styles={styles}
               personPreviewUrl={personPreviewUrl}
-              clothImageUrl={clothImageUrl}
+              clothImageUrl={mode === "standalone" ? clothPreviewUrl : clothImageUrl}
               canvasRef={canvasRef}
               brushColor={brushColor}
               setBrushColor={setBrushColor}
@@ -761,7 +858,12 @@ export default function VtonModal({
                   id="vton-generate-mask-btn"
                   className={styles.primaryBtn}
                   onClick={handleGenerateMask}
-                  disabled={!personB64 || !clothType || isGeneratingMask}
+                  disabled={
+                    !personB64 || 
+                    (mode === "product" && !clothType) || 
+                    (mode === "standalone" && (!selectedClothType || !clothB64)) || 
+                    isGeneratingMask
+                  }
                 >
                   {isGeneratingMask ? (
                     <>
@@ -902,11 +1004,22 @@ function StepUpload({
   onDragLeave,
   onDrop,
   onGenerateMask,
+  mode,
+  clothB64,
+  isClothDragOver,
+  onClothFileInputChange,
+  onClothDragOver,
+  onClothDragLeave,
+  onClothDrop,
+  setSelectedClothType,
+  wardrobeItems,
+  onSelectWardrobeItem,
 }) {
   const fileInputRef = useRef(null);
+  const clothFileInputRef = useRef(null);
 
   return (
-    <div className={styles.uploadLayout}>
+    <div className={mode === "standalone" ? styles.standaloneUploadGrid : styles.uploadLayout}>
       {/* Person photo upload / preview */}
       <div>
         {!personPreviewUrl ? (
@@ -984,7 +1097,7 @@ function StepUpload({
           </p>
         )}
 
-        {!clothType && personB64 && (
+        {mode === "product" && !clothType && personB64 && (
           <p className={styles.infoBox}>
             <AlertCircle size={16} />
             This product does not have a supported category for try-on. Please contact support.
@@ -992,23 +1105,117 @@ function StepUpload({
         )}
       </div>
 
-      {/* Garment reference */}
+      {/* Garment reference / Upload */}
       <div className={styles.clothPanel}>
-        <p className={styles.clothPanelLabel}>You&apos;re trying on</p>
-        <div className={styles.clothThumbnail}>
-          {clothImageUrl ? (
-            <img
-              src={clothImageUrl}
-              alt="Garment to try on"
-              className={styles.clothThumbnailImg}
-            />
-          ) : (
-            <div className={styles.clothPlaceholder}>
-              <ImageIcon size={32} />
-              <span>No garment image</span>
+        {mode === "standalone" ? (
+          <>
+            {!clothImageUrl ? (
+              <div
+                className={[
+                  styles.uploadZone,
+                  isClothDragOver ? styles.uploadZoneHover : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onDragOver={onClothDragOver}
+                onDragLeave={onClothDragLeave}
+                onDrop={onClothDrop}
+                onClick={() => clothFileInputRef.current?.click()}
+                role="button"
+                aria-label="Upload garment photo"
+              >
+                <input
+                  ref={clothFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className={styles.uploadInput}
+                  onChange={onClothFileInputChange}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <div className={styles.uploadIcon}>
+                  <Upload size={28} />
+                </div>
+                <p className={styles.uploadTitle}>Upload Garment</p>
+                <p className={styles.uploadHint}>
+                  Drag &amp; drop or click to select
+                  <br />
+                  A clear photo of the clothing item
+                </p>
+              </div>
+            ) : (
+              <div className={styles.uploadPreview}>
+                <img
+                  src={clothImageUrl}
+                  alt="Garment to try on"
+                  className={styles.uploadPreviewImg}
+                />
+                <button
+                  className={styles.uploadChangeBtn}
+                  onClick={() => clothFileInputRef.current?.click()}
+                >
+                  <Upload size={14} />
+                  Change Garment
+                </button>
+                <input
+                  ref={clothFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className={styles.uploadInput}
+                  style={{ display: "none" }}
+                  onChange={onClothFileInputChange}
+                />
+              </div>
+            )}
+            
+            <select 
+              className={styles.clothTypeSelect}
+              value={clothType || ""}
+              onChange={(e) => setSelectedClothType(e.target.value)}
+            >
+              <option value="" disabled>Select clothing type...</option>
+              <option value="upper">Upper Body (Shirts, Tops)</option>
+              <option value="lower">Lower Body (Pants, Skirts)</option>
+              <option value="overall">Overall (Dresses, Suits)</option>
+            </select>
+
+            {wardrobeItems && wardrobeItems.length > 0 && (
+              <div className={styles.wardrobeSelector}>
+                <p className={styles.wardrobeSelectorTitle}>Or choose from your wardrobe:</p>
+                <div className={styles.wardrobeList}>
+                  {wardrobeItems.map((item) => (
+                    <img
+                      key={item.id}
+                      src={item.imageUrl}
+                      alt={item.label || "Wardrobe item"}
+                      className={styles.wardrobeThumbnail}
+                      onClick={() => onSelectWardrobeItem(item)}
+                      title={item.label}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <p className={styles.clothPanelLabel}>You&apos;re trying on</p>
+            <div className={styles.clothThumbnail}>
+              {clothImageUrl ? (
+                <img
+                  src={clothImageUrl}
+                  alt="Garment to try on"
+                  className={styles.clothThumbnailImg}
+                />
+              ) : (
+                <div className={styles.clothPlaceholder}>
+                  <ImageIcon size={32} />
+                  <span>No garment image</span>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
+        
         <p className={styles.clothInfo}>
           Stand straight, facing the camera.
           <br />

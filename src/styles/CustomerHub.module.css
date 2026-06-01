@@ -361,3 +361,119 @@
     font-size: 32px;
   }
 }
+
+/* AI Section Banner */
+.aiSection {
+  margin-top: 40px;
+  width: 100%;
+}
+
+.aiCard {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  padding: 40px;
+  background: linear-gradient(135deg, var(--burgundy) 0%, #4a1f26 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 10px 30px rgba(139, 72, 82, 0.2);
+}
+
+/* Shimmer overlay */
+.aiCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255,255,255,0.1), transparent);
+  transform: skewX(-20deg);
+  animation: shimmer 6s infinite;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  20% { left: 200%; }
+  100% { left: 200%; }
+}
+
+.aiCardContent {
+  flex: 1;
+  max-width: 600px;
+  position: relative;
+  z-index: 1;
+}
+
+.aiCardTitle {
+  font-family: var(--font-serif);
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.aiTag {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.aiCardDesc {
+  font-size: 16px;
+  line-height: 1.5;
+  opacity: 0.9;
+}
+
+.aiCardAction {
+  position: relative;
+  z-index: 1;
+  margin-left: 32px;
+}
+
+.aiCardBtn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: white;
+  color: var(--burgundy);
+  border: none;
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+}
+
+.aiCardBtn:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 25px rgba(0,0,0,0.15);
+}
+
+@media (max-width: 768px) {
+  .aiCard {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 30px 24px;
+    gap: 24px;
+  }
+  .aiCardAction {
+    margin-left: 0;
+    width: 100%;
+  }
+  .aiCardBtn {
+    width: 100%;
+    justify-content: center;
+  }
+}

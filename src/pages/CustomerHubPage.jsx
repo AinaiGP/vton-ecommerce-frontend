@@ -16,6 +16,7 @@ import {
   Eye,
   Ticket,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
@@ -23,6 +24,7 @@ import apiClient from "../utils/apiClient";
 import { formatPrice } from "../utils/productHelpers";
 import styles from "../styles/CustomerHub.module.css";
 import { useAuth } from "../context/AuthContext";
+import VtonModal from "../components/vton/VtonModal";
 
 /* ─── Page sections ─── */
 const CUSTOMER_PAGES = [
@@ -108,6 +110,7 @@ export default function CustomerHubPage() {
   const [stats, setStats] = useState({ orders: 0, tickets: 0, wardrobe: 0 });
   const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [vtonOpen, setVtonOpen] = useState(false);
 
   useEffect(() => {
     fetchHubData();
@@ -262,8 +265,41 @@ export default function CustomerHubPage() {
             </div>
           </aside>
         </div>
+
+        {/* AI Features Section */}
+        <section className={styles.aiSection}>
+          <div className={styles.aiCard}>
+            <div className={styles.aiCardContent}>
+              <h2 className={styles.aiCardTitle}>
+                <Sparkles size={28} />
+                Virtual Try-On
+                <span className={styles.aiTag}>AI</span>
+              </h2>
+              <p className={styles.aiCardDesc}>
+                Upload any garment photo and see how it looks on you instantly.
+                Our AI blends the item onto your photo for a realistic preview.
+              </p>
+            </div>
+            <div className={styles.aiCardAction}>
+              <button 
+                className={styles.aiCardBtn}
+                onClick={() => setVtonOpen(true)}
+              >
+                <Sparkles size={20} />
+                Try It Now
+              </button>
+            </div>
+          </div>
+        </section>
       </main>
       <Footer />
+
+      {/* Standalone Virtual Try-On Modal */}
+      <VtonModal
+        isOpen={vtonOpen}
+        onClose={() => setVtonOpen(false)}
+        mode="standalone"
+      />
     </div>
   );
 }
