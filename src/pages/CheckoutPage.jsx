@@ -158,6 +158,9 @@ export default function CheckoutPage() {
   const [clientSecret, setClientSecret] = useState(null);
   const [paymentError, setPaymentError] = useState(null);
 
+  const [couponCodeInput, setCouponCodeInput] = useState("");
+  const [couponProcessing, setCouponProcessing] = useState(false);
+
   // 1. Initial Load: Fetch Profile and Session
   useEffect(() => {
     if (!isAuthenticated) {
@@ -309,6 +312,38 @@ export default function CheckoutPage() {
     }
   };
 
+  const handleApplyCoupon = async (e) => {
+    e.preventDefault();
+    if (!couponCodeInput.trim()) return;
+
+    setCouponProcessing(true);
+    try {
+      const res = await apiClient.post(`/checkout/sessions/${session.id}/coupon`, {
+        code: couponCodeInput.trim(),
+      });
+      setSession(res.data);
+      setCouponCodeInput("");
+    } catch (err) {
+      console.error("Failed to apply coupon:", err);
+      alert(err?.response?.data?.message || "Failed to apply coupon.");
+    } finally {
+      setCouponProcessing(false);
+    }
+  };
+
+  const handleRemoveCoupon = async () => {
+    setCouponProcessing(true);
+    try {
+      const res = await apiClient.delete(`/checkout/sessions/${session.id}/coupon`);
+      setSession(res.data);
+    } catch (err) {
+      console.error("Failed to remove coupon:", err);
+      alert(err?.response?.data?.message || "Failed to remove coupon.");
+    } finally {
+      setCouponProcessing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className={styles.page}>
@@ -367,7 +402,8 @@ export default function CheckoutPage() {
 
   const subtotal = session?.subtotal || 0;
   const shipping = session?.shippingCost || 0;
-  const total = subtotal + shipping;
+  const discount = session?.discountAmount || 0;
+  const total = session?.total !== undefined ? session.total : Math.max(0, subtotal + shipping - discount);
   const currency = session?.currency || "EGP";
 
   return (
@@ -796,7 +832,47 @@ export default function CheckoutPage() {
                     : formatPrice(shipping, currency)}
                 </span>
               </div>
+              {session?.discountAmount > 0 && (
+                <div className={`${styles.summaryRow} ${styles.summaryDiscount}`}>
+                  <span>Discount ({session.couponCode})</span>
+                  <span>-{formatPrice(session.discountAmount, currency)}</span>
+                </div>
+              )}
               <div className={styles.summaryDivider} />
+
+              {!session?.couponCode ? (
+                <form onSubmit={handleApplyCoupon} className={styles.couponForm}>
+                  <input
+                    type="text"
+                    placeholder="Enter coupon code"
+                    value={couponCodeInput}
+                    onChange={(e) => setCouponCodeInput(e.target.value)}
+                    disabled={couponProcessing}
+                    className={styles.couponInput}
+                  />
+                  <button 
+                    type="submit" 
+                    className={styles.couponBtn}
+                    disabled={couponProcessing || !couponCodeInput.trim()}
+                  >
+                    Apply
+                  </button>
+                </form>
+              ) : (
+                <div className={styles.appliedCoupon}>
+                  <span>{session.couponCode} applied</span>
+                  <button 
+                    type="button" 
+                    onClick={handleRemoveCoupon}
+                    disabled={couponProcessing}
+                    className={styles.removeCouponBtn}
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+              <div className={styles.summaryDivider} />
+
               <div className={`${styles.summaryRow} ${styles.summaryTotal}`}>
                 <span>{t("cart.total")}</span>
                 <span>{formatPrice(total, currency)}</span>

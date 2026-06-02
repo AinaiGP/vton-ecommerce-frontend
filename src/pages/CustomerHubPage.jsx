@@ -17,6 +17,7 @@ import {
   Ticket,
   Loader2,
   Sparkles,
+  Store,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
@@ -61,6 +62,12 @@ const CUSTOMER_PAGES = [
         icon: Shirt,
         label: "My Wardrobe",
         desc: "AI-powered digital wardrobe",
+      },
+      {
+        to: "/apply-vendor",
+        icon: Store,
+        label: "Vendor Application",
+        desc: "Apply to become a vendor",
       },
     ],
   },

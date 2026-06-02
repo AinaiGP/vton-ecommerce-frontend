@@ -82,13 +82,31 @@ function AppModal({ app, onClose, onApprove, onReject, loading }) {
             </div>
           )}
 
+          {app.categories?.length > 0 && (
+            <div className={t.formGroup}>
+              <label className={t.label}>Categories</label>
+              <p style={{ margin: 0 }}>{app.categories.join(', ')}</p>
+            </div>
+          )}
+
           {app.documents?.length > 0 && (
             <div className={t.formGroup}>
               <label className={t.label}>Documents</label>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {app.documents.map((doc, i) => (
-                  <a key={i} href={doc} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "var(--adm-accent)" }}>{doc}</a>
-                ))}
+                {app.documents.map((doc, i) => {
+                  let label = "Document";
+                  let url = doc;
+                  if (doc.includes("|")) {
+                    const parts = doc.split("|");
+                    label = parts[0];
+                    url = parts.slice(1).join("|");
+                  }
+                  return (
+                    <a key={i} href={url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "var(--adm-accent)" }}>
+                      {label}
+                    </a>
+                  );
+                })}
               </div>
             </div>
           )}

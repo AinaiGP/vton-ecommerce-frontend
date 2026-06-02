@@ -14,67 +14,91 @@ import {
   Upload,
   Send,
   AlertCircle,
+  Check,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import styles from "../styles/VendorApplicationPage.module.css";
+import apiClient from "../utils/apiClient";
 
 const CATEGORIES = [
   "Women's Fashion",
   "Men's Fashion",
   "Kids' Fashion",
-  "Abayas & Kaftans",
-  "Accessories",
-  "Shoes & Footwear",
-  "Sportswear",
-  "Luxury / Designer",
-  "Other",
 ];
 
 const STATUS_CFG = {
-  Pending: {
+  pending: {
     cls: styles.statusPending,
     icon: Clock,
     label: "Application Pending",
     desc: "Your application is under review. We'll notify you within 3–5 business days.",
     color: "#92400e",
   },
-  Approved: {
+  approved: {
     cls: styles.statusApproved,
     icon: CheckCircle,
     label: "Application Approved!",
     desc: "Congratulations! Your vendor account is now active. Visit your vendor dashboard to get started.",
     color: "#15803d",
   },
-  Rejected: {
+  rejected: {
     cls: styles.statusRejected,
     icon: XCircle,
     label: "Application Rejected",
     desc: "Unfortunately your application was not approved. Please review the feedback and try again.",
     color: "#dc2626",
   },
-  "Needs More Information": {
+  canceled: {
     cls: styles.statusInfo,
     icon: Info,
-    label: "Additional Information Required",
-    desc: "Our team needs more details. Please review the comments below and update your application.",
+    label: "Application Canceled",
+    desc: "You have canceled this application.",
     color: "#1d4ed8",
   },
 };
 
 export default function VendorApplicationPage() {
   const [submitted, setSubmitted] = useState(false);
-  const [appStatus] = useState("Pending");
+  const [appStatus, setAppStatus] = useState("pending");
+  const [rejectionReason, setRejectionReason] = useState("");
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [alert, setAlert] = useState(null);
-  const logoRef = useRef(null);
-  const [logoPreview, setLogoPreview] = useState(null);
   const [docLinks, setDocLinks] = useState([
     { id: 1, label: "Business License", url: "" },
   ]);
+  const [cooldownRemaining, setCooldownRemaining] = useState(-1);
 
   useEffect(() => {
-    // TODO: wire vendor application status to real API
+    const fetchMyApplication = async () => {
+      try {
+        const res = await apiClient.get("/customers/vendor-applications/my");
+        if (res.data) {
+          if (res.data.id) {
+            setSubmitted(true);
+            setAppStatus(res.data.status);
+            if (res.data.rejectionReason) setRejectionReason(res.data.rejectionReason);
+            
+            setForm({
+              storeName: res.data.brandName || "",
+              brandEmail: res.data.businessEmail || "",
+              brandPhone: res.data.businessPhone || "",
+              description: res.data.description || "",
+              categories: res.data.categories || [],
+            });
+          }
+          if (res.data.cooldownRemaining !== undefined) {
+            setCooldownRemaining(res.data.cooldownRemaining);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    fetchMyApplication();
   }, []);
 
   const [form, setForm] = useState({
@@ -82,11 +106,7 @@ export default function VendorApplicationPage() {
     brandEmail: "",
     brandPhone: "",
     description: "",
-    category: CATEGORIES[0],
-    website: "",
-    instagram: "",
-    facebook: "",
-    tiktok: "",
+    categories: [],
   });
 
   const f = (k) => ({
@@ -94,9 +114,19 @@ export default function VendorApplicationPage() {
     onChange: (e) => setForm({ ...form, [k]: e.target.value }),
   });
 
-  const handleLogoChange = (e) => {
-    const file = e.target.files[0];
-    if (file) setLogoPreview(URL.createObjectURL(file));
+  const handleCategoryToggle = (cat) => {
+    setForm((prev) => {
+      const isSelected = prev.categories.includes(cat);
+      if (isSelected) {
+        return { ...prev, categories: prev.categories.filter((c) => c !== cat) };
+      } else {
+        if (prev.categories.length >= 3) {
+          alert("You can select up to 3 categories.");
+          return prev;
+        }
+        return { ...prev, categories: [...prev.categories, cat] };
+      }
+    });
   };
 
   const addDocLink = () =>
@@ -108,22 +138,53 @@ export default function VendorApplicationPage() {
       prev.map((d) => (d.id === id ? { ...d, [key]: val } : d)),
     );
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.storeName.trim() || !form.brandEmail.trim()) {
       setAlert({ type: "error", text: "Please fill in all required fields." });
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      // Format as "label|url" to preserve both parts for the backend/admin view
+      const documents = docLinks
+        .filter(d => d.url.trim() !== "")
+        .map(d => `${d.label.trim() || 'Document'}|${d.url.trim()}`);
+      
+      await apiClient.post("/customers/vendor-applications", {
+        brandName: form.storeName,
+        businessEmail: form.brandEmail,
+        businessPhone: form.brandPhone,
+        description: form.description,
+        documents: documents,
+        categories: form.categories
+      });
+      
       setSubmitted(true);
-    }, 1400);
+      setAppStatus("pending");
+      setAlert(null);
+    } catch (err) {
+      setAlert({ type: "error", text: err?.response?.data?.message || "Failed to submit application." });
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (initialLoading) {
+    return (
+      <div className={styles.page}>
+        <Header />
+        <main className={styles.main} style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "50vh" }}>
+          Loading...
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   /* Status view — shown after submission */
   if (submitted) {
-    const cfg = STATUS_CFG[appStatus];
+    const cfg = STATUS_CFG[appStatus] || STATUS_CFG.pending;
     const Icon = cfg.icon;
     return (
       <div className={styles.page}>
@@ -151,6 +212,32 @@ export default function VendorApplicationPage() {
             <div>
               <p className={styles.statusTitle}>{cfg.label}</p>
               <p className={styles.statusText}>{cfg.desc}</p>
+              {appStatus === "rejected" && rejectionReason && (
+                 <p style={{ marginTop: 8, color: "#dc2626", fontWeight: "bold" }}>Reason: {rejectionReason}</p>
+              )}
+              
+              {(appStatus === "rejected" || appStatus === "canceled") && (
+                <div style={{ marginTop: 16 }}>
+                  {cooldownRemaining > 0 ? (
+                    <div style={{ padding: "12px", background: "rgba(220, 38, 38, 0.05)", borderRadius: "8px", border: "1px solid rgba(220, 38, 38, 0.1)" }}>
+                      <p style={{ margin: 0, fontSize: "13px", color: "var(--charcoal)", fontWeight: 600 }}>
+                        You can submit a new application in: 
+                        <span style={{ color: "#dc2626", marginLeft: 4 }}>
+                          {Math.floor(cooldownRemaining / 86400)} days, {Math.floor((cooldownRemaining % 86400) / 3600)} hours
+                        </span>
+                      </p>
+                    </div>
+                  ) : (
+                    <button 
+                      className={`${styles.btn} ${styles.btnPrimary}`} 
+                      onClick={() => setSubmitted(false)}
+                      style={{ padding: "10px 20px", fontSize: "13px" }}
+                    >
+                      Submit New Application
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -174,8 +261,7 @@ export default function VendorApplicationPage() {
                 ["Store Name", form.storeName],
                 ["Brand Email", form.brandEmail],
                 ["Phone", form.brandPhone],
-                ["Category", form.category],
-                ["Website", form.website || "—"],
+                ["Categories", form.categories?.join(", ") || "—"],
               ].map(([l, v]) => (
                 <div key={l}>
                   <p
@@ -256,12 +342,24 @@ export default function VendorApplicationPage() {
                   />
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Store Category *</label>
-                  <select className={styles.select} {...f("category")}>
-                    {CATEGORIES.map((c) => (
-                      <option key={c}>{c}</option>
-                    ))}
-                  </select>
+                  <label className={styles.label}>Store Categories (Select up to 3) *</label>
+                  <div className={styles.categoryGrid}>
+                    {CATEGORIES.map((c) => {
+                      const isSelected = form.categories.includes(c);
+                      return (
+                        <div
+                          key={c}
+                          className={`${styles.categoryCard} ${isSelected ? styles.selected : ""}`}
+                          onClick={() => handleCategoryToggle(c)}
+                        >
+                          <span>{c}</span>
+                          <div className={styles.checkboxCircle}>
+                            <Check className={styles.checkboxIcon} size={12} strokeWidth={3} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
               <div className={styles.formRow}>
@@ -297,94 +395,7 @@ export default function VendorApplicationPage() {
             </div>
           </div>
 
-          {/* Logo Upload */}
-          <div className={styles.section}>
-            <div className={styles.sectionHead}>
-              <div className={styles.sectionIcon}>
-                <Upload size={17} />
-              </div>
-              <h2 className={styles.sectionTitle}>Store Logo</h2>
-            </div>
-            <div className={styles.sectionBody}>
-              <div
-                className={styles.logoUpload}
-                onClick={() => logoRef.current?.click()}
-              >
-                {logoPreview ? (
-                  <img
-                    src={logoPreview}
-                    alt="Logo preview"
-                    className={styles.logoPreview}
-                  />
-                ) : (
-                  <Upload size={28} style={{ color: "var(--burgundy)" }} />
-                )}
-                <p className={styles.uploadText}>
-                  {logoPreview
-                    ? "Click to change logo"
-                    : "Click to upload store logo"}
-                </p>
-                <p className={styles.uploadSub}>
-                  PNG, JPG, SVG — Recommended 400×400px, Max 5MB
-                </p>
-              </div>
-              <input
-                ref={logoRef}
-                type="file"
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={handleLogoChange}
-              />
-            </div>
-          </div>
 
-          {/* Social / Website */}
-          <div className={styles.section}>
-            <div className={styles.sectionHead}>
-              <div className={styles.sectionIcon}>
-                <Globe size={17} />
-              </div>
-              <h2 className={styles.sectionTitle}>Website & Social Media</h2>
-            </div>
-            <div className={styles.sectionBody}>
-              <div className={styles.formRow}>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Website URL</label>
-                  <input
-                    className={styles.input}
-                    {...f("website")}
-                    placeholder="https://yourbrand.com"
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Instagram</label>
-                  <input
-                    className={styles.input}
-                    {...f("instagram")}
-                    placeholder="@yourbrand"
-                  />
-                </div>
-              </div>
-              <div className={styles.formRow}>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Facebook</label>
-                  <input
-                    className={styles.input}
-                    {...f("facebook")}
-                    placeholder="facebook.com/yourbrand"
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>TikTok</label>
-                  <input
-                    className={styles.input}
-                    {...f("tiktok")}
-                    placeholder="@yourbrand"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
 
           {/* Documents */}
           <div className={styles.section}>

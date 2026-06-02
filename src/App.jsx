@@ -57,6 +57,7 @@ const AdminStaff = lazy(() => import("./pages/admin/AdminStaff"));
 const AdminVendorApplications = lazy(() => import("./pages/admin/AdminVendorApplications"));
 const AdminInvitations = lazy(() => import("./pages/admin/AdminInvitations"));
 const AdminProfile = lazy(() => import("./pages/admin/AdminProfile"));
+const AdminCoupons = lazy(() => import("./components/admin/AdminCoupons"));
 
 // Support
 const SupportDashboard = lazy(() => import("./pages/support/SupportDashboard"));
@@ -431,6 +432,14 @@ function App() {
             element={
               <ProtectedRoute requiredRole="admin">
                 <AdminOrders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/coupons"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <AdminCoupons />
               </ProtectedRoute>
             }
           />

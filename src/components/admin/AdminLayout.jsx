@@ -27,6 +27,7 @@ import {
   Mail,
   FileCheck,
   Inbox,
+  Tag,
 } from "lucide-react";
 import styles from "../../styles/AdminLayout.module.css";
 import { useLanguage } from "../../context/LanguageContext";
@@ -41,6 +42,7 @@ const NAV_SECTIONS = [
       { icon: Store, label: "Vendors", to: "/admin/vendors" },
       { icon: Package, label: "Products", to: "/admin/products" },
       { icon: ShoppingCart, label: "Orders", to: "/admin/orders" },
+      { icon: Tag, label: "Coupons", to: "/admin/coupons" },
     ],
   },
   {
@@ -102,6 +104,11 @@ function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
           icon: ShoppingCart,
           label: t("admin.orders"),
           to: "/admin/orders",
+        },
+        {
+          icon: Tag,
+          label: lang === "ar" ? "الكوبونات" : "Coupons",
+          to: "/admin/coupons",
         },
       ],
     },
@@ -321,6 +328,7 @@ function AdminHeader({ onMenuToggle, dark, onDarkToggle }) {
           label: t("admin.orders"),
           to: "/admin/orders",
         },
+        { icon: Tag, label: "Coupons", to: "/admin/coupons" },
       ],
     },
     {

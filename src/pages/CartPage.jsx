@@ -23,8 +23,7 @@ export default function CartPage() {
   const [error, setError] = useState(null);
   const [busyItems, setBusyItems] = useState(new Set());
 
-  const [promoCode, setPromoCode] = useState("");
-  const [discount, setDiscount] = useState(0);
+
 
   const fetchCart = useCallback(async () => {
     try {
@@ -67,16 +66,7 @@ export default function CartPage() {
 
   const removeItem = (variantId) => updateQuantity(variantId, 0);
 
-  const applyPromo = (e) => {
-    e.preventDefault();
-    // Backend doesn't support promo codes yet, keeping frontend-only mock for UI
-    if (promoCode.toUpperCase() === "AINAI20") {
-      setDiscount(0.20);
-    } else {
-      alert("Invalid promo code");
-      setDiscount(0);
-    }
-  };
+
 
   if (loading) {
     return (
@@ -95,8 +85,7 @@ export default function CartPage() {
   const currency = cart?.currency || "EGP";
   // Backend doesn't provide shipping yet, mock 3000+ free rule (300000 piasters)
   const shipping = subtotal > 0 ? (subtotal >= 300000 ? 0 : 10000) : 0;
-  const discountAmount = subtotal * discount;
-  const total = subtotal - discountAmount + shipping;
+  const total = subtotal + shipping;
 
   return (
     <div className={styles.pageWrapper}>
@@ -209,32 +198,11 @@ export default function CartPage() {
               <div className={styles.summaryCard}>
                 <h3 className={styles.summaryTitle}>{t("cart.summary")}</h3>
 
-                <form className={styles.promoForm} onSubmit={applyPromo}>
-                  <div className={styles.promoInputGroup}>
-                    <Tag size={16} className={styles.promoIcon} style={{ right: dir === 'rtl' ? '14px' : 'auto', left: dir === 'rtl' ? 'auto' : '14px' }} />
-                    <input 
-                      type="text" 
-                      placeholder={t("cart.promoPlaceholder")} 
-                      value={promoCode} 
-                      onChange={e => setPromoCode(e.target.value)} 
-                      className={styles.promoInput}
-                      style={{ padding: dir === 'rtl' ? '0 40px 0 14px' : '0 14px 0 40px' }}
-                    />
-                  </div>
-                  <button type="submit" className={`${styles.promoBtn} click-bounce`}>{t("cart.apply")}</button>
-                </form>
-
                 <div className={styles.summaryRows}>
                   <div className={styles.summaryRow}>
                     <span>{t("cart.subtotal")}</span>
                     <span>{formatPrice(subtotal, currency)}</span>
                   </div>
-                  {discount > 0 && (
-                    <div className={`${styles.summaryRow} ${styles.discountRow}`}>
-                      <span>{t("cart.discount")} (20%)</span>
-                      <span>- {formatPrice(discountAmount, currency)}</span>
-                    </div>
-                  )}
                   <div className={styles.summaryRow}>
                     <span>{t("cart.shipping")}</span>
                     <span>{shipping === 0 ? t("cart.free") : formatPrice(shipping, currency)}</span>
