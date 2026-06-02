@@ -177,6 +177,7 @@ export default function VtonModal({
   const [tryonError, setTryonError] = useState(null);
   const [usedOriginalMask, setUsedOriginalMask] = useState(false);
   const processingIntervalRef = useRef(null);
+  const maskAbortControllerRef = useRef(null);
 
   // ── Step 4 state ─────────────────────────────────────────────────────────
   const [resultB64, setResultB64] = useState(null);
@@ -215,6 +216,20 @@ export default function VtonModal({
       .catch(console.error);
   }, [isOpen, mode]);
 
+  // ─── Fetch quota when modal opens ─────────────────────────────────────────
+  useEffect(() => {
+    if (!isOpen) return;
+    apiClient.get("/vton/quota")
+      .then((res) => {
+        if (res.data.remaining <= 0 && !res.data.isPro) {
+          setShowUpgradeModal(true);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch quota:", err);
+      });
+  }, [isOpen]);
+
   // ─── Reset all state when modal closes ───────────────────────────────────
 
   const resetAll = useCallback(() => {
@@ -245,6 +260,10 @@ export default function VtonModal({
     setResultB64(null);
     if (processingIntervalRef.current) {
       clearInterval(processingIntervalRef.current);
+    }
+    if (maskAbortControllerRef.current) {
+      maskAbortControllerRef.current.abort();
+      maskAbortControllerRef.current = null;
     }
   }, []);
 
@@ -350,16 +369,23 @@ export default function VtonModal({
     setIsGeneratingMask(true);
     setMaskError(null);
 
+    maskAbortControllerRef.current = new AbortController();
+
     try {
       const res = await apiClient.post("/vton/generate-mask", {
         personImage: personB64,
         clothType: activeClothType,
+      }, {
+        signal: maskAbortControllerRef.current.signal
       });
       const maskB64 = res.data?.maskImage;
       if (!maskB64) throw new Error("No mask returned from server.");
       setOriginalMaskB64(maskB64);
       setStep(2);
     } catch (err) {
+      if (err?.name === "CanceledError" || err?.message === "canceled") {
+        return; // Ignore abort errors
+      }
       const msg =
         err?.response?.data?.message ||
         err?.message ||
@@ -367,6 +393,7 @@ export default function VtonModal({
       setMaskError(Array.isArray(msg) ? msg[0] : msg);
     } finally {
       setIsGeneratingMask(false);
+      maskAbortControllerRef.current = null;
     }
   };
 
@@ -1107,7 +1134,7 @@ function StepUpload({
         {isGeneratingMask && (
           <p className={styles.infoBox} role="status">
             <RefreshCw size={16} className={styles.spinning} />
-            Analyzing your photo… this runs on CPU and may take <strong>30–90 seconds</strong>. Please wait.
+            Analyzing your photo… this may take <strong>5–15 seconds</strong>. Please wait.
           </p>
         )}
 
