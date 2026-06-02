@@ -529,7 +529,7 @@ function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
-      {(!isAuthenticated || userRole === "customer") && <FloatingChatWidget />}
+      {(!isAuthenticated || userRole === "customer") && !location.pathname.startsWith("/auth") && <FloatingChatWidget />}
     </>
   );
 }
