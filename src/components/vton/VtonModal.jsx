@@ -190,6 +190,7 @@ export default function VtonModal({
   const strokePathRef = useRef([]);
   // Last point on the mask canvas (for incremental mask drawing)
   const lastMaskPointRef = useRef(null);
+  const currentStrokeBrushSizeRef = useRef(null);
 
   // ── Step 3 state ─────────────────────────────────────────────────────────
   const [processingMsgIndex, setProcessingMsgIndex] = useState(0);
@@ -484,13 +485,13 @@ export default function VtonModal({
 
   /** Redraw the current stroke path onto a context at the given opacity */
   const replayStrokePath = useCallback(
-    (ctx, opacity) => {
+    (ctx, opacity, actualBrushSize) => {
       const pts = strokePathRef.current;
       if (pts.length === 0) return;
       ctx.save();
       ctx.globalAlpha = opacity;
       ctx.globalCompositeOperation = brushColor === "black" ? "destination-out" : "source-over";
-      ctx.lineWidth = brushSize * 2;
+      ctx.lineWidth = actualBrushSize * 2;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       const displayColor = brushColor === "white" ? "#ff3b30" : brushColor;
@@ -498,7 +499,7 @@ export default function VtonModal({
       ctx.fillStyle = displayColor;
       if (pts.length === 1) {
         ctx.beginPath();
-        ctx.arc(pts[0].x, pts[0].y, brushSize, 0, Math.PI * 2);
+        ctx.arc(pts[0].x, pts[0].y, actualBrushSize, 0, Math.PI * 2);
         ctx.fill();
       } else {
         ctx.beginPath();
@@ -532,6 +533,11 @@ export default function VtonModal({
     const maskCanvas = maskCanvasRef.current;
     if (!displayCanvas || !maskCanvas) return;
 
+    const rect = displayCanvas.getBoundingClientRect();
+    const scaleX = displayCanvas.width / rect.width;
+    const actualBrushSize = brushSize * scaleX;
+    currentStrokeBrushSizeRef.current = actualBrushSize;
+
     // Snapshot display canvas state BEFORE this stroke begins
     const displayCtx = displayCanvas.getContext("2d");
     strokeStartDisplayRef.current = displayCtx.getImageData(
@@ -543,7 +549,7 @@ export default function VtonModal({
     lastMaskPointRef.current = null;
 
     // Draw first dot at 100% opacity on display canvas
-    replayStrokePath(displayCtx, 1);
+    replayStrokePath(displayCtx, 1, actualBrushSize);
 
     // Draw full-opacity dot on mask canvas
     const maskCtx = maskCanvas.getContext("2d");
@@ -552,7 +558,7 @@ export default function VtonModal({
     maskCtx.globalCompositeOperation = "source-over";
     maskCtx.fillStyle = brushColor;
     maskCtx.beginPath();
-    maskCtx.arc(x, y, brushSize, 0, Math.PI * 2);
+    maskCtx.arc(x, y, actualBrushSize, 0, Math.PI * 2);
     maskCtx.fill();
     maskCtx.restore();
     lastMaskPointRef.current = { x, y };
@@ -572,12 +578,14 @@ export default function VtonModal({
     // Append new point
     strokePathRef.current.push({ x, y });
 
+    const actualBrushSize = currentStrokeBrushSizeRef.current || brushSize;
+
     // Display: restore snapshot → replay full path at 100%
     const displayCtx = displayCanvas.getContext("2d");
     if (strokeStartDisplayRef.current) {
       displayCtx.putImageData(strokeStartDisplayRef.current, 0, 0);
     }
-    replayStrokePath(displayCtx, 1);
+    replayStrokePath(displayCtx, 1, actualBrushSize);
 
     // Mask: incremental segment at full opacity
     const maskCtx = maskCanvas.getContext("2d");
@@ -585,7 +593,7 @@ export default function VtonModal({
       maskCtx.save();
       maskCtx.globalAlpha = 1;
       maskCtx.globalCompositeOperation = "source-over";
-      maskCtx.lineWidth = brushSize * 2;
+      maskCtx.lineWidth = actualBrushSize * 2;
       maskCtx.lineCap = "round";
       maskCtx.lineJoin = "round";
       maskCtx.strokeStyle = brushColor;
@@ -1315,6 +1323,22 @@ function StepMaskEditor({
   onUndo,
   onReset,
 }) {
+  const customCursorRef = useRef(null);
+
+  const handlePointerMove = (e) => {
+    if (customCursorRef.current) {
+      customCursorRef.current.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0) translate(-50%, -50%)`;
+    }
+  };
+
+  const handlePointerEnter = () => {
+    if (customCursorRef.current) customCursorRef.current.style.opacity = 1;
+  };
+
+  const handlePointerLeave = () => {
+    if (customCursorRef.current) customCursorRef.current.style.opacity = 0;
+  };
+
   return (
     <div className={styles.editorRoot}>
       {/* ── Brush Toolbar ── */}
@@ -1399,7 +1423,12 @@ function StepMaskEditor({
       </div>
 
       {/* ── Photo + Overlay Canvas ── */}
-      <div className={styles.overlayEditorWrapper}>
+      <div 
+        className={styles.overlayEditorWrapper}
+        onPointerMove={handlePointerMove}
+        onPointerEnter={handlePointerEnter}
+        onPointerLeave={handlePointerLeave}
+      >
         {/* The actual person photo as background */}
         <img
           src={personPreviewUrl}
@@ -1412,11 +1441,7 @@ function StepMaskEditor({
           id="vton-mask-canvas"
           ref={canvasRef}
           className={styles.overlayCanvas}
-          style={{
-            cursor: `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(
-              `<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize * 2}" height="${brushSize * 2}" viewBox="0 0 ${brushSize * 2} ${brushSize * 2}"><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="white" stroke-width="2"/><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="black" stroke-width="1"/></svg>`
-            )}") ${brushSize} ${brushSize}, crosshair`,
-          }}
+          style={{ cursor: 'none' }}
           onMouseDown={onCanvasMouseDown}
           onMouseMove={onCanvasMouseMove}
           onMouseUp={onCanvasMouseUp}
@@ -1446,6 +1471,26 @@ function StepMaskEditor({
             />
           </div>
         )}
+
+        {/* Custom cursor element */}
+        <div
+          ref={customCursorRef}
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: brushSize * 2,
+            height: brushSize * 2,
+            borderRadius: "50%",
+            border: "2px solid white",
+            boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.5)",
+            pointerEvents: "none",
+            opacity: 0,
+            zIndex: 9999,
+            transition: "opacity 0.15s ease",
+            transform: "translate(-50%, -50%)",
+          }}
+        />
       </div>
 
       <p className={styles.editorHint}>
