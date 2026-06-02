@@ -94,6 +94,18 @@ export const forgotPassword = async (email) => {
   }
 };
 
+export const resendVerificationEmail = async (email) => {
+  try {
+    const response = await apiClient.post("/auth/resend-verification", { email });
+    return { status: true, message: response?.data?.message || "Verification email sent." };
+  } catch (error) {
+    return {
+      status: false,
+      message: getErrorMessage(error, "Failed to resend verification email."),
+    };
+  }
+};
+
 /**
  * Maps user roles to their respective dashboard or landing paths.
  * @param {string} role - The user role string from the backend.

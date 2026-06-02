@@ -5,6 +5,7 @@ import { GoogleIcon } from "../common/SocialIcons";
 import { registerUser } from "../../utils/authFunctions";
 import { useAuth } from "../../context/AuthContext";
 import ContentModal from "../common/ContentModal";
+import VerificationModal from "./VerificationModal";
 
 /* ─────────────────────────────────────────────
    RegistrationForm – Embeddable signup form
@@ -23,6 +24,8 @@ export default function RegistrationForm({ styles, onSwitchToLogin }) {
     confirmPassword: "",
   });
   const [error, setError] = useState("");
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
   const [loading, setLoading] = useState(false);
   
   const [showTerms, setShowTerms] = useState(false);
@@ -56,21 +59,17 @@ export default function RegistrationForm({ styles, onSwitchToLogin }) {
     );
 
     if (result.status) {
-      login(
-        result.data.user,
-        result.data.accessToken,
-        result.data.refreshToken,
-        true,
-      );
-
-      const role = result.data.user?.role;
-      if (role === "vendor") {
-        navigate("/vendor");
-      } else if (role === "admin") {
-        navigate("/admin");
-      } else {
-        navigate("/");
-      }
+      localStorage.setItem(`lastVerificationSent_${formData.email}`, Date.now().toString());
+      setRegisteredEmail(formData.email);
+      setShowVerificationModal(true);
+      setFormData({
+        firstName: "",
+        lastName: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+      });
+      // We don't login immediately because email verification is required.
     } else {
       setError(result.message);
     }
@@ -329,6 +328,16 @@ export default function RegistrationForm({ styles, onSwitchToLogin }) {
             <p>For questions regarding these terms, please contact us at <a href="mailto:ainai.egy@outlook.com">ainai.egy@outlook.com</a>.</p>
           </div>
         </ContentModal>
+      )}
+
+      {showVerificationModal && (
+        <VerificationModal 
+          email={registeredEmail} 
+          onClose={() => {
+            setShowVerificationModal(false);
+            onSwitchToLogin();
+          }} 
+        />
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import { GoogleIcon } from "../common/SocialIcons";
 import { forgotPassword, loginUser, getRedirectPathByRole } from "../../utils/authFunctions";
 import { useAuth } from "../../context/AuthContext";
 import { useLocation } from "react-router-dom";
+import VerificationModal from "./VerificationModal";
 
 /* ─────────────────────────────────────────────
    LoginForm – Embeddable login form component
@@ -33,6 +34,8 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
   const [loading, setLoading] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
@@ -49,7 +52,11 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
       result = await loginUser(formData.email, formData.password);
     } catch (err) {
       const status = err?.response?.status;
-      if (status === 401 || status === 400 || status === 404) {
+      const message = err?.response?.data?.message;
+      if (status === 401 && message === "Please verify your email before logging in.") {
+        setUnverifiedEmail(formData.email);
+        setShowVerificationModal(true);
+      } else if (status === 401 || status === 400 || status === 404) {
         setErrorMessage("Invalid email or password. Please try again.");
       } else {
         setErrorMessage("Something went wrong. Please try again.");
@@ -240,6 +247,14 @@ export default function LoginForm({ styles, onSwitchToSignup }) {
           Sign up
         </button>
       </p>
+
+      {showVerificationModal && (
+        <VerificationModal 
+          email={unverifiedEmail} 
+          autoSend={true}
+          onClose={() => setShowVerificationModal(false)} 
+        />
+      )}
     </div>
   );
 }
