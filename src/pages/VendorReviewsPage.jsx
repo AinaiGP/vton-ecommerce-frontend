@@ -52,7 +52,7 @@ export default function VendorReviewsPage() {
       const data = res.data?.data || [];
       setReviews(data);
       if (data.length > 0) {
-        const avg = data.reduce((s, r) => s + (r.rating || 0), 0) / data.length;
+        const avg = data.reduce((s, r) => s + (parseFloat(r.rating) || 0), 0) / data.length;
         setProductRatings(prev => ({ ...prev, [productId]: avg }));
       }
     } catch (err) {
@@ -62,15 +62,21 @@ export default function VendorReviewsPage() {
     }
   };
 
-  const totalRating = reviews.length > 0 ? reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length : 0;
+  const totalRating = reviews.length > 0 ? reviews.reduce((s, r) => s + (parseFloat(r.rating) || 0), 0) / reviews.length : 0;
+
+  const matchesRating = (actualRaw, target) => {
+    const actual = parseFloat(actualRaw);
+    if (target === 5) return actual >= 4.5;
+    return actual >= target - 0.5 && actual < target + 0.5;
+  };
 
   const filtered = reviews.filter(r =>
-    filter === 0 ? true : r.rating === filter,
+    filter === 0 ? true : matchesRating(r.rating, filter),
   );
 
-  const countFor = (n) => reviews.filter(r => r.rating === n).length;
+  const countFor = (n) => reviews.filter(r => matchesRating(r.rating, n)).length;
 
-  const dist = [5,4,3,2,1].map(r => ({ stars: r, count: reviews.filter(v => v.rating === r).length }));
+  const dist = [5,4,3,2,1].map(r => ({ stars: r, count: countFor(r) }));
 
   const filteredProducts = products.filter(prod => {
     if (!prod.name.toLowerCase().includes(search.toLowerCase())) return false;
