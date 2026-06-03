@@ -21,6 +21,8 @@ export default function GoogleOnboardingPage() {
     phoneNumber: "",
     street: "",
     city: "",
+    addressLabel: "Home",
+    customAddressLabel: "",
   });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,6 +58,9 @@ export default function GoogleOnboardingPage() {
 
     if (formData.street.trim()) {
       payload.shippingAddress = {
+        label: formData.addressLabel === "Other" 
+          ? (formData.customAddressLabel.trim() || "Other") 
+          : formData.addressLabel.trim(),
         street: formData.street.trim(),
         city: formData.city.trim(),
       };
@@ -214,19 +219,54 @@ export default function GoogleOnboardingPage() {
           </div>
 
           {formData.street.trim() && (
-            <div className={styles.field}>
-              <label htmlFor="google-city" className={styles.label}>
-                City
-              </label>
-              <input
-                id="google-city"
-                name="city"
-                value={formData.city}
-                onChange={handleChange}
-                className={styles.inputNoIcon}
-                placeholder="Cairo"
-              />
-            </div>
+            <>
+              <div className={styles.field}>
+                <label htmlFor="google-address-label" className={styles.label}>
+                  Address Label
+                </label>
+                <select
+                  id="google-address-label"
+                  name="addressLabel"
+                  value={formData.addressLabel}
+                  onChange={handleChange}
+                  className={styles.select}
+                >
+                  <option value="Home">Home</option>
+                  <option value="Work">Work</option>
+                  <option value="Other">Other...</option>
+                </select>
+              </div>
+
+              {formData.addressLabel === "Other" && (
+                <div className={styles.field}>
+                  <label htmlFor="google-custom-label" className={styles.label}>
+                    Custom Label Name
+                  </label>
+                  <input
+                    id="google-custom-label"
+                    name="customAddressLabel"
+                    value={formData.customAddressLabel}
+                    onChange={handleChange}
+                    className={styles.inputNoIcon}
+                    placeholder="e.g. Gym, Parent's House"
+                  />
+                </div>
+              )}
+
+              <div className={styles.field}>
+                <label htmlFor="google-city" className={styles.label}>
+                  City
+                </label>
+                <input
+                  id="google-city"
+                  name="city"
+                  value={formData.city}
+                  onChange={handleChange}
+                  className={styles.inputNoIcon}
+                  placeholder="Cairo"
+                />
+              </div>
+            </>
           )}
 
           {!isNameValid && (
