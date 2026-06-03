@@ -659,7 +659,7 @@ export default function ProductPage() {
                 ))}
               </div>
 
-              <button 
+              <button 
                 className={`${styles.scrollBtn} ${styles.scrollBtnRight}`} 
                 onClick={() => scrollRecommendations("right")}
                 aria-label="Scroll Right"
@@ -671,72 +671,78 @@ export default function ProductPage() {
         )}
 
         {/* Reviews Section */}
-        <div className={styles.detailsSection} style={{ marginTop: 40 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <h4 className={styles.detailsTitle} style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
-              <MessageSquare size={20} /> Customer Reviews
-            </h4>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <section className={styles.reviewsSectionContainer}>
+          <div className={styles.reviewsSectionHead}>
+            <h2 className={styles.detailsTitle} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <MessageSquare size={24} /> Customer Reviews
+            </h2>
+            <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
               {canReview && (
                 <button
                   onClick={() => setReviewModalOpen(true)}
                   style={{
-                    padding: "6px 14px",
-                    borderRadius: 6,
+                    padding: "8px 18px",
+                    borderRadius: 8,
                     border: "1.5px solid var(--gold)",
                     background: "white",
                     color: "var(--gold-dark)",
-                    fontSize: 13,
-                    fontWeight: 600,
+                    fontSize: 14,
+                    fontWeight: 700,
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
-                    gap: 6
+                    gap: 8,
+                    transition: "all 0.2s"
                   }}
                 >
-                  <Star size={14} /> Write a Review
+                  <Star size={16} /> Write a Review
                 </button>
               )}
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <StarRow value={Math.round(averageRating || 0)} size={18} />
-                <strong>{(averageRating || 0).toFixed(1)}</strong>
-                <span style={{ color: "var(--charcoal-muted)", fontSize: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <StarRow value={Math.round(averageRating || 0)} size={20} />
+                <strong style={{ fontSize: 20 }}>{(averageRating || 0).toFixed(1)}</strong>
+                <span style={{ color: "var(--charcoal-muted)", fontSize: 15, fontWeight: 500 }}>
                   ({reviewsTotal} reviews)
                 </span>
               </div>
             </div>
           </div>
           {reviews.length === 0 ? (
-            <div style={{ padding: "30px 0", textAlign: "center", color: "var(--charcoal-muted)" }}>
-              <MessageSquare size={24} style={{ marginBottom: 12, opacity: 0.5 }} />
-              <p>No reviews yet.</p>
+            <div style={{ padding: "60px 0", textAlign: "center", color: "var(--charcoal-muted)" }}>
+              <MessageSquare size={32} style={{ marginBottom: 16, opacity: 0.3 }} />
+              <h3 style={{ margin: "0 0 8px 0", fontSize: 18, color: "var(--charcoal)" }}>No reviews yet</h3>
+              <p style={{ margin: 0, fontSize: 14 }}>Be the first to share your thoughts on this product!</p>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div className={styles.reviewsGrid}>
               {reviews.map((review) => (
-                <div key={review.id} style={{ padding: 16, background: "var(--ivory)", borderRadius: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      {review.avatar ? (
-                        <img src={review.avatar} alt={review.author} style={{ width: 40, height: 40, borderRadius: "50%" }} />
-                      ) : (
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--charcoal)", color: "var(--ivory)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold" }}>
-                          {(review.author || "C")[0]}
-                        </div>
-                      )}
-                      <div>
-                        <p style={{ margin: 0, fontWeight: "600", color: "var(--charcoal)" }}>{review.author}</p>
-                        <p style={{ margin: 0, fontSize: 12, color: "var(--charcoal-muted)" }}>{review.date}</p>
+                <div key={review.id} className={styles.reviewCard}>
+                  <div className={styles.reviewMeta}>
+                    {review.avatar ? (
+                      <img
+                        src={review.avatar}
+                        alt={review.author}
+                        className={styles.reviewAvatar}
+                      />
+                    ) : (
+                      <div className={styles.reviewAvatarFallback}>
+                        {review.author[0]}
                       </div>
+                    )}
+                    <div>
+                      <p className={styles.reviewAuthor}>{review.author}</p>
+                      <p className={styles.reviewDate}>{review.date}</p>
                     </div>
-                    <StarRow value={review.rating} />
+                    <div className={styles.reviewStars}>
+                      <StarRow value={review.rating} />
+                    </div>
                   </div>
-                  <p style={{ margin: 0, color: "var(--charcoal-muted)", lineHeight: 1.5, fontSize: 14 }}>{review.comment}</p>
+                  <p className={styles.reviewComment}>{review.comment}</p>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </section>
       </main>
 
       <Footer />

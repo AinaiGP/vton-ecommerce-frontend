@@ -221,6 +221,10 @@ function StepVerify({ email, onNext, onResend }) {
           {resendCooldown > 0 ? `Resend in 0:${String(resendCooldown).padStart(2, '0')}` : 'Click to resend'}
         </button>
       </p>
+
+      <p className={styles.switchPrompt} style={{ marginTop: '0.5rem' }}>
+        <Link to="/auth" className={styles.switchLink}>Return to Login</Link>
+      </p>
     </div>
   );
 }
