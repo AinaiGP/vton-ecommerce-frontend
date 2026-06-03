@@ -20,6 +20,7 @@ import Footer from "../components/common/Footer";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import VtonModal from "../components/vton/VtonModal";
 import ProductCard from "../components/common/ProductCard";
+import ReviewProductModal from "../components/modal/ReviewProductModal";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import apiClient from "../utils/apiClient";
@@ -83,6 +84,8 @@ export default function ProductPage() {
   const [reviews, setReviews] = useState([]);
   const [reviewsTotal, setReviewsTotal] = useState(0);
   const [averageRating, setAverageRating] = useState(null);
+  const [canReview, setCanReview] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
 
   const [recommendations, setRecommendations] = useState([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
@@ -165,8 +168,15 @@ export default function ProductPage() {
         .get("/customers/wishlist?limit=100")
         .then((res) => setWishlistItems(res.data.data.map((w) => w.variantId)))
         .catch(console.error);
+        
+      if (id) {
+        apiClient
+          .get(`/products/${id}/can-review`)
+          .then((res) => setCanReview(res.data.canReview))
+          .catch(console.error);
+      }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, id, retryKey]);
 
   const sortedImages = useMemo(() => {
     if (!product?.images?.length) return [];
@@ -666,12 +676,34 @@ export default function ProductPage() {
             <h4 className={styles.detailsTitle} style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
               <MessageSquare size={20} /> Customer Reviews
             </h4>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <StarRow value={Math.round(averageRating || 0)} size={18} />
-              <strong>{(averageRating || 0).toFixed(1)}</strong>
-              <span style={{ color: "var(--charcoal-muted)", fontSize: 14 }}>
-                ({reviewsTotal} reviews)
-              </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              {canReview && (
+                <button
+                  onClick={() => setReviewModalOpen(true)}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: 6,
+                    border: "1.5px solid var(--gold)",
+                    background: "white",
+                    color: "var(--gold-dark)",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}
+                >
+                  <Star size={14} /> Write a Review
+                </button>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <StarRow value={Math.round(averageRating || 0)} size={18} />
+                <strong>{(averageRating || 0).toFixed(1)}</strong>
+                <span style={{ color: "var(--charcoal-muted)", fontSize: 14 }}>
+                  ({reviewsTotal} reviews)
+                </span>
+              </div>
             </div>
           </div>
           {reviews.length === 0 ? (
@@ -716,6 +748,15 @@ export default function ProductPage() {
         clothImageUrl={clothImageUrl}
         clothType={product?.category?.bodyPart || 'overall'}
         productId={product?.id || null}
+      />
+
+      <ReviewProductModal
+        isOpen={reviewModalOpen}
+        onClose={() => setReviewModalOpen(false)}
+        productId={product?.id}
+        onSuccess={() => {
+          setRetryKey((k) => k + 1);
+        }}
       />
     </div>
   );

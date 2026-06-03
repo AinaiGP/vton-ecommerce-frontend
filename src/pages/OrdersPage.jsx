@@ -13,9 +13,11 @@ import {
   X,
   Send,
   Eye,
+  Star,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
+import ReviewProductModal from "../components/modal/ReviewProductModal";
 import styles from "../styles/OrdersPage.module.css";
 import t from "../styles/CustomerTickets.module.css"; // reuse ticket modal styles
 import apiClient from "../utils/apiClient";
@@ -87,6 +89,7 @@ function mapOrder(o) {
 
   const items = (o.items || []).map((item) => ({
     id: item.id,
+    productId: item.productId,
     name: item.productName,
     qty: item.quantity,
     size: item.variantSize || "—",
@@ -522,6 +525,9 @@ export default function OrdersPage() {
   const [returnModal, setReturnModal] = useState(null); // order object
   const [returnLoading, setReturnLoading] = useState(false);
   const [returnError, setReturnError] = useState(null);
+
+  const [reviewProductModal, setReviewProductModal] = useState(null);
+
   const [toasts, setToasts] = useState([]);
 
   /* ── Fetch orders on mount ── */
@@ -996,6 +1002,33 @@ export default function OrdersPage() {
                                     </button>
                                   </div>
                                 )}
+
+                                {((order.rawStatus === 'completed' || order.rawStatus === 'returned' || item.fulfillmentStatus === 'delivered') && item.fulfillmentStatus !== 'canceled') && (
+                                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed #e5e7eb", display: "flex", justifyContent: "flex-end" }}>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setReviewProductModal(item.productId);
+                                      }}
+                                      style={{
+                                        padding: "8px 16px",
+                                        borderRadius: 8,
+                                        border: "1.5px solid var(--gold)",
+                                        background: "white",
+                                        color: "var(--gold-dark)",
+                                        fontSize: 13,
+                                        fontWeight: 600,
+                                        cursor: "pointer",
+                                        transition: "all 0.15s"
+                                      }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.background = "var(--gold)"; e.currentTarget.style.color = "white"; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.background = "white"; e.currentTarget.style.color = "var(--gold-dark)"; }}
+                                    >
+                                      <Star size={14} style={{ verticalAlign: "middle", marginRight: 4 }} />
+                                      Leave Review
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1047,6 +1080,15 @@ export default function OrdersPage() {
           error={returnError}
         />
       )}
+      <ReviewProductModal
+        isOpen={!!reviewProductModal}
+        onClose={() => setReviewProductModal(null)}
+        productId={reviewProductModal}
+        onSuccess={() => {
+          // Could show a toast here, or simply do nothing as modal closes
+          console.log("Review submitted!");
+        }}
+      />
 
       <Footer />
     </div>

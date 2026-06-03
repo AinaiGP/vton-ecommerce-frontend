@@ -14,6 +14,8 @@ import {
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import ProductCard from "../components/common/ProductCard";
+import ReviewVendorModal from "../components/modal/ReviewVendorModal";
+import { useAuth } from "../context/AuthContext";
 import styles from "../styles/VendorStorefrontPage.module.css";
 import apiClient from "../utils/apiClient";
 
@@ -34,17 +36,20 @@ function StarRow({ value, size = 14 }) {
 
 export default function VendorStorefrontPage() {
   const { id } = useParams();
+  const { isAuthenticated } = useAuth();
   const [activeCategory, setActiveCategory] = useState("All");
   const [cartAdded, setCartAdded] = useState({});
   const [store, setStore] = useState(null);
   const [products, setProducts] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [canReview, setCanReview] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchStoreData();
-  }, [id]);
+  }, [id, isAuthenticated]);
 
   const fetchStoreData = async () => {
     setLoading(true);
@@ -82,6 +87,15 @@ export default function VendorStorefrontPage() {
           comment: r.comment || "",
         }))
       );
+
+      if (isAuthenticated) {
+        try {
+          const canReviewRes = await apiClient.get(`/vendors/${id}/can-review`);
+          setCanReview(canReviewRes.data.canReview);
+        } catch (e) {
+          console.error("Failed to fetch vendor review eligibility:", e);
+        }
+      }
     } catch (err) {
       console.error("Failed to fetch store data", err);
       setError("Failed to load storefront.");
@@ -260,12 +274,34 @@ export default function VendorStorefrontPage() {
                 <h2 className={styles.sectionTitle}>
                   <MessageSquare size={20} /> Customer Reviews
                 </h2>
-                <div className={styles.reviewSummary}>
-                  <StarRow value={Math.round(storeRating)} size={18} />
-                  <strong>{storeRating.toFixed(1)}</strong>
-                  <span className={styles.reviewCount}>
-                    ({reviewCount} reviews)
-                  </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  {canReview && (
+                    <button
+                      onClick={() => setReviewModalOpen(true)}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: 6,
+                        border: "1.5px solid var(--gold)",
+                        background: "white",
+                        color: "var(--gold-dark)",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6
+                      }}
+                    >
+                      <Star size={14} /> Rate Vendor
+                    </button>
+                  )}
+                  <div className={styles.reviewSummary}>
+                    <StarRow value={Math.round(storeRating)} size={18} />
+                    <strong>{storeRating.toFixed(1)}</strong>
+                    <span className={styles.reviewCount}>
+                      ({reviewCount} reviews)
+                    </span>
+                  </div>
                 </div>
               </div>
               {reviews.length === 0 ? (
@@ -310,6 +346,15 @@ export default function VendorStorefrontPage() {
             </section>
           </>
         )}
+
+        <ReviewVendorModal
+          isOpen={reviewModalOpen}
+          onClose={() => setReviewModalOpen(false)}
+          vendorId={id}
+          onSuccess={() => {
+            fetchStoreData();
+          }}
+        />
       </main>
       <Footer />
     </div>
