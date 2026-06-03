@@ -1,7 +1,7 @@
 import { Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { useEffect, useLayoutEffect, lazy, Suspense } from "react";
 import FloatingChatWidget from "./components/chat/FloatingChatWidget";
-import GoogleOnboardingModal from "./components/auth/GoogleOnboardingModal";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import ProtectedRoute, { CustomerRoute } from "./components/ProtectedRoute";
 import { useAuth } from "./context/AuthContext";
 import { useCart } from "./context/CartContext";
@@ -14,6 +14,7 @@ const CartPage = lazy(() => import("./pages/CartPage"));
 const AuthPage = lazy(() => import("./pages/AuthPage"));
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
 const AuthCallbackPage = lazy(() => import("./pages/AuthCallbackPage"));
+const GoogleOnboardingPage = lazy(() => import("./pages/GoogleOnboardingPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const Profile = lazy(() => import("./pages/Profile"));
 const CustomerProfilePage = lazy(() => import("./pages/CustomerProfilePage"));
@@ -154,10 +155,8 @@ function App() {
   return (
     <>
       <ScrollToTop />
-      {needsOnboarding && location.pathname !== "/onboarding" && (
-        <GoogleOnboardingModal />
-      )}
-      <Suspense fallback={<PageLoader />}>
+      <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "REPLACE_WITH_YOUR_CLIENT_ID"}>
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route
@@ -175,7 +174,7 @@ function App() {
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route
             path="/onboarding"
-            element={<GoogleOnboardingModal isPage={true} />}
+            element={<GoogleOnboardingPage />}
           />
           <Route
             path="/dashboard"
@@ -538,6 +537,7 @@ function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
+      </GoogleOAuthProvider>
       {(!isAuthenticated || userRole === "customer") && !location.pathname.startsWith("/auth") && <FloatingChatWidget />}
     </>
   );

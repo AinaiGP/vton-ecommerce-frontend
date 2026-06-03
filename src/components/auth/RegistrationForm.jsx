@@ -2,8 +2,9 @@ import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GoogleIcon } from "../common/SocialIcons";
-import { registerUser } from "../../utils/authFunctions";
+import { registerUser, googleLoginUser, getRedirectPathByRole } from "../../utils/authFunctions";
 import { useAuth } from "../../context/AuthContext";
+import { useGoogleLogin } from "@react-oauth/google";
 import ContentModal from "../common/ContentModal";
 import VerificationModal from "./VerificationModal";
 
@@ -33,6 +34,60 @@ export default function RegistrationForm({ styles, onSwitchToLogin }) {
 
   const navigate = useNavigate();
   const { login } = useAuth();
+
+  const handleGoogleSuccess = async (tokenResponse) => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await googleLoginUser(tokenResponse.access_token);
+      
+      if (result.isNewUser || result.needsOnboarding) {
+        // Redirect to onboarding page with temporary token
+        navigate("/onboarding", { 
+          state: { 
+            onboardingToken: result.onboardingToken,
+            firstName: result.firstName,
+            lastName: result.lastName
+          } 
+        });
+        setLoading(false);
+        return;
+      }
+      
+      const accessToken = result?.accessToken;
+      if (!accessToken) throw new Error("No token returned");
+      
+      // Decode JWT
+      const base64 = accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const normalized = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+      const payload = JSON.parse(atob(normalized));
+
+      const user = {
+        id: payload?.sub || payload?.id || null,
+        email: payload?.email || null,
+        role: payload?.role || null,
+        isOnboardingComplete: payload?.isOnboardingComplete ?? true,
+        authProvider: payload?.authProvider,
+        firstName: payload?.firstName,
+        lastName: payload?.lastName,
+        brandName: payload?.brandName,
+        vendorId: payload?.vendorId,
+        isSubscribedToNewsletter: payload?.isSubscribedToNewsletter ?? false,
+      };
+
+      login(user, accessToken, result.refreshToken, false);
+      navigate(getRedirectPathByRole(user.role), { replace: true });
+    } catch (err) {
+      setError("Google login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loginWithGoogle = useGoogleLogin({
+    onSuccess: handleGoogleSuccess,
+    onError: () => setError("Google login was cancelled or failed."),
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -253,9 +308,8 @@ export default function RegistrationForm({ styles, onSwitchToLogin }) {
         <button
           type="button"
           className={styles.socialButton}
-          onClick={() => {
-            window.location.href = `${import.meta.env.VITE_API_URL}/auth/google`;
-          }}
+          onClick={() => loginWithGoogle()}
+          disabled={loading}
         >
           <GoogleIcon />
           <span>Google</span>

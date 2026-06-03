@@ -1,23 +1,34 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import { Phone, User } from "lucide-react";
-import apiClient from "../../utils/apiClient";
-import { useAuth } from "../../context/AuthContext";
-import styles from "../../styles/GoogleOnboardingModal.module.css";
+import { completeGoogleOnboarding } from "../utils/authFunctions";
+import { useAuth } from "../context/AuthContext";
+import styles from "../styles/GoogleOnboardingPage.module.css";
 
-export default function GoogleOnboardingModal({ isPage = false }) {
+export default function GoogleOnboardingPage() {
   const navigate = useNavigate();
-  const { needsOnboarding, completeOnboarding } = useAuth();
+  const location = useLocation();
+  const { login } = useAuth();
+  
+  const onboardingToken = location.state?.onboardingToken;
+  const initialFirstName = location.state?.firstName || "";
+  const initialLastName = location.state?.lastName || "";
+
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
+    firstName: initialFirstName,
+    lastName: initialLastName,
     gender: "",
     phoneNumber: "",
     street: "",
     city: "",
   });
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  if (!onboardingToken) {
+    return <Navigate to="/auth" replace />;
+  }
 
   const isNameValid =
     formData.firstName.trim().length > 0 && formData.lastName.trim().length > 0;
@@ -25,10 +36,12 @@ export default function GoogleOnboardingModal({ isPage = false }) {
   const handleChange = (event) => {
     const { name, value } = event.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setError("");
   };
 
   const buildPayload = () => {
     const payload = {
+      onboardingToken,
       firstName: formData.firstName.trim(),
       lastName: formData.lastName.trim(),
     };
@@ -68,19 +81,33 @@ export default function GoogleOnboardingModal({ isPage = false }) {
     setIsSubmitting(true);
 
     try {
-      const response = await apiClient.post(
-        "/customers/onboarding",
-        buildPayload(),
-      );
-      const updatedUser = response?.data?.user ?? response?.data;
-      if (updatedUser) {
-        completeOnboarding(updatedUser);
-        if (isPage) {
-          navigate("/", { replace: true });
-        }
-      }
-    } catch (requestError) {
-      const backendMessage = requestError?.response?.data?.message;
+      const result = await completeGoogleOnboarding(buildPayload());
+      
+      const accessToken = result?.accessToken;
+      if (!accessToken) throw new Error("No token returned");
+      
+      // Decode JWT
+      const base64 = accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const normalized = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+      const payload = JSON.parse(atob(normalized));
+
+      const user = {
+        id: payload?.sub || payload?.id || null,
+        email: payload?.email || null,
+        role: payload?.role || null,
+        isOnboardingComplete: payload?.isOnboardingComplete ?? true,
+        authProvider: payload?.authProvider,
+        firstName: payload?.firstName,
+        lastName: payload?.lastName,
+        brandName: payload?.brandName,
+        vendorId: payload?.vendorId,
+        isSubscribedToNewsletter: payload?.isSubscribedToNewsletter ?? false,
+      };
+
+      login(user, accessToken, result.refreshToken, false);
+      navigate("/", { replace: true });
+    } catch (err) {
+      const backendMessage = err?.response?.data?.message;
       const message = Array.isArray(backendMessage)
         ? backendMessage.join(", ")
         : backendMessage || "Unable to complete onboarding.";
@@ -90,17 +117,9 @@ export default function GoogleOnboardingModal({ isPage = false }) {
     }
   };
 
-  if (!isPage && !needsOnboarding) {
-    return null;
-  }
-
   return (
-    <div
-      className={isPage ? styles.pageShell : styles.overlay}
-      role={isPage ? undefined : "dialog"}
-      aria-modal={isPage ? undefined : "true"}
-    >
-      <div className={isPage ? styles.pageCard : styles.modalCard}>
+    <div className={styles.pageShell}>
+      <div className={styles.pageCard}>
         <h2 className={styles.title}>Complete your profile</h2>
         <p className={styles.subtitle}>
           Just a few details to personalize AINAI.

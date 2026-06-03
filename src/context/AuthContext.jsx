@@ -51,8 +51,9 @@ export const AuthProvider = ({ children }) => {
     // We use a custom event or let the App component handle it via isAuthenticated change
   };
 
-  const completeOnboarding = (updatedUser) => {
+  const completeOnboarding = () => {
     const rememberMe = getTokenStorageType() === "local";
+    const updatedUser = { ...user, isOnboardingComplete: true };
     setUser(updatedUser);
     setUserData(updatedUser, rememberMe);
     setNeedsOnboarding(false);

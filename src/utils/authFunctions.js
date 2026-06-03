@@ -46,6 +46,24 @@ export const loginUser = async (email, password) => {
   }
 };
 
+export const googleLoginUser = async (credential) => {
+  try {
+    const response = await apiClient.post("/auth/google/login", { credential });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const completeGoogleOnboarding = async (payload) => {
+  try {
+    const response = await apiClient.post("/auth/google/complete-onboarding", payload);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const logoutUser = async () => {
   try {
     await apiClient.post("/auth/logout");
