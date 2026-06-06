@@ -12,11 +12,10 @@ import UpgradeModal from "../modal/UpgradeModal";
 // ---------------------------------------------------------------------------
 
 /**
- * Renders a single line of inline markdown into React nodes.
- * Handles: **bold** → <strong>, everything else as plain text.
- * The caller strips leading bullet characters before passing the line in.
+ * Returns inline markdown nodes (bold, plain text) without a wrapper element.
+ * Used when the caller supplies its own wrapper (e.g. a heading <p>).
  */
-function renderInline(line, key) {
+function renderInlineNodes(line) {
   const BOLD_RE = /\*\*([^*]+)\*\*/g;
   const parts = [];
   let last = 0;
@@ -35,21 +34,60 @@ function renderInline(line, key) {
     parts.push(<span key={idx++}>{line.slice(last)}</span>);
   }
 
-  return <p key={key} className={styles.messageText}>{parts}</p>;
+  return parts;
+}
+
+/**
+ * Renders a single line of inline markdown into React nodes.
+ * Handles: **bold** → <strong>, everything else as plain text.
+ * The caller strips leading bullet characters before passing the line in.
+ */
+function renderInline(line, key) {
+  return <p key={key} className={styles.messageText}>{renderInlineNodes(line)}</p>;
 }
 
 /**
  * Renders a text segment, handling line-by-line markdown:
- *  - Lines starting with `* ` or `- ` have the bullet stripped
+ *  - Lines starting with `# `, `## `, `### ` become styled headings
+ *  - Lines starting with `* `, `- `, `• `, or `1. ` have bullet/number stripped
  *  - **bold** is rendered as <strong>
+ *  - Lines that are just `---` are rendered as <hr>
  *  - Blank lines become spacing
  */
 function renderTextSegment(text, segKey) {
   const lines = text.split("\n");
   return lines.map((rawLine, i) => {
-    // Strip leading bullet: `* `, `- `, or `• `
-    const line = rawLine.replace(/^[\*\-•]\s+/, "").trimEnd();
-    if (!line) return null;
+    const trimmed = rawLine.trimEnd();
+    if (!trimmed) return null;
+
+    // Heading markers → styled heading
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const headingText = headingMatch[2];
+      const className =
+        level === 1
+          ? styles.chatHeading1
+          : level === 2
+          ? styles.chatHeading2
+          : styles.chatHeading3;
+      return (
+        <p key={`${segKey}-${i}`} className={className}>
+          {renderInlineNodes(headingText)}
+        </p>
+      );
+    }
+
+    // Horizontal rule
+    if (/^---+$/.test(trimmed)) {
+      return <hr key={`${segKey}-${i}`} className={styles.chatHr} />;
+    }
+
+    // Strip leading bullet or numbered list marker
+    const line = trimmed
+      .replace(/^\d+\.\s+/, "")   // numbered list: "1. "
+      .replace(/^[*\-•]\s+/, ""); // bullet: "- ", "* ", "• "
+
     return renderInline(line, `${segKey}-${i}`);
   });
 }
