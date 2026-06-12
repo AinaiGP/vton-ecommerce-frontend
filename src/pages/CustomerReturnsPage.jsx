@@ -1,19 +1,23 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
-  Plus, Search, Package, ChevronRight, X, Paperclip,
-  Send, AlertTriangle, CheckCircle, Clock, ImageIcon, FileText, Eye
+  Plus,
+  Search,
+  Package,
+  ChevronRight,
+  X,
+  Paperclip,
+  Send,
+  Clock,
+  ImageIcon,
+  FileText,
+  CheckCircle,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import styles from "../styles/CustomerTickets.module.css";
+import apiClient, { multipartClient } from "../utils/apiClient";
 
-/* ─── Seed orders (for select) ── */
-const MY_ORDERS = [
-  { id: "#ORD-2841", items: ["Silk Evening Gown", "Cashmere Wrap Dress"], date: "Apr 18, 2026" },
-  { id: "#ORD-2839", items: ["Embroidered Kaftan"], date: "Apr 14, 2026" },
-  { id: "#ORD-2836", items: ["Velvet Abaya"], date: "Apr 10, 2026" },
-];
-
+/* ─── Return reasons (free text options matching ReturnRequestDto expectation) ─── */
 const RETURN_REASONS = [
   "Wrong size / doesn't fit",
   "Received wrong item",
@@ -24,119 +28,389 @@ const RETURN_REASONS = [
   "Other",
 ];
 
-const SEED_RETURNS = [
-  {
-    id: "RET-001", orderId: "#ORD-2836", product: "Velvet Abaya",
-    reason: "Wrong size / doesn't fit", status: "Pending",
-    created: "Apr 20, 2026", updated: "2 hours ago",
-    vendorName: "Urban Threads",
-    messages: [
-      { from: "customer", text: "Hi, I received size L but I ordered M. Please initiate a refund or exchange.", time: "Apr 20, 10:00 AM", attachment: null },
-      { from: "vendor", text: "Hi! We're sorry about that. Could you please provide a photo showing the size label? This will help us process this quickly.", time: "Apr 20, 11:30 AM", attachment: null },
-    ],
-  },
-  {
-    id: "RET-002", orderId: "#ORD-2839", product: "Embroidered Kaftan",
-    reason: "Item damaged or defective", status: "Approved",
-    created: "Apr 15, 2026", updated: "3 days ago",
-    vendorName: "Urban Threads",
-    messages: [
-      { from: "customer", text: "The kaftan arrived with a visible tear near the sleeve. I've attached photos.", time: "Apr 15, 09:00 AM", attachment: { name: "damage_photo.jpg", type: "image" } },
-      { from: "vendor", text: "We sincerely apologize! We can confirm a full refund of EGP 450. It will be processed within 3–5 business days.", time: "Apr 15, 01:00 PM", attachment: null },
-    ],
-  },
-];
-
+/* ─── Return status uses exact ReturnStatus enum values from backend ─── */
+// Returns are stored as support tickets with type=RETURN_REQUEST
+// The ticket status maps to return progress
 const STATUS_CFG = {
-  "Pending":              { color: "#f59e0b", bg: "#fef3c7" },
-  "Vendor Replied":       { color: "#3b82f6", bg: "#eff6ff" },
-  "Approved":             { color: "#16a34a", bg: "#dcfce7" },
-  "Rejected":             { color: "#ef4444", bg: "#fee2e2" },
-  "Escalated to Admin":   { color: "#7c3aed", bg: "#f5f3ff" },
-  "Closed":               { color: "#94a3b8", bg: "#f1f5f9" },
+  // Ticket statuses (returns go through the ticket system)
+  OPEN:               { color: "#f59e0b", bg: "#fef3c7", label: "Pending" },
+  IN_PROGRESS:        { color: "#3b82f6", bg: "#eff6ff", label: "In Review" },
+  AWAITING_RESPONSE:  { color: "#8b5cf6", bg: "#f5f3ff", label: "Vendor Replied" },
+  ESCALATED:          { color: "#7c3aed", bg: "#f5f3ff", label: "Escalated to Admin" },
+  RESOLVED:           { color: "#16a34a", bg: "#dcfce7", label: "Approved" },
+  CLOSED:             { color: "#94a3b8", bg: "#f1f5f9", label: "Closed" },
+  CANCELED:           { color: "#ef4444", bg: "#fee2e2", label: "Rejected" },
 };
 
+function getStatusLabel(status) {
+  return STATUS_CFG[status]?.label || status;
+}
+
+function extractLegacyAttachment(content) {
+  if (!content) return { text: "", urls: [] };
+  const match = content.match(/\(attachment:\s*(https?:\/\/[^\s)]+)\)/i);
+  if (!match) return { text: content, urls: [] };
+  const cleaned = content.replace(match[0], "").trim();
+  return { text: cleaned || "Attachment", urls: [match[1]] };
+}
+
+/* ─── Map a RETURN_REQUEST ticket to the shape the JSX expects ─── */
+function mapReturnTicket(ticket) {
+  const messages = (ticket.messages || [])
+    .filter((m) => !m.isSystemMessage)
+    .map((m) => {
+      const legacy = extractLegacyAttachment(m.content);
+      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
+        Boolean,
+      );
+      const attachments = attachmentUrls.map((url) => ({
+        url,
+        name: url.split("/").pop() || "Attachment",
+        isImage: isImageUrl(url),
+      }));
+
+      return {
+        from:
+          String(m.senderRole || "").toLowerCase() === "customer"
+            ? "customer"
+            : "vendor",
+        text: legacy.text || m.content,
+        time: new Date(m.createdAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        createdAt: m.createdAt,
+        senderRole: m.senderRole,
+        senderName:
+          m.sender?.profile?.companyName ||
+          m.sender?.profile?.fullName ||
+          m.sender?.email ||
+          "Vendor",
+        senderAvatar: m.sender?.profile?.avatarUrl,
+        attachments,
+        isSystemMessage: m.isSystemMessage,
+      };
+    })
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+  return {
+    id: ticket.id,
+    product: ticket.orderItem?.productVariant?.product?.name || "Product",
+    orderId: ticket.order?.id,
+    vendorName: ticket.counterparty?.profile?.companyName || "Vendor",
+    reason: ticket.subject,
+    status: ticket.status,
+    created: new Date(ticket.createdAt).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+    messages,
+    supportInvited: ticket.supportInvited,
+  };
+}
+
+/* ─── Map an order to the selector shape ─── */
+function mapOrderForSelector(o) {
+  return {
+    id:    o.id,
+    number: o.orderNumber || o.id,
+    date:  new Date(o.createdAt).toLocaleDateString("en-US", {
+      month: "short", day: "numeric", year: "numeric",
+    }),
+    items: (o.items || []).map((item) => ({
+      id:   item.id,
+      name: item.productName,
+      qty:  item.quantity,
+    })),
+  };
+}
+
+/* ─── Status Badge ─── */
 function StatusBadge({ status }) {
-  const c = STATUS_CFG[status] || { color: "#94a3b8", bg: "#f1f5f9" };
+  const c = STATUS_CFG[status] || { color: "#94a3b8", bg: "#f1f5f9", label: status };
   return (
     <span className={styles.badge} style={{ background: c.bg, color: c.color }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.color, display: "inline-block" }} />
-      {status}
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          background: c.color,
+          display: "inline-block",
+        }}
+      />
+      {c.label}
     </span>
   );
 }
 
-function FileAtt({ att }) {
-  if (!att) return null;
+function isImageUrl(url) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url);
+}
+
+function AttachmentList({ attachments, onImageClick }) {
+  if (!attachments?.length) return null;
   return (
-    <div className={styles.attachment}>
-      {att.type === "image" ? <ImageIcon size={13} /> : <FileText size={13} />}
-      <span>{att.name}</span>
+    <div className={styles.attachmentList}>
+      {attachments.map((att) =>
+        att.isImage ? (
+          <div
+            key={att.url}
+            className={styles.attachmentImageLink}
+            onClick={() => onImageClick(att.url)}
+            style={{ cursor: "zoom-in" }}
+          >
+            <img
+              src={att.url}
+              alt={att.name}
+              className={styles.attachmentImage}
+            />
+          </div>
+        ) : (
+          <a
+            key={att.url}
+            href={att.url}
+            target="_blank"
+            rel="noreferrer"
+            className={styles.attachment}
+          >
+            <FileText size={13} />
+            <span>{att.name}</span>
+          </a>
+        ),
+      )}
     </div>
   );
 }
 
-/* ─── Create Return Modal ── */
-function CreateReturnModal({ onClose, onSubmit }) {
-  const [orderId, setOrderId] = useState(MY_ORDERS[0].id);
-  const [product, setProduct] = useState("");
-  const [reason, setReason]   = useState(RETURN_REASONS[0]);
-  const [desc, setDesc]       = useState("");
-  const [file, setFile]       = useState(null);
-  const fileRef               = useRef(null);
+/* ─── Loading Spinner ─── */
+function LoadingSpinner() {
+  return (
+    <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          border: "3px solid var(--ivory-dark)",
+          borderTop: "3px solid var(--burgundy)",
+          borderRadius: "50%",
+          animation: "spin 0.8s linear infinite",
+        }}
+      />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
 
-  const selectedOrder = MY_ORDERS.find(o => o.id === orderId);
+/* ─── Create Return Modal ─── */
+function CreateReturnModal({ onClose, onSubmit, myOrders }) {
+  const [selectedOrderId, setSelectedOrderId] = useState(myOrders[0]?.id || "");
+  const [selectedItemId, setSelectedItemId] = useState("");
+  const [reason, setReason] = useState(RETURN_REASONS[0]);
+  const [desc, setDesc] = useState("");
+  const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  const selectedOrder = myOrders.find((o) => o.id === selectedOrderId);
+
+  useEffect(() => {
+    if (selectedOrder?.items?.length > 0) {
+      setSelectedItemId(selectedOrder.items[0].id);
+    } else {
+      setSelectedItemId("");
+    }
+  }, [selectedOrderId, selectedOrder]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedItemId || !reason.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit({ orderId: selectedOrderId, itemId: selectedItemId, reason, desc, file });
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Failed to submit return request.";
+      setError(Array.isArray(msg) ? msg.join(", ") : msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className={styles.backdrop} onClick={onClose}>
-      <div className={styles.modal} onClick={e => e.stopPropagation()}>
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHead}>
           <h2 className={styles.modalTitle}>Submit Return Request</h2>
-          <button className={styles.modalClose} onClick={onClose}><X size={17} /></button>
+          <button className={styles.modalClose} onClick={onClose}>
+            <X size={17} />
+          </button>
         </div>
-        <form onSubmit={e => { e.preventDefault(); onSubmit({ orderId, product, reason, desc, file }); }}>
+        <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
             <div className={styles.formGroup}>
               <label className={styles.label}>Select Order *</label>
-              <select className={styles.select} value={orderId} onChange={e => { setOrderId(e.target.value); setProduct(""); }}>
-                {MY_ORDERS.map(o => <option key={o.id} value={o.id}>{o.id} — {o.date}</option>)}
+              <select
+                className={styles.select}
+                value={selectedOrderId}
+                onChange={(e) => {
+                  setSelectedOrderId(e.target.value);
+                  setSelectedItemId("");
+                }}
+              >
+                {myOrders.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.number} — {o.date}
+                  </option>
+                ))}
               </select>
             </div>
             {selectedOrder && (
               <div className={styles.formGroup}>
                 <label className={styles.label}>Item to Return *</label>
-                <select className={styles.select} value={product} onChange={e => setProduct(e.target.value)} required>
+                <select
+                  className={styles.select}
+                  value={selectedItemId}
+                  onChange={(e) => setSelectedItemId(e.target.value)}
+                  required
+                >
                   <option value="">Select item…</option>
-                  {selectedOrder.items.map(item => <option key={item} value={item}>{item}</option>)}
+                  {selectedOrder.items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
             <div className={styles.formGroup}>
               <label className={styles.label}>Reason for Return *</label>
-              <select className={styles.select} value={reason} onChange={e => setReason(e.target.value)}>
-                {RETURN_REASONS.map(r => <option key={r}>{r}</option>)}
+              <select
+                className={styles.select}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              >
+                {RETURN_REASONS.map((r) => (
+                  <option key={r}>{r}</option>
+                ))}
               </select>
             </div>
             <div className={styles.formGroup}>
               <label className={styles.label}>Additional Details</label>
-              <textarea className={styles.textarea} rows={4} value={desc} onChange={e => setDesc(e.target.value)} placeholder="Please describe the issue in detail…" />
+              <textarea
+                className={styles.textarea}
+                rows={4}
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                placeholder="Please describe the issue in detail…"
+              />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.label}>Upload Proof <span style={{ fontWeight: 400, color: "var(--charcoal-muted)" }}>(photo of item — optional)</span></label>
-              <div className={styles.attachZone} onClick={() => fileRef.current?.click()}>
+              <label className={styles.label}>
+                Upload Proof{" "}
+                <span
+                  style={{ fontWeight: 400, color: "var(--charcoal-muted)" }}
+                >
+                  (photo of item — optional)
+                </span>
+              </label>
+              <div
+                className={styles.attachZone}
+                onClick={() => fileRef.current?.click()}
+              >
                 <Paperclip size={20} style={{ color: "var(--burgundy)" }} />
                 <div>
-                  <p className={styles.attachTitle}>{file ? file.name : "Click to upload image or file"}</p>
-                  <p className={styles.attachSub}>{file ? `${(file.size / 1024).toFixed(1)} KB` : "PNG, JPG, PDF — Max 10 MB"}</p>
+                  <p className={styles.attachTitle}>
+                    {file ? file.name : "Click to attach proof or item photo"}
+                  </p>
+                  <p className={styles.attachSub}>
+                    {file
+                      ? `${(file.size / 1024).toFixed(1)} KB`
+                      : "JPG, PNG, WebP — Max 5 MB"}
+                  </p>
                 </div>
-                {file && <button type="button" className={styles.attachRemove} onClick={e => { e.stopPropagation(); setFile(null); }}><X size={13} /></button>}
+                {file && (
+                  <button
+                    type="button"
+                    className={styles.attachRemove}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFile(null);
+                    }}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
-              <input ref={fileRef} type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={e => setFile(e.target.files[0] || null)} />
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                style={{ display: "none" }}
+                onChange={(e) => setFile(e.target.files[0] || null)}
+              />
+              {file && (
+                <div className={styles.attachmentPreview}>
+                  {file.type?.startsWith("image/") && previewUrl && (
+                    <img
+                      src={previewUrl}
+                      alt={file.name}
+                      className={styles.attachmentPreviewImage}
+                    />
+                  )}
+                  <div className={styles.attachmentPreviewInfo}>
+                    <span className={styles.attachmentPreviewName}>
+                      {file.name}
+                    </span>
+                    <span className={styles.attachmentPreviewMeta}>
+                      {(file.size / 1024).toFixed(1)} KB
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.attachmentPreviewRemove}
+                    onClick={() => setFile(null)}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
             </div>
+            {error && (
+              <p style={{ color: "#dc2626", fontSize: 12 }}>{error}</p>
+            )}
           </div>
           <div className={styles.modalFoot}>
-            <button type="button" className={`${styles.btn} ${styles.btnOutline}`} onClick={onClose}>Cancel</button>
-            <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`} disabled={!product}><Send size={14} /> Submit Request</button>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnOutline}`}
+              onClick={onClose}
+              disabled={submitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              disabled={!selectedItemId || submitting}
+            >
+              <Send size={14} /> {submitting ? "Submitting…" : "Submit Request"}
+            </button>
           </div>
         </form>
       </div>
@@ -144,45 +418,160 @@ function CreateReturnModal({ onClose, onSubmit }) {
   );
 }
 
-/* ─── Return Detail (chat) ── */
-function ReturnDetail({ ret, onBack, onReply }) {
-  const [text, setText] = useState("");
-  const [file, setFile] = useState(null);
-  const fileRef = useRef(null);
-  const isClosed = ret.status === "Approved" || ret.status === "Rejected" || ret.status === "Closed";
+/* ─── Return Detail (chat) ─── */
+function ReturnDetail({ ret, onBack, onReply, onCancel, onImageClick, onInviteSupport }) {
+    const [text, setText] = useState("");
+    const [file, setFile] = useState(null);
+    const [sending, setSending] = useState(false);
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [canceling, setCanceling] = useState(false);
+    const [inviting, setInviting] = useState(false);
+    const fileRef = useRef(null);
+    const isClosed =
+      ret.status === "RESOLVED" ||
+      ret.status === "CLOSED" ||
+      ret.status === "CANCELED";
 
-  const handleSend = (e) => {
+    const handleSend = async (e) => {
     e.preventDefault();
     if (!text.trim() && !file) return;
-    onReply(ret.id, text, file ? { name: file.name, type: file.type.startsWith("image") ? "image" : "file" } : null);
-    setText(""); setFile(null);
+    setSending(true);
+    try {
+      await onReply(ret.id, text, file);
+      setText("");
+      setFile(null);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
     <div className={styles.detailShell}>
       <div className={styles.detailHeader}>
-        <button className={styles.backBtn} onClick={onBack}>← All Return Requests</button>
+        <button className={styles.backBtn} onClick={onBack}>
+          ← All Return Requests
+        </button>
         <div className={styles.detailTitleGroup}>
-          <span className={styles.detailId}>{ret.id}</span>
-          <h2 className={styles.detailTitle}>{ret.product} — {ret.orderId}</h2>
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--charcoal-muted)" }}>Vendor: {ret.vendorName} · Reason: {ret.reason}</p>
+          <span className={styles.detailId}>{ret.id.slice(0, 8)}…</span>
+          <h2 className={styles.detailTitle}>
+            {ret.product} — {ret.orderId}
+          </h2>
+          <p
+            style={{
+              margin: "4px 0 0",
+              fontSize: 12,
+              color: "var(--charcoal-muted)",
+            }}
+          >
+            Vendor: {ret.vendorName} · Reason: {ret.reason}
+          </p>
         </div>
         <StatusBadge status={ret.status} />
+        {!isClosed && !ret.supportInvited && (
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={async () => {
+              setInviting(true);
+              await onInviteSupport(ret.id);
+              setInviting(false);
+            }}
+            disabled={inviting}
+            style={{ marginLeft: 12, background: "var(--burgundy, #7c3aed)", borderColor: "var(--burgundy, #7c3aed)", color: "white" }}
+          >
+            {inviting ? "Inviting..." : "Invite Support"}
+          </button>
+        )}
+        {!isClosed && (ret.status === "OPEN" || ret.status === "AWAITING_RESPONSE") && (
+          <button
+            className={`${styles.btn} ${styles.btnOutline} ${styles.btnSm}`}
+            onClick={() => setShowCancelModal(true)}
+            style={{ marginLeft: 12 }}
+          >
+            Cancel Request
+          </button>
+        )}
+        {showCancelModal && (
+          <div className={styles.backdrop} onClick={() => setShowCancelModal(false)}>
+            <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+              <div className={styles.modalHead}>
+                <h2 className={styles.modalTitle}>Cancel Return</h2>
+                <button className={styles.modalClose} onClick={() => setShowCancelModal(false)}>
+                  <X size={17} />
+                </button>
+              </div>
+              <div className={styles.modalBody}>
+                <p style={{ margin: 0, fontSize: 14, color: "var(--charcoal-muted)" }}>
+                  Are you sure you want to cancel this return request? This action cannot be undone.
+                </p>
+              </div>
+              <div className={styles.modalFoot}>
+                <button
+                  className={`${styles.btn} ${styles.btnOutline}`}
+                  onClick={() => setShowCancelModal(false)}
+                  disabled={canceling}
+                >
+                  Keep Request
+                </button>
+                <button
+                  className={`${styles.btn} ${styles.btnPrimary}`}
+                  style={{ background: "#dc2626", borderColor: "#dc2626" }}
+                  onClick={async () => {
+                    setCanceling(true);
+                    await onCancel(ret.id);
+                    setCanceling(false);
+                    setShowCancelModal(false);
+                  }}
+                  disabled={canceling}
+                >
+                  {canceling ? "Canceling…" : "Yes, Cancel It"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className={styles.chatArea} style={{ marginTop: 16 }}>
-        <div className={styles.sysEvent}><span>Return request submitted · {ret.created}</span></div>
+        <div className={styles.sysEvent}>
+          <span>Return request submitted · {ret.created}</span>
+        </div>
         {ret.messages.map((msg, i) => {
+          if (msg.isSystemMessage) {
+            return (
+              <div key={i} className={styles.sysEvent}>
+                <span>{msg.text}</span>
+              </div>
+            );
+          }
           const isMe = msg.from === "customer";
           return (
-            <div key={i} className={`${styles.msgRow} ${isMe ? styles.msgRight : styles.msgLeft}`}>
-              {!isMe && <div className={styles.msgAvatar} style={{ background: "#7c3aed", fontSize: 10 }}>V</div>}
-              <div className={`${styles.bubble} ${isMe ? styles.bubbleCustomer : styles.bubbleSupport}`}>
+            <div
+              key={i}
+              className={`${styles.msgRow} ${isMe ? styles.msgRight : styles.msgLeft}`}
+            >
+              {!isMe && (
+                <div
+                  className={styles.msgAvatar}
+                  style={{ background: "#7c3aed", fontSize: 10 }}
+                >
+                  V
+                </div>
+              )}
+              <div
+                className={`${styles.bubble} ${isMe ? styles.bubbleCustomer : styles.bubbleSupport}`}
+              >
                 <p className={styles.bubbleText}>{msg.text}</p>
-                <FileAtt att={msg.attachment} />
+                <AttachmentList attachments={msg.attachments} onImageClick={onImageClick} />
                 <span className={styles.bubbleTime}>{msg.time}</span>
               </div>
-              {isMe && <div className={styles.msgAvatar} style={{ background: "var(--burgundy)" }}>Me</div>}
+              {isMe && (
+                <div
+                  className={styles.msgAvatar}
+                  style={{ background: "var(--burgundy)" }}
+                >
+                  Me
+                </div>
+              )}
             </div>
           );
         })}
@@ -192,64 +581,226 @@ function ReturnDetail({ ret, onBack, onReply }) {
         <form className={styles.replyBox} onSubmit={handleSend}>
           {file && (
             <div className={styles.replyFileChip}>
-              <Paperclip size={12} /><span>{file.name}</span>
-              <button type="button" onClick={() => setFile(null)}><X size={11} /></button>
+              <Paperclip size={12} />
+              <span>{file.name}</span>
+              <button type="button" onClick={() => setFile(null)}>
+                <X size={11} />
+              </button>
             </div>
           )}
           <div className={styles.replyInputRow}>
-            <button type="button" className={styles.replyAttachBtn} onClick={() => fileRef.current?.click()}><Paperclip size={17} /></button>
-            <input type="file" ref={fileRef} style={{ display: "none" }} onChange={e => setFile(e.target.files[0] || null)} />
-            <textarea className={styles.replyInput} rows={2} placeholder="Message the vendor…" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e); } }} />
-            <button type="submit" className={styles.sendBtn} disabled={!text.trim() && !file}><Send size={16} /></button>
+            <button
+              type="button"
+              className={styles.replyAttachBtn}
+              onClick={() => fileRef.current?.click()}
+            >
+              <Paperclip size={17} />
+            </button>
+            <input
+              type="file"
+              ref={fileRef}
+              style={{ display: "none" }}
+              onChange={(e) => setFile(e.target.files[0] || null)}
+            />
+            <textarea
+              className={styles.replyInput}
+              rows={2}
+              placeholder="Message the vendor…"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend(e);
+                }
+              }}
+            />
+            <button
+              type="submit"
+              className={styles.sendBtn}
+              disabled={(!text.trim() && !file) || sending}
+            >
+              <Send size={16} />
+            </button>
           </div>
         </form>
       ) : (
         <div className={styles.closedBanner}>
-          <CheckCircle size={16} /> This return request is {ret.status.toLowerCase()}.
+          <CheckCircle size={16} /> This return request is{" "}
+          {STATUS_CFG[ret.status]?.label?.toLowerCase() || ret.status.toLowerCase()}.
         </div>
       )}
     </div>
   );
 }
 
-/* ─── Main page ── */
-let nextRetId = 3;
-
+/* ─── Main page ─── */
 export default function CustomerReturnsPage() {
-  const [returns, setReturns] = useState(SEED_RETURNS);
-  const [view, setView]       = useState("list");
+  const [returns, setReturns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [myOrders, setMyOrders] = useState([]);
+  const [view, setView] = useState("list");
   const [selected, setSelected] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [search, setSearch]   = useState("");
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [fullscreenImage, setFullscreenImage] = useState(null);
 
-  const filtered = returns.filter(r => {
-    const ms = r.id.toLowerCase().includes(search.toLowerCase()) || r.product.toLowerCase().includes(search.toLowerCase()) || r.orderId.toLowerCase().includes(search.toLowerCase());
+  /* ── Fetch return requests (RETURN_REQUEST tickets) on mount ── */
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchReturns() {
+      setLoading(true);
+      try {
+        const res = await apiClient.get("/customers/support/tickets", {
+          params: { type: "RETURN_REQUEST", limit: 50, page: 1 },
+        });
+        if (!cancelled) {
+          const raw = res.data?.data || res.data || [];
+          setReturns(Array.isArray(raw) ? raw.map(mapReturnTicket) : []);
+        }
+      } catch {
+        if (!cancelled) setReturns([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchReturns();
+    return () => { cancelled = true; };
+  }, []);
+
+  /* ── Fetch orders for the create modal ── */
+  useEffect(() => {
+    async function fetchOrders() {
+      try {
+        const res = await apiClient.get("/customers/orders", {
+          params: { limit: 50, page: 1 },
+        });
+        const raw = res.data?.data || res.data || [];
+        setMyOrders(Array.isArray(raw) ? raw.map(mapOrderForSelector) : []);
+      } catch {
+        setMyOrders([]);
+      }
+    }
+    fetchOrders();
+  }, []);
+
+  /* ── Refetch return tickets ── */
+  const refetchReturns = async () => {
+    try {
+      const res = await apiClient.get("/customers/support/tickets", {
+        params: { type: "RETURN_REQUEST", limit: 50, page: 1 },
+      });
+      const raw = res.data?.data || res.data || [];
+      setReturns(Array.isArray(raw) ? raw.map(mapReturnTicket) : []);
+    } catch {
+      // silent
+    }
+  };
+
+  /* ── Filter ── */
+  const filtered = returns.filter((r) => {
+    const ms =
+      r.id.toLowerCase().includes(search.toLowerCase()) ||
+      r.product.toLowerCase().includes(search.toLowerCase()) ||
+      String(r.orderId).toLowerCase().includes(search.toLowerCase());
     const mv = statusFilter === "All" || r.status === statusFilter;
     return ms && mv;
   });
 
-  const handleCreate = (form) => {
-    const newRet = {
-      id: `RET-00${nextRetId++}`,
-      orderId: form.orderId, product: form.product,
-      reason: form.reason, status: "Pending",
-      created: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      updated: "Just now",
-      vendorName: "Urban Threads",
-      messages: [{ from: "customer", text: form.desc || form.reason, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), attachment: form.file ? { name: form.file.name, type: form.file.type?.startsWith("image") ? "image" : "file" } : null }],
-    };
-    setReturns([newRet, ...returns]);
+  /* ── Create return ── */
+  const handleCreate = async ({ orderId, itemId, reason, desc, file }) => {
+    let attachmentUrl = null;
+
+    if (file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadRes = await multipartClient.post(
+        `/customers/support/upload`,
+        formData,
+      );
+      attachmentUrl = uploadRes.data?.url || null;
+    }
+
+    const res = await apiClient.post(`/customers/orders/${orderId}/return`, {
+      orderItemId: itemId,
+      quantity: 1,
+      reason: reason,
+      ...(desc ? { note: desc } : {}),
+      ...(attachmentUrl ? { attachments: [attachmentUrl] } : {}),
+    });
+
     setShowCreate(false);
-    setSelected(newRet);
-    setView("detail");
+    await refetchReturns();
+    // Open the newly created ticket with full detail (messages)
+    const newTicketId = res.data?.id;
+    if (newTicketId) {
+      try {
+        setLoading(true);
+        const detailRes = await apiClient.get(`/customers/support/tickets/${newTicketId}`);
+        setSelected(mapReturnTicket(detailRes.data));
+        setView("detail");
+      } catch (err) {
+        console.error("Failed to fetch new return detail:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
-  const handleReply = (id, text, attachment) => {
-    const msg = { from: "customer", text, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), attachment };
-    const updated = returns.map(r => r.id === id ? { ...r, messages: [...r.messages, msg], updated: "Just now" } : r);
-    setReturns(updated);
-    setSelected(updated.find(r => r.id === id));
+  /* ── Reply to return (send message on the ticket) ── */
+  const handleReply = async (ticketId, text, file) => {
+    let attachmentUrl = null;
+
+    if (file) {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadRes = await multipartClient.post(
+          `/customers/support/tickets/${ticketId}/messages/attachments`,
+          formData,
+        );
+        attachmentUrl = uploadRes.data?.url || null;
+      } catch (err) {
+        console.error("Failed to upload return message attachment:", err);
+        throw err;
+      }
+    }
+
+    const content = text?.trim() || "Attachment";
+    await apiClient.post(`/customers/support/tickets/${ticketId}/messages`, {
+      content,
+      attachments: attachmentUrl ? [attachmentUrl] : undefined,
+    });
+
+    const res = await apiClient.get(`/customers/support/tickets/${ticketId}`);
+    const updatedReturn = mapReturnTicket(res.data);
+    setSelected(updatedReturn);
+    setReturns((prev) =>
+      prev.map((r) => (r.id === ticketId ? updatedReturn : r)),
+    );
+  };
+
+  const handleCancel = async (id) => {
+    try {
+      await apiClient.patch(`/customers/support/tickets/${id}/cancel`);
+      await refetchReturns();
+      const res = await apiClient.get(`/customers/support/tickets/${id}`);
+      setSelected(mapReturnTicket(res.data));
+    } catch (err) {
+      console.error("Failed to cancel return:", err);
+    }
+  };
+
+  const handleInviteSupport = async (id) => {
+    try {
+      await apiClient.patch(`/customers/support/tickets/${id}/invite`);
+      const res = await apiClient.get(`/customers/support/tickets/${id}`);
+      setSelected(mapReturnTicket(res.data));
+      await refetchReturns();
+    } catch (err) {
+      console.error("Failed to invite support:", err);
+    }
   };
 
   if (view === "detail" && selected) {
@@ -257,23 +808,52 @@ export default function CustomerReturnsPage() {
       <div style={{ minHeight: "100vh", background: "var(--ivory)" }}>
         <Header />
         <div className={styles.pageContent}>
-          <ReturnDetail ret={selected} onBack={() => setView("list")} onReply={handleReply} />
+          <ReturnDetail
+            ret={selected}
+            onBack={() => setView("list")}
+            onReply={handleReply}
+            onCancel={handleCancel}
+            onInviteSupport={handleInviteSupport}
+            onImageClick={(url) => setFullscreenImage(url)}
+          />
         </div>
+        {fullscreenImage && (
+          <div className={styles.fullscreenOverlay} onClick={() => setFullscreenImage(null)}>
+            <div className={styles.fullscreenContent}>
+              <img src={fullscreenImage} alt="Preview" className={styles.fullscreenImg} />
+              <button className={styles.fullscreenClose} onClick={() => setFullscreenImage(null)}>
+                <X size={24} />
+              </button>
+            </div>
+          </div>
+        )}
         <Footer />
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--ivory)", display: "flex", flexDirection: "column" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "var(--ivory)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <Header />
       <div className={styles.pageContent} style={{ flex: 1 }}>
         <div className={styles.pageHead}>
           <div>
             <h1 className={styles.pageTitle}>Return Requests</h1>
-            <p className={styles.pageSubtitle}>Message vendors about returns and track your refund requests.</p>
+            <p className={styles.pageSubtitle}>
+              Message vendors about returns and track your refund requests.
+            </p>
           </div>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setShowCreate(true)}>
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={() => setShowCreate(true)}
+          >
             <Plus size={15} /> New Return Request
           </button>
         </div>
@@ -281,44 +861,79 @@ export default function CustomerReturnsPage() {
         <div className={styles.toolbar}>
           <div className={styles.searchBox}>
             <Search size={14} className={styles.searchIcon} />
-            <input className={styles.searchInput} placeholder="Search by order, product…" value={search} onChange={e => setSearch(e.target.value)} />
+            <input
+              className={styles.searchInput}
+              placeholder="Search by order, product…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
-          <select className={styles.filterSelect} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <select
+            className={styles.filterSelect}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
             <option value="All">All Status</option>
-            {Object.keys(STATUS_CFG).map(s => <option key={s}>{s}</option>)}
+            {Object.entries(STATUS_CFG).map(([key, cfg]) => (
+              <option key={key} value={key}>{cfg.label}</option>
+            ))}
           </select>
           <span className={styles.pageInfo}>{filtered.length} requests</span>
         </div>
 
-        {filtered.length === 0 ? (
+        {loading ? (
+          <LoadingSpinner />
+        ) : filtered.length === 0 ? (
           <div className={styles.emptyState}>
             <Package size={36} style={{ color: "var(--charcoal-muted)" }} />
             <h3>No return requests</h3>
             <p>You haven't submitted any return requests yet.</p>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setShowCreate(true)}>
+            <button
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={() => setShowCreate(true)}
+            >
               <Plus size={14} /> Submit Return Request
             </button>
           </div>
         ) : (
           <div className={styles.ticketList}>
-            {filtered.map(ret => (
-              <article key={ret.id} className={styles.ticketCard} onClick={() => { setSelected(ret); setView("detail"); }}>
+            {filtered.map((ret) => (
+              <article
+                key={ret.id}
+                className={styles.ticketCard}
+                onClick={async () => {
+                  try {
+                    setLoading(true);
+                    const res = await apiClient.get(`/customers/support/tickets/${ret.id}`);
+                    setSelected(mapReturnTicket(res.data));
+                    setView("detail");
+                  } catch (err) {
+                    console.error("Failed to fetch return detail:", err);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+              >
                 <div className={styles.cardMain}>
                   <div className={styles.cardLeft}>
                     <div className={styles.cardTopRow}>
-                      <span className={styles.ticketId}>{ret.id}</span>
-                      <span className={styles.catTag}>{ret.orderId}</span>
+                      <span className={styles.ticketId}>{ret.id.slice(0, 8)}…</span>
+                      <span className={styles.catTag}>{String(ret.orderId).slice(0, 8)}…</span>
                     </div>
                     <h3 className={styles.ticketSubject}>{ret.product}</h3>
                     <div className={styles.ticketMeta}>
-                      <span><Clock size={11} /> {ret.created}</span>
+                      <span>
+                        <Clock size={11} /> {ret.created}
+                      </span>
                       <span>Reason: {ret.reason}</span>
                       <span>Vendor: {ret.vendorName}</span>
                     </div>
                   </div>
                   <div className={styles.cardRight}>
                     <StatusBadge status={ret.status} />
-                    <button className={styles.viewBtn}>View <ChevronRight size={13} /></button>
+                    <button className={styles.viewBtn}>
+                      View <ChevronRight size={13} />
+                    </button>
                   </div>
                 </div>
               </article>
@@ -327,7 +942,13 @@ export default function CustomerReturnsPage() {
         )}
       </div>
 
-      {showCreate && <CreateReturnModal onClose={() => setShowCreate(false)} onSubmit={handleCreate} />}
+      {showCreate && (
+        <CreateReturnModal
+          onClose={() => setShowCreate(false)}
+          onSubmit={handleCreate}
+          myOrders={myOrders}
+        />
+      )}
       <Footer />
     </div>
   );

@@ -1,89 +1,378 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { Check, CreditCard, MapPin, ShoppingBag, Lock, Sparkles, Loader2, ArrowRight } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Check,
+  CreditCard,
+  MapPin,
+  ShoppingBag,
+  Lock,
+  Sparkles,
+  Loader2,
+  ArrowRight,
+  Plus,
+  Phone,
+} from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
+
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
+import LoadingSpinner from "../components/common/LoadingSpinner";
+import apiClient from "../utils/apiClient";
+import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
 import { useLanguage } from "../context/LanguageContext";
+import { formatPrice } from "../utils/formatPrice";
 import styles from "../styles/CheckoutPage.module.css";
 
-const STEPS = ["Shipping", "Payment", "Confirm"];
+// Initialize Stripe
+const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = stripeKey
+  ? loadStripe(stripeKey, {
+      developerTools: {
+        assistant: {
+          enabled: false,
+        },
+      },
+    })
+  : null;
 
-// Mock dataset with VTON history flag included
-const ITEMS = [
-  { id: 1, name: "Silk Evening Gown", size: "M", price: 389, qty: 1, image: "https://images.unsplash.com/photo-1566479179817-0b6cf9b3888e?w=80&h=100&fit=crop", vtonTried: true },
-  { id: 2, name: "Gold Cuff Bracelet", size: "One size", price: 89, qty: 1, image: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=80&h=100&fit=crop", vtonTried: false },
-];
+/**
+ * Stripe Payment Form Component
+ */
+function PaymentForm({ onSuccess, onBack, totalAmount, currency }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [error, setError] = useState(null);
+  const [processing, setProcessing] = useState(false);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!stripe || !elements) return;
+
+    setProcessing(true);
+    setError(null);
+
+    try {
+      const { error: confirmError, paymentIntent } =
+        await stripe.confirmPayment({
+          elements,
+          confirmParams: {
+            return_url: `${window.location.origin}/orders`,
+          },
+          redirect: "if_required",
+        });
+
+      if (confirmError) {
+        setError(confirmError.message);
+        setProcessing(false);
+      } else if (paymentIntent.status === "succeeded") {
+        onSuccess(paymentIntent.id);
+      }
+    } catch (err) {
+      console.error("Payment confirmation failed:", err);
+      setError(err?.response?.data?.message || "Payment initiation failed.");
+      setProcessing(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className={styles.cardForm}>
+      <div className={styles.stripeElementContainer}>
+        <PaymentElement
+          options={{
+            layout: "tabs",
+            wallets: {
+              applePay: "never",
+              googlePay: "never",
+            },
+          }}
+        />
+      </div>
+
+      {error && (
+        <div className={styles.errorText} style={{ marginTop: "12px" }}>
+          {error}
+        </div>
+      )}
+
+      <div className={styles.secureNote} style={{ marginTop: "24px" }}>
+        <Lock size={14} /> 256-bit SSL encrypted. We never store your full
+        payment details.
+      </div>
+
+      <div className={styles.stepActions}>
+        <button
+          type="button"
+          className={styles.btnGhost}
+          onClick={onBack}
+          disabled={processing}
+        >
+          ← Back to Payment Method
+        </button>
+        <button
+          type="submit"
+          className={styles.btnPrimary}
+          disabled={!stripe || processing}
+        >
+          {processing ? (
+            <>
+              <Loader2 size={18} className={styles.spin} /> Processing...
+            </>
+          ) : (
+            `Pay ${formatPrice(totalAmount, currency)}`
+          )}
+        </button>
+      </div>
+    </form>
+  );
+}
 
 export default function CheckoutPage() {
   const { t, dir } = useLanguage();
-  const [step, setStep] = useState(0);
+  const { isAuthenticated, user } = useAuth();
+  const { refreshCartCount } = useCart();
+  const navigate = useNavigate();
+
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
   const [done, setDone] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const [form, setForm] = useState({ 
-    first: "", last: "", email: "", phone: "", 
-    address: "", city: "", country: "UAE", payment: "card", savedAddress: false 
-  });
-  
-  const [errors, setErrors] = useState({});
+  const [step, setStep] = useState(0); // 0: Shipping, 1: Payment, 2: Review/Pay
+  const [profile, setProfile] = useState(null);
+  const [session, setSession] = useState(null);
 
-  // Auto-fill logic mock
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  // Backend doesn't support phone selection in checkout yet, but we'll show it for completeness
+  // as the instructions mentioned phone number selection.
+  const [selectedPhoneId, setSelectedPhoneId] = useState("");
+
+  const [paymentMethod, setPaymentMethod] = useState("card"); // card or cod
+  const [clientSecret, setClientSecret] = useState(null);
+  const [paymentError, setPaymentError] = useState(null);
+
+  const [couponCodeInput, setCouponCodeInput] = useState("");
+  const [couponProcessing, setCouponProcessing] = useState(false);
+
+  // 1. Initial Load: Fetch Profile and Session
   useEffect(() => {
-    if (form.savedAddress) {
-      setForm(prev => ({ 
-        ...prev, 
-        first: "Sara", last: "Al-Rashid", email: "sara@example.com", 
-        phone: "+971 50 123 4567", address: "123 Sheikh Zayed Road", city: "Dubai"
-      }));
-      setErrors({});
+    if (!isAuthenticated) {
+      navigate("/auth", { state: { from: { pathname: "/checkout" } } });
+      return;
+    }
+
+    const init = async () => {
+      try {
+        const [profileRes, sessionRes] = await Promise.all([
+          apiClient.get("/customers/profile"),
+          apiClient.get("/checkout/session").catch(async (err) => {
+            if (err.response?.status === 404) {
+              // Create new session if none exists
+              const createRes = await apiClient.post("/checkout/sessions");
+              return createRes;
+            }
+            throw err;
+          }),
+        ]);
+
+        setProfile(profileRes.data);
+        setSession(sessionRes.data);
+
+        if (sessionRes.data.shippingAddressId) {
+          setSelectedAddressId(sessionRes.data.shippingAddressId);
+        } else {
+          // Default to primary address
+          const primary = profileRes.data.shippingAddresses.find(
+            (a) => a.isPrimary,
+          );
+          if (primary) setSelectedAddressId(primary.id);
+        }
+
+        const primaryPhone = profileRes.data.phoneNumbers.find(
+          (p) => p.isPrimary,
+        );
+        if (primaryPhone) setSelectedPhoneId(primaryPhone.id);
+
+        setLoading(false);
+      } catch (err) {
+        console.error("Checkout init failed:", err);
+        setError(
+          "Could not initialize checkout. Do you have items in your cart?",
+        );
+        setLoading(false);
+      }
+    };
+
+    init();
+  }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    setPaymentError(null);
+    if (paymentMethod !== "card") {
+      setClientSecret(null);
+    }
+  }, [paymentMethod]);
+
+  const handleNextToPayment = async () => {
+    if (!selectedAddressId) {
+      alert("Please select a shipping address.");
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      // Sync address to backend session
+      const res = await apiClient.patch(
+        `/checkout/sessions/${session.id}/address`,
+        {
+          shippingAddressId: selectedAddressId,
+        },
+      );
+      setSession(res.data);
+      setStep(1);
+    } catch (err) {
+      console.error("Failed to set address:", err);
+      alert(
+        err?.response?.data?.message ||
+          "Failed to save shipping address. Please try again.",
+      );
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleNextToReview = async () => {
+    if (paymentMethod === "card") {
+      setProcessing(true);
+      setPaymentError(null);
+      try {
+        const res = await apiClient.post(
+          `/checkout/sessions/${session.id}/confirm`,
+        );
+        if (!res.data?.clientSecret) {
+          setPaymentError("Payment initialization failed. Please try again.");
+          return;
+        }
+        setClientSecret(res.data.clientSecret);
+        setStep(2);
+      } catch (err) {
+        console.error("Payment initiation failed:", err);
+        setPaymentError(
+          err?.response?.data?.message || "Payment initiation failed.",
+        );
+      } finally {
+        setProcessing(false);
+      }
     } else {
-      setForm(prev => ({ 
-        ...prev, 
-        first: "", last: "", email: "", phone: "", address: "", city: ""
-      }));
-    }
-  }, [form.savedAddress]);
-
-  const subtotal = ITEMS.reduce((s, i) => s + i.price * i.qty, 0);
-  const shipping = subtotal >= 500 ? 0 : 25;
-  const total = subtotal + shipping;
-
-  const updateForm = (k, v) => {
-    setForm(prev => ({ ...prev, [k]: v }));
-    if (errors[k]) setErrors(prev => ({ ...prev, [k]: null })); // Clear error on typing
-  };
-
-  const validateStep0 = () => {
-    const errs = {};
-    if (!form.first.trim()) errs.first = "First name is required";
-    if (!form.last.trim()) errs.last = "Last name is required";
-    if (!form.email.includes("@")) errs.email = "Valid email is required";
-    if (!form.address.trim()) errs.address = "Address is required";
-    if (!form.city.trim()) errs.city = "City is required";
-    
-    if (Object.keys(errs).length > 0) {
-      setErrors(errs);
-      return false;
-    }
-    return true;
-  };
-
-  const handleNext = () => {
-    if (step === 0) {
-      if (validateStep0()) setStep(1);
-    } else if (step === 1) {
       setStep(2);
     }
   };
 
-  const placeOrder = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setDone(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 2000);
+  const handleOrderSuccess = async (paymentIntentId) => {
+    if (paymentIntentId) {
+      setProcessing(true);
+      try {
+        // Fallback: Verify payment on backend to ensure order is created
+        await apiClient.post(`/checkout/sessions/${session.id}/verify`, {
+          paymentIntentId,
+        });
+      } catch (err) {
+        console.error("Payment verification failed:", err);
+        // We don't block the user here because the webhook might still work
+        // but we log it.
+      } finally {
+        setProcessing(false);
+      }
+    }
+
+    // Always refresh cart count after order success (clears cart on backend)
+    refreshCartCount();
+
+    setDone(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  const handleConfirmCashOrder = async () => {
+    setProcessing(true);
+    try {
+      await apiClient.post(`/checkout/sessions/${session.id}/cash`);
+      handleOrderSuccess();
+    } catch (err) {
+      console.error("COD confirmation failed:", err);
+      alert(err?.response?.data?.message || "Failed to confirm cash order.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleApplyCoupon = async (e) => {
+    e.preventDefault();
+    if (!couponCodeInput.trim()) return;
+
+    setCouponProcessing(true);
+    try {
+      const res = await apiClient.post(`/checkout/sessions/${session.id}/coupon`, {
+        code: couponCodeInput.trim(),
+      });
+      setSession(res.data);
+      setCouponCodeInput("");
+    } catch (err) {
+      console.error("Failed to apply coupon:", err);
+      alert(err?.response?.data?.message || "Failed to apply coupon.");
+    } finally {
+      setCouponProcessing(false);
+    }
+  };
+
+  const handleRemoveCoupon = async () => {
+    setCouponProcessing(true);
+    try {
+      const res = await apiClient.delete(`/checkout/sessions/${session.id}/coupon`);
+      setSession(res.data);
+    } catch (err) {
+      console.error("Failed to remove coupon:", err);
+      alert(err?.response?.data?.message || "Failed to remove coupon.");
+    } finally {
+      setCouponProcessing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className={styles.page}>
+        <Header />
+        <main className={styles.main}>
+          <LoadingSpinner message="Setting up your checkout..." />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={styles.page}>
+        <Header />
+        <main className={styles.main}>
+          <div className={styles.successCard}>
+            <h1 className={styles.successTitle}>Oops!</h1>
+            <p className={styles.successSub}>{error}</p>
+            <Link to="/cart" className={styles.btnPrimary}>
+              Back to Cart
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (done) {
     return (
@@ -91,14 +380,18 @@ export default function CheckoutPage() {
         <Header />
         <main className={styles.main}>
           <div className={styles.successCard}>
-            <div className={styles.successIcon}><Check size={40} /></div>
+            <div className={styles.successIcon}>
+              <Check size={40} />
+            </div>
             <h1 className={styles.successTitle}>{t("success.title")}</h1>
-            <p className={styles.successSub}>
-              {t("success.sub")}
-            </p>
+            <p className={styles.successSub}>{t("success.sub")}</p>
             <div className={styles.successActions}>
-              <Link to="/orders" className={styles.btnPrimary}>{t("success.track")}</Link>
-              <Link to="/browse" className={styles.btnOutline}>{t("cart.continue")}</Link>
+              <Link to="/orders" className={styles.btnPrimary}>
+                {t("success.track")}
+              </Link>
+              <Link to="/browse" className={styles.btnOutline}>
+                {t("cart.continue")}
+              </Link>
             </div>
           </div>
         </main>
@@ -107,19 +400,39 @@ export default function CheckoutPage() {
     );
   }
 
+  const subtotal = session?.subtotal || 0;
+  const shipping = session?.shippingCost || 0;
+  const discount = session?.discountAmount || 0;
+  const total = session?.total !== undefined ? session.total : Math.max(0, subtotal + shipping - discount);
+  const currency = session?.currency || "EGP";
+
   return (
     <div className={styles.page}>
       <Header />
       <main className={styles.main}>
         {/* Progress Bar */}
         <div className={styles.progress}>
-          {[t("checkout.shipping"), t("checkout.payment"), t("checkout.review")].map((s, i) => (
+          {[
+            t("checkout.shipping"),
+            t("checkout.payment"),
+            t("checkout.review"),
+          ].map((s, i) => (
             <div key={s} className={styles.progressItem}>
-              <div className={`${styles.progressDot} ${i < step ? styles.progressDotPast : ""} ${i === step ? styles.progressDotActive : ""}`}>
+              <div
+                className={`${styles.progressDot} ${i < step ? styles.progressDotPast : ""} ${i === step ? styles.progressDotActive : ""}`}
+              >
                 {i < step ? <Check size={14} /> : i + 1}
               </div>
-              <span className={`${styles.progressLabel} ${i <= step ? styles.progressLabelActive : ""}`}>{s}</span>
-              {i < 2 && <div className={`${styles.progressLine} ${i < step ? styles.progressLineActive : ""}`} />}
+              <span
+                className={`${styles.progressLabel} ${i <= step ? styles.progressLabelActive : ""}`}
+              >
+                {s}
+              </span>
+              {i < 2 && (
+                <div
+                  className={`${styles.progressLine} ${i < step ? styles.progressLineActive : ""}`}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -127,146 +440,343 @@ export default function CheckoutPage() {
         <div className={styles.layout}>
           {/* Left: Form Flow */}
           <div className={styles.formArea}>
+            {/* STEP 0: Shipping Address Selection */}
             {step === 0 && (
               <div className={styles.formCard}>
                 <div className={styles.formCardHeader}>
-                  <h2 className={styles.formTitle}><MapPin size={20} /> {t("checkout.shipping")}</h2>
-                  <label className={styles.switchLabel} style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row' }}>
-                    <input 
-                      type="checkbox" 
-                      className={styles.switchInput} 
-                      checked={form.savedAddress} 
-                      onChange={e => updateForm("savedAddress", e.target.checked)} 
-                    />
-                    {t("checkout.savedAddress")}
-                  </label>
-                </div>
-                
-                <div className={styles.formGrid}>
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>{t("checkout.firstName")}</label>
-                    <input className={`${styles.input} ${errors.first ? styles.inputError : ""}`} value={form.first} onChange={e => updateForm("first", e.target.value)} placeholder="Sara" />
-                    {errors.first && <span className={styles.errorText}>{errors.first}</span>}
-                  </div>
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>{t("checkout.lastName")}</label>
-                    <input className={`${styles.input} ${errors.last ? styles.inputError : ""}`} value={form.last} onChange={e => updateForm("last", e.target.value)} placeholder="Al-Rashid" />
-                    {errors.last && <span className={styles.errorText}>{errors.last}</span>}
-                  </div>
-                  <div className={`${styles.formGroup} ${styles.fullWidth}`}>
-                    <label className={styles.label}>{t("checkout.email")}</label>
-                    <input type="email" className={`${styles.input} ${errors.email ? styles.inputError : ""}`} value={form.email} onChange={e => updateForm("email", e.target.value)} placeholder="sara@example.com" />
-                    {errors.email && <span className={styles.errorText}>{errors.email}</span>}
-                  </div>
-                  <div className={`${styles.formGroup} ${styles.fullWidth}`}>
-                    <label className={styles.label}>{t("checkout.phone")}</label>
-                    <input type="tel" className={styles.input} value={form.phone} onChange={e => updateForm("phone", e.target.value)} placeholder="+971 50 000 0000" />
-                  </div>
-                  <div className={`${styles.formGroup} ${styles.fullWidth}`}>
-                    <label className={styles.label}>{t("checkout.address")}</label>
-                    <input className={`${styles.input} ${errors.address ? styles.inputError : ""}`} value={form.address} onChange={e => updateForm("address", e.target.value)} placeholder="123 Sheikh Zayed Road" />
-                    {errors.address && <span className={styles.errorText}>{errors.address}</span>}
-                  </div>
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>{t("checkout.city")}</label>
-                    <input className={`${styles.input} ${errors.city ? styles.inputError : ""}`} value={form.city} onChange={e => updateForm("city", e.target.value)} placeholder="Dubai" />
-                    {errors.city && <span className={styles.errorText}>{errors.city}</span>}
-                  </div>
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>{t("checkout.country")}</label>
-                    <select className={styles.input} value={form.country} onChange={e => updateForm("country", e.target.value)}>
-                      <option>UAE</option><option>Saudi Arabia</option><option>Qatar</option><option>Egypt</option><option>Jordan</option>
-                    </select>
-                  </div>
+                  <h2 className={styles.formTitle}>
+                    <MapPin size={20} /> {t("checkout.shipping")}
+                  </h2>
                 </div>
 
-                <div className={styles.stepActions}>
-                  <Link to="/cart" className={styles.btnGhost}>{t("cart.summary")}</Link>
-                  <button className={styles.btnPrimary} onClick={handleNext}>{t("checkout.continuePayment")} <ArrowRight size={16} style={{ transform: dir === 'rtl' ? 'rotate(180deg)' : 'none' }} /></button>
-                </div>
-              </div>
-            )}
-
-            {step === 1 && (
-              <div className={styles.formCard}>
-                <h2 className={styles.formTitle}><CreditCard size={20} /> {t("checkout.payment")}</h2>
-                
-                <div className={styles.paymentOptions}>
-                  {[
-                    { id: "card", label: "Credit / Debit Card", icon: "💳" },
-                    { id: "applepay", label: "Apple Pay", icon: "🍏" },
-                    { id: "cod", label: "Cash on Delivery", icon: "💵" },
-                  ].map(opt => (
-                    <label key={opt.id} className={`${styles.payOption} ${form.payment === opt.id ? styles.payOptionActive : ""}`}>
-                      <input type="radio" name="payment" value={opt.id} checked={form.payment === opt.id} onChange={() => updateForm("payment", opt.id)} className={styles.radioHidden} />
-                      <span className={styles.payOptIcon}>{opt.icon}</span>
-                      <span className={styles.payOptLabel}>{opt.label}</span>
-                      {form.payment === opt.id && <div className={styles.radioChecked}><Check size={12} /></div>}
-                      {form.payment !== opt.id && <div className={styles.radioUnchecked} />}
-                    </label>
-                  ))}
-                </div>
-
-                {form.payment === "card" && (
-                  <div className={styles.cardFields}>
-                    <div className={`${styles.formGroup} ${styles.fullWidth}`}>
-                      <label className={styles.label}>Card Number</label>
-                      <input className={styles.input} placeholder="4242 4242 4242 4242" maxLength={19} />
-                    </div>
-                    <div className={styles.formGroup}>
-                      <label className={styles.label}>Expiry Date</label>
-                      <input className={styles.input} placeholder="MM / YY" />
-                    </div>
-                    <div className={styles.formGroup}>
-                      <label className={styles.label}>CVV</label>
-                      <input className={styles.input} placeholder="•••" maxLength={4} type="password" />
-                    </div>
+                <h3 className={styles.label} style={{ marginBottom: "12px" }}>
+                  Select Shipping Address
+                </h3>
+                {profile?.shippingAddresses.length > 0 ? (
+                  <div className={styles.selectionList}>
+                    {profile.shippingAddresses.map((addr) => (
+                      <div
+                        key={addr.id}
+                        className={`${styles.selectionItem} ${selectedAddressId === addr.id ? styles.selectionItemActive : ""}`}
+                        onClick={() => setSelectedAddressId(addr.id)}
+                      >
+                        <div
+                          className={
+                            selectedAddressId === addr.id
+                              ? styles.radioChecked
+                              : styles.radioUnchecked
+                          }
+                        >
+                          {selectedAddressId === addr.id && <Check size={12} />}
+                        </div>
+                        <div className={styles.selectionInfo}>
+                          <span className={styles.selectionLabel}>
+                            {addr.label || "Address"}{" "}
+                            {addr.isPrimary && "(Primary)"}
+                          </span>
+                          <p className={styles.selectionText}>
+                            {addr.street}, {addr.city}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    <Link
+                      to="/profile"
+                      className={styles.btnGhost}
+                      style={{ justifyContent: "flex-start", padding: "8px 0" }}
+                    >
+                      <Plus size={16} /> Add New Address
+                    </Link>
+                  </div>
+                ) : (
+                  <div className={styles.emptyState}>
+                    <p>No addresses found in your profile.</p>
+                    <Link to="/profile" className={styles.btnPrimary}>
+                      Add Address in Profile
+                    </Link>
                   </div>
                 )}
 
-                <div className={styles.secureNote}>
-                  <Lock size={14} /> 256-bit SSL encrypted. We never store your full payment details.
-                </div>
+                <h3
+                  className={styles.label}
+                  style={{ marginTop: "24px", marginBottom: "12px" }}
+                >
+                  Select Contact Phone
+                </h3>
+                {profile?.phoneNumbers.length > 0 ? (
+                  <div className={styles.selectionList}>
+                    {profile.phoneNumbers.map((ph) => (
+                      <div
+                        key={ph.id}
+                        className={`${styles.selectionItem} ${selectedPhoneId === ph.id ? styles.selectionItemActive : ""}`}
+                        onClick={() => setSelectedPhoneId(ph.id)}
+                      >
+                        <div
+                          className={
+                            selectedPhoneId === ph.id
+                              ? styles.radioChecked
+                              : styles.radioUnchecked
+                          }
+                        >
+                          {selectedPhoneId === ph.id && <Check size={12} />}
+                        </div>
+                        <div className={styles.selectionInfo}>
+                          <span className={styles.selectionLabel}>
+                            Phone {ph.isPrimary && "(Primary)"}
+                          </span>
+                          <p className={styles.selectionText}>
+                            {ph.phoneNumber}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    <Link
+                      to="/profile"
+                      className={styles.btnGhost}
+                      style={{ justifyContent: "flex-start", padding: "8px 0" }}
+                    >
+                      <Plus size={16} /> Add New Phone
+                    </Link>
+                  </div>
+                ) : (
+                  <div className={styles.emptyState}>
+                    <p>No phone numbers found.</p>
+                    <Link to="/profile" className={styles.btnPrimary}>
+                      Add Phone in Profile
+                    </Link>
+                  </div>
+                )}
 
-                <div className={styles.stepActions}>
-                  <button className={styles.btnGhost} onClick={() => setStep(0)}>← {t("checkout.backShipping")}</button>
-                  <button className={styles.btnPrimary} onClick={handleNext}>{t("checkout.reviewOrder")} <ArrowRight size={16} style={{ transform: dir === 'rtl' ? 'rotate(180deg)' : 'none' }} /></button>
+                <div
+                  className={styles.stepActions}
+                  style={{ marginTop: "40px" }}
+                >
+                  <Link to="/cart" className={styles.btnGhost}>
+                    {t("cart.summary")}
+                  </Link>
+                  <button
+                    className={styles.btnPrimary}
+                    onClick={handleNextToPayment}
+                    disabled={
+                      !selectedAddressId || !selectedPhoneId || processing
+                    }
+                  >
+                    {processing ? (
+                      <Loader2 size={18} className={styles.spin} />
+                    ) : (
+                      t("checkout.continuePayment")
+                    )}
+                    <ArrowRight
+                      size={16}
+                      style={{
+                        transform: dir === "rtl" ? "rotate(180deg)" : "none",
+                      }}
+                    />
+                  </button>
                 </div>
               </div>
             )}
 
+            {/* STEP 1: Payment Method Selection */}
+            {step === 1 && (
+              <div className={styles.formCard}>
+                <h2 className={styles.formTitle}>
+                  <CreditCard size={20} /> {t("checkout.payment")}
+                </h2>
+
+                <div
+                  className={styles.paymentOptions}
+                  style={{ marginTop: "24px" }}
+                >
+                  <label
+                    className={`${styles.payOption} ${paymentMethod === "card" ? styles.payOptionActive : ""}`}
+                  >
+                    <input
+                      type="radio"
+                      checked={paymentMethod === "card"}
+                      onChange={() => setPaymentMethod("card")}
+                      className={styles.radioHidden}
+                    />
+                    <span className={styles.payOptIcon}>💳</span>
+                    <span className={styles.payOptLabel}>
+                      Credit / Debit Card (Stripe)
+                    </span>
+                    {paymentMethod === "card" ? (
+                      <div className={styles.radioChecked}>
+                        <Check size={12} />
+                      </div>
+                    ) : (
+                      <div className={styles.radioUnchecked} />
+                    )}
+                  </label>
+
+                  <label
+                    className={`${styles.payOption} ${paymentMethod === "cod" ? styles.payOptionActive : ""}`}
+                  >
+                    <input
+                      type="radio"
+                      checked={paymentMethod === "cod"}
+                      onChange={() => setPaymentMethod("cod")}
+                      className={styles.radioHidden}
+                    />
+                    <span className={styles.payOptIcon}>💵</span>
+                    <span className={styles.payOptLabel}>Cash on Delivery</span>
+                    {paymentMethod === "cod" ? (
+                      <div className={styles.radioChecked}>
+                        <Check size={12} />
+                      </div>
+                    ) : (
+                      <div className={styles.radioUnchecked} />
+                    )}
+                  </label>
+                </div>
+
+                <div className={styles.stepActions}>
+                  <button
+                    className={styles.btnGhost}
+                    onClick={() => setStep(0)}
+                  >
+                    ← {t("checkout.backShipping")}
+                  </button>
+                  <button
+                    className={styles.btnPrimary}
+                    onClick={handleNextToReview}
+                    disabled={processing}
+                  >
+                    {processing ? (
+                      <Loader2 size={18} className={styles.spin} />
+                    ) : (
+                      t("checkout.reviewOrder")
+                    )}
+                    {!processing && (
+                      <ArrowRight
+                        size={16}
+                        style={{
+                          transform: dir === "rtl" ? "rotate(180deg)" : "none",
+                        }}
+                      />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: Review & Final Payment */}
             {step === 2 && (
               <div className={styles.formCard}>
-                <h2 className={styles.formTitle}><ShoppingBag size={20} /> {t("checkout.review")}</h2>
-                
-                <div className={styles.summaryBlock}>
+                <h2 className={styles.formTitle}>
+                  <ShoppingBag size={20} /> {t("checkout.review")}
+                </h2>
+
+                <div
+                  className={styles.summaryBlock}
+                  style={{ marginTop: "24px" }}
+                >
                   <div className={styles.confirmRow}>
                     <div className={styles.confirmHeader}>
-                      <span className={styles.confirmLabel}>Shipping Address</span>
-                      <button className={styles.editBtn} onClick={() => setStep(0)}>Edit</button>
+                      <span className={styles.confirmLabel}>
+                        Shipping Address
+                      </span>
+                      <button
+                        className={styles.editBtn}
+                        onClick={() => setStep(0)}
+                      >
+                        Edit
+                      </button>
                     </div>
-                    <p className={styles.confirmVal}>{form.first} {form.last}</p>
-                    <p className={styles.confirmVal}>{form.address}, {form.city}, {form.country}</p>
-                    <p className={styles.confirmVal}>{form.phone} | {form.email}</p>
+                    {session.shippingAddress && (
+                      <>
+                        <p className={styles.confirmVal}>
+                          {session.shippingAddress.shippingName}
+                        </p>
+                        <p className={styles.confirmVal}>
+                          {session.shippingAddress.shippingStreet},{" "}
+                          {session.shippingAddress.shippingCity}
+                        </p>
+                        <p className={styles.confirmVal}>
+                          {
+                            profile.phoneNumbers.find(
+                              (p) => p.id === selectedPhoneId,
+                            )?.phoneNumber
+                          }
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   <div className={styles.confirmRow}>
                     <div className={styles.confirmHeader}>
-                      <span className={styles.confirmLabel}>Payment Method</span>
-                      <button className={styles.editBtn} onClick={() => setStep(1)}>Edit</button>
+                      <span className={styles.confirmLabel}>
+                        Payment Method
+                      </span>
+                      <button
+                        className={styles.editBtn}
+                        onClick={() => setStep(1)}
+                      >
+                        Edit
+                      </button>
                     </div>
                     <p className={styles.confirmVal}>
-                      {form.payment === "card" ? "💳 Credit / Debit Card" : form.payment === "applepay" ? "🍏 Apple Pay" : "💵 Cash on Delivery"}
+                      {paymentMethod === "card"
+                        ? "💳 Credit / Debit Card"
+                        : "💵 Cash on Delivery"}
                     </p>
                   </div>
                 </div>
 
-                <div className={styles.stepActionsStack}>
-                  <button className={`${styles.btnPrimary} ${styles.btnLarge}`} onClick={placeOrder} disabled={loading}>
-                    {loading ? <><Loader2 size={18} className={styles.spin} /> {t("checkout.processing")}</> : `${t("checkout.confirmOrder")} — EGP ${total.toFixed(2)}`}
-                  </button>
-                  <p className={styles.termsNote}>{t("checkout.terms")}</p>
-                </div>
+                {paymentMethod === "card" && clientSecret && stripePromise ? (
+                  <Elements
+                    stripe={stripePromise}
+                    options={{
+                      clientSecret,
+                      appearance: {
+                        variables: {
+                          colorPrimary: "#000000",
+                        },
+                      },
+                    }}
+                  >
+                    <PaymentForm
+                      onSuccess={handleOrderSuccess}
+                      onBack={() => setStep(1)}
+                      totalAmount={total}
+                      currency={currency}
+                    />
+                  </Elements>
+                ) : paymentMethod === "card" ? (
+                  <div className={styles.emptyState}>
+                    {paymentError ? (
+                      <p className={styles.errorText}>{paymentError}</p>
+                    ) : !stripePromise ? (
+                      <p className={styles.errorText}>
+                        Stripe publishable key is missing. Please configure
+                        `VITE_STRIPE_PUBLISHABLE_KEY`.
+                      </p>
+                    ) : (
+                      <>
+                        <Loader2 size={24} className={styles.spin} />
+                        <p>Initializing secure payment...</p>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className={styles.stepActionsStack}>
+                    <button
+                      className={`${styles.btnPrimary} ${styles.btnLarge}`}
+                      onClick={handleConfirmCashOrder}
+                      disabled={processing}
+                    >
+                      {processing ? (
+                        <>
+                          <Loader2 size={18} className={styles.spin} />{" "}
+                          Processing...
+                        </>
+                      ) : (
+                        `Confirm COD Order — ${formatPrice(total, currency)}`
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -276,29 +786,97 @@ export default function CheckoutPage() {
             <div className={styles.summaryCard}>
               <h3 className={styles.summaryTitle}>{t("checkout.inCart")}</h3>
               <div className={styles.summaryItems}>
-                {ITEMS.map(i => (
-                  <div key={i.id} className={styles.summaryItem}>
-                    <img src={i.image} alt={i.name} className={styles.summaryImg} />
-                    <div className={styles.summaryItemInfo}>
-                      <div style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "2px" }}>
-                        <p className={styles.summaryItemName}>{i.name}</p>
-                        {i.vtonTried && (
-                          <div className={styles.vtonBadgeSmall} title="Tried virtually">
-                            <Sparkles size={10} />
-                          </div>
-                        )}
+                {session?.items.map((i) => (
+                  <div key={i.variantId} className={styles.summaryItem}>
+                    {i.imageUrl ? (
+                      <img
+                        src={i.imageUrl}
+                        alt={i.productName}
+                        className={styles.summaryImg}
+                      />
+                    ) : (
+                      <div
+                        className={styles.summaryImg}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "10px",
+                        }}
+                      >
+                        {i.productName.slice(0, 2).toUpperCase()}
                       </div>
-                      <p className={styles.summaryItemMeta}>Qty: {i.qty} | Size: {i.size}</p>
-                      <span className={styles.summaryItemPrice}>EGP {i.price.toFixed(2)}</span>
+                    )}
+                    <div className={styles.summaryItemInfo}>
+                      <p className={styles.summaryItemName}>{i.productName}</p>
+                      <p className={styles.summaryItemMeta}>
+                        Qty: {i.quantity} | {i.variantSize}
+                      </p>
+                      <span className={styles.summaryItemPrice}>
+                        {formatPrice(i.unitPrice, currency)}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
               <div className={styles.summaryDivider} />
-              <div className={styles.summaryRow}><span>{t("cart.subtotal")}</span><span>EGP {subtotal.toFixed(2)}</span></div>
-              <div className={styles.summaryRow}><span>{t("cart.shipping")}</span><span>{shipping === 0 ? t("cart.free") : `EGP ${shipping.toFixed(2)}`}</span></div>
+              <div className={styles.summaryRow}>
+                <span>{t("cart.subtotal")}</span>
+                <span>{formatPrice(subtotal, currency)}</span>
+              </div>
+              <div className={styles.summaryRow}>
+                <span>{t("cart.shipping")}</span>
+                <span>
+                  {shipping === 0
+                    ? t("cart.free")
+                    : formatPrice(shipping, currency)}
+                </span>
+              </div>
+              {session?.discountAmount > 0 && (
+                <div className={`${styles.summaryRow} ${styles.summaryDiscount}`}>
+                  <span>Discount ({session.couponCode})</span>
+                  <span>-{formatPrice(session.discountAmount, currency)}</span>
+                </div>
+              )}
               <div className={styles.summaryDivider} />
-              <div className={`${styles.summaryRow} ${styles.summaryTotal}`}><span>{t("cart.total")}</span><span>EGP {total.toFixed(2)}</span></div>
+
+              {!session?.couponCode ? (
+                <form onSubmit={handleApplyCoupon} className={styles.couponForm}>
+                  <input
+                    type="text"
+                    placeholder="Enter coupon code"
+                    value={couponCodeInput}
+                    onChange={(e) => setCouponCodeInput(e.target.value)}
+                    disabled={couponProcessing}
+                    className={styles.couponInput}
+                  />
+                  <button 
+                    type="submit" 
+                    className={styles.couponBtn}
+                    disabled={couponProcessing || !couponCodeInput.trim()}
+                  >
+                    Apply
+                  </button>
+                </form>
+              ) : (
+                <div className={styles.appliedCoupon}>
+                  <span>{session.couponCode} applied</span>
+                  <button 
+                    type="button" 
+                    onClick={handleRemoveCoupon}
+                    disabled={couponProcessing}
+                    className={styles.removeCouponBtn}
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+              <div className={styles.summaryDivider} />
+
+              <div className={`${styles.summaryRow} ${styles.summaryTotal}`}>
+                <span>{t("cart.total")}</span>
+                <span>{formatPrice(total, currency)}</span>
+              </div>
             </div>
           </aside>
         </div>

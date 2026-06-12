@@ -1,75 +1,118 @@
-import { useState } from "react";
-import { Search, Plus, Pencil, Trash2, Eye, EyeOff, X, Check, AlertTriangle, Package } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Search, Package, X, Eye, ChevronRight } from "lucide-react";
 import AdminLayout from "../../components/admin/AdminLayout";
+import apiClient from "../../utils/apiClient";
+import { formatPrice } from "../../utils/formatPrice";
 import t from "../../styles/AdminTable.module.css";
 
-const INITIAL_PRODUCTS = [
-  { id: 1, name: "Silk Evening Gown", vendor: "Silk & Satin", category: "Formal Wear", price: "EGP 89.99", stock: 45, visible: true, vton: true },
-  { id: 2, name: "Urban Jogger Set", vendor: "Urban Threads", category: "Sportswear", price: "EGP 59.99", stock: 120, visible: true, vton: false },
-  { id: 3, name: "Desert Kaftan", vendor: "Desert Rose", category: "Traditional", price: "EGP 49.99", stock: 22, visible: true, vton: true },
-  { id: 4, name: "Pearl Hijab Collection", vendor: "Noor Fashion", category: "Accessories", price: "EGP 29.99", stock: 200, visible: false, vton: false },
-  { id: 5, name: "Floral Summer Dress", vendor: "Blossom & Bloom", category: "Summer", price: "EGP 44.99", stock: 0, visible: true, vton: true },
-  { id: 6, name: "Business Abaya", vendor: "Noor Fashion", category: "Formal Wear", price: "EGP 119.99", stock: 18, visible: true, vton: false },
-  { id: 7, name: "Boho Maxi Skirt", vendor: "Blossom & Bloom", category: "Casual", price: "EGP 34.99", stock: 67, visible: true, vton: true },
+const STATUS_OPTIONS = [
+  { value: "", label: "All Status" },
+  { value: "active", label: "Active" },
+  { value: "draft", label: "Draft" },
+  { value: "archived", label: "Archived" },
 ];
 
-const PAGE_SIZE = 5;
-const CATEGORIES = ["All", "Formal Wear", "Sportswear", "Traditional", "Accessories", "Summer", "Casual"];
+const STATUS_CLASS = {
+  active: t.badgeActive,
+  draft: t.badgeDraft,
+  archived: t.badgeClosed,
+};
 
-function getInitials(name) {
-  return name.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+function StatusBadge({ status }) {
+  return (
+    <span className={`${t.badge} ${STATUS_CLASS[status] || t.badgeDraft}`}>
+      {status}
+    </span>
+  );
+}
+
+function ProductImage({ url, name }) {
+  if (url) {
+    return (
+      <div className={t.productThumb}>
+        <img src={url} alt={name} />
+      </div>
+    );
+  }
+  return (
+    <div className={t.productThumb}>
+      <Package size={16} />
+    </div>
+  );
+}
+
+function fmt(date) {
+  if (!date) return "—";
+  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 export default function AdminProducts() {
-  const [products, setProducts] = useState(INITIAL_PRODUCTS);
-  const [search, setSearch] = useState("");
-  const [catFilter, setCatFilter] = useState("All");
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [editProduct, setEditProduct] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
+  const limit = 20;
 
-  const filtered = products.filter((p) => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.vendor.toLowerCase().includes(search.toLowerCase());
-    const matchCat = catFilter === "All" || p.category === catFilter;
-    return matchSearch && matchCat;
-  });
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const [viewProduct, setViewProduct] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [error, setError] = useState(null);
 
-  const toggleVisible = (id) => setProducts(products.map((p) => p.id === id ? { ...p, visible: !p.visible } : p));
-  const deleteProduct = (id) => { setProducts(products.filter((p) => p.id !== id)); setConfirmDelete(null); };
+  const fetchProducts = useCallback(() => {
+    setLoading(true);
+    const params = { page, limit };
+    if (search) params.search = search;
+    if (statusFilter) params.status = statusFilter;
+    apiClient
+      .get("/admin/products", { params })
+      .then((r) => {
+        setProducts(r.data.data);
+        setTotal(r.data.total);
+      })
+      .catch(() => setError("Failed to load products."))
+      .finally(() => setLoading(false));
+  }, [page, limit, search, statusFilter]);
 
-  const saveProduct = (e) => {
-    e.preventDefault();
-    if (editProduct._new) {
-      setProducts([...products, { ...editProduct, id: Date.now(), visible: true }]);
-    } else {
-      setProducts(products.map((p) => p.id === editProduct.id ? editProduct : p));
-    }
-    setEditProduct(null);
-  };
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
-  const BLANK = { name: "", vendor: "", category: "Formal Wear", price: "", stock: 0, visible: true, vton: false, _new: true };
+  const totalPages = Math.ceil(total / limit);
 
   return (
-    <AdminLayout pageTitle="Product Management" pageSubtitle="Browse, add, and moderate all store products." breadcrumb="Products">
+    <AdminLayout
+      pageTitle="Product Management"
+      pageSubtitle="Browse and monitor all store products."
+      breadcrumb="Products"
+    >
+      {error && (
+        <div style={{ marginBottom: 12, padding: "10px 16px", borderRadius: 8, background: "#fee2e2", color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          {error}
+          <button onClick={() => setError(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626" }}><X size={14} /></button>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className={t.toolbar}>
         <div className={t.toolbarLeft}>
           <div className={t.searchBox}>
             <Search size={15} className={t.searchIcon} />
-            <input className={t.searchInput} placeholder="Search by name or vendor..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+            <input
+              className={t.searchInput}
+              placeholder="Search by product name..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
           </div>
-          <select className={t.filterSelect} value={catFilter} onChange={(e) => { setCatFilter(e.target.value); setPage(1); }}>
-            {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+          <select
+            className={t.filterSelect}
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          >
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
           </select>
-        </div>
-        <div className={t.toolbarRight}>
-          <button className={`${t.btn} ${t.btnPrimary}`} onClick={() => setEditProduct({ ...BLANK })}>
-            <Plus size={15} /> Add Product
-          </button>
         </div>
       </div>
 
@@ -79,155 +122,219 @@ export default function AdminProducts() {
           <table className={t.table}>
             <thead>
               <tr>
+                <th style={{ width: 32 }}></th>
+                <th>#</th>
                 <th>Product</th>
-                <th>Category</th>
+                <th>Brand</th>
                 <th>Price</th>
-                <th>Vendor</th>
-                <th>Stock</th>
-                <th>VTON</th>
-                <th>Visible</th>
-                <th style={{ width: 120 }}>Actions</th>
+                <th>Sold</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {paged.length === 0 ? (
-                <tr><td colSpan={8}>
-                  <div className={t.emptyState}>
-                    <div className={t.emptyIcon}><Package size={24} /></div>
-                    <h3 className={t.emptyTitle}>No products found</h3>
-                    <p className={t.emptyText}>Try adjusting your search or category filter.</p>
-                  </div>
-                </td></tr>
-              ) : paged.map((p) => (
-                <tr key={p.id} style={{ opacity: p.visible ? 1 : 0.55 }}>
-                  <td>
-                    <div className={t.avatarCell}>
-                      <div className={t.productThumb}><Package size={16} /></div>
-                      <span style={{ fontWeight: 600 }}>{p.name}</span>
-                    </div>
-                  </td>
-                  <td><span className={`${t.badge} ${t.badgeDraft}`}>{p.category}</span></td>
-                  <td style={{ fontWeight: 700 }}>{p.price}</td>
-                  <td style={{ color: "var(--adm-text-muted)" }}>{p.vendor}</td>
-                  <td>
-                    <span style={{ fontWeight: 700, color: p.stock === 0 ? "#dc2626" : "inherit" }}>
-                      {p.stock === 0 ? "Out of stock" : p.stock}
-                    </span>
-                  </td>
-                  <td>
-                    {p.vton
-                      ? <span className={`${t.badge} ${t.badgeProcessing}`}>Enabled</span>
-                      : <span className={`${t.badge} ${t.badgeDraft}`}>Off</span>
-                    }
-                  </td>
-                  <td>
-                    <button
-                      className={t.actionBtn}
-                      title={p.visible ? "Hide" : "Show"}
-                      onClick={() => toggleVisible(p.id)}
-                      style={{ color: p.visible ? "#16a34a" : "#dc2626" }}
-                    >
-                      {p.visible ? <Eye size={15} /> : <EyeOff size={15} />}
-                    </button>
-                  </td>
-                  <td>
-                    <div className={t.actions}>
-                      <button className={`${t.actionBtn} ${t.edit}`} title="Edit" onClick={() => setEditProduct({ ...p })}><Pencil size={15} /></button>
-                      <button className={`${t.actionBtn} ${t.delete}`} title="Delete" onClick={() => setConfirmDelete(p)}><Trash2 size={15} /></button>
+              {loading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    <td colSpan={9}><span className={`${t.skeleton} ${t.skeletonRow}`} /></td>
+                  </tr>
+                ))
+              ) : products.length === 0 ? (
+                <tr>
+                  <td colSpan={9}>
+                    <div className={t.emptyState}>
+                      <div className={t.emptyIcon}><Package size={24} /></div>
+                      <h3 className={t.emptyTitle}>No products found</h3>
+                      <p className={t.emptyText}>Try adjusting your filters.</p>
                     </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                products.map((p, i) => {
+                  const isExpanded = expandedId === p.id;
+                  const primaryImg = p.images?.find((img) => img.isPrimary) || p.images?.[0];
+                  return (
+                    <>
+                      <tr key={p.id}>
+                        <td>
+                          {p.variants?.length > 0 && (
+                            <button
+                              className={t.expandBtn}
+                              onClick={() => setExpandedId(isExpanded ? null : p.id)}
+                              title={isExpanded ? "Collapse variants" : "Expand variants"}
+                            >
+                              <ChevronRight
+                                size={15}
+                                className={`${t.chevron} ${isExpanded ? t.chevronOpen : ""}`}
+                              />
+                            </button>
+                          )}
+                        </td>
+                        <td>{(page - 1) * limit + i + 1}</td>
+                        <td>
+                          <div className={t.avatarCell}>
+                            <ProductImage url={primaryImg?.url || primaryImg?.s3Url} name={p.name} />
+                            <span className={t.avatarName}>{p.name}</span>
+                          </div>
+                        </td>
+                        <td>{p.vendor?.brandName || "—"}</td>
+                        <td>{formatPrice(p.basePrice)}</td>
+                        <td>{p.totalSold}</td>
+                        <td><StatusBadge status={p.status} /></td>
+                        <td>{fmt(p.createdAt)}</td>
+                        <td>
+                          <div className={t.actions}>
+                            <button className={t.actionBtn} title="View" onClick={() => setViewProduct(p)}>
+                              <Eye size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${p.id}-variants`} className={t.variantExpandRow}>
+                          <td colSpan={9}>
+                            <div className={t.variantExpandInner}>
+                              <table className={t.variantSubTable}>
+                                <thead>
+                                  <tr>
+                                    <th>Image</th>
+                                    <th>Color</th>
+                                    <th>Size</th>
+                                    <th>SKU</th>
+                                    <th>Physical</th>
+                                    <th>Reserved</th>
+                                    <th>Available</th>
+                                    <th>Price</th>
+                                    <th>Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {p.variants.map((v) => {
+                                    const variantImg =
+                                      v.variantImageLinks?.[0]?.image?.s3Url ||
+                                      primaryImg?.s3Url ||
+                                      primaryImg?.url;
+                                    const effectivePrice = v.priceOverride ?? p.basePrice;
+                                    const available =
+                                      v.availableQuantity ??
+                                      (v.physicalQuantity ?? 0) - (v.reservedQuantity ?? 0);
+                                    return (
+                                      <tr key={v.id}>
+                                        <td>
+                                          {variantImg ? (
+                                            <img
+                                              src={variantImg}
+                                              alt={v.sku || "variant"}
+                                              className={t.variantThumb}
+                                            />
+                                          ) : (
+                                            <div className={t.variantThumbPlaceholder}>
+                                              <Package size={12} />
+                                            </div>
+                                          )}
+                                        </td>
+                                        <td>
+                                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                            {v.color?.hexCode && (
+                                              <span
+                                                className={t.variantColorDot}
+                                                style={{ background: v.color.hexCode }}
+                                              />
+                                            )}
+                                            {v.color?.name || "—"}
+                                          </div>
+                                        </td>
+                                        <td>{v.size?.name || "—"}</td>
+                                        <td>{v.sku || "—"}</td>
+                                        <td>
+                                          <span className={v.physicalQuantity > 0 ? t.variantQtyOk : t.variantQtyLow}>
+                                            {v.physicalQuantity ?? 0}
+                                          </span>
+                                        </td>
+                                        <td>{v.reservedQuantity ?? 0}</td>
+                                        <td>
+                                          <span className={available > 0 ? t.variantQtyOk : t.variantQtyLow}>
+                                            {available}
+                                          </span>
+                                        </td>
+                                        <td>{formatPrice(effectivePrice)}</td>
+                                        <td>
+                                          <span className={`${t.badge} ${STATUS_CLASS[v.status] || t.badgeDraft}`}>
+                                            {v.status || "—"}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
 
         {totalPages > 1 && (
           <div className={t.pagination}>
-            <span className={t.pageInfo}>Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} products</span>
+            <span className={t.pageInfo}>
+              Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total} products
+            </span>
             <div className={t.pageButtons}>
-              <button className={t.pageBtn} onClick={() => setPage(p => p - 1)} disabled={page === 1}>←</button>
-              {Array.from({ length: totalPages }, (_, i) => (
-                <button key={i + 1} className={`${t.pageBtn} ${page === i + 1 ? t.pageBtnActive : ""}`} onClick={() => setPage(i + 1)}>{i + 1}</button>
+              <button className={t.pageBtn} onClick={() => setPage((p) => p - 1)} disabled={page === 1}>←</button>
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => (
+                <button
+                  key={i + 1}
+                  className={`${t.pageBtn} ${page === i + 1 ? t.pageBtnActive : ""}`}
+                  onClick={() => setPage(i + 1)}
+                >{i + 1}</button>
               ))}
-              <button className={t.pageBtn} onClick={() => setPage(p => p + 1)} disabled={page === totalPages}>→</button>
+              <button className={t.pageBtn} onClick={() => setPage((p) => p + 1)} disabled={page === totalPages}>→</button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Edit/Add Modal */}
-      {editProduct && (
-        <div className={t.modalBackdrop} onClick={() => setEditProduct(null)}>
+      {/* View Modal */}
+      {viewProduct && (
+        <div className={t.modalBackdrop} onClick={() => setViewProduct(null)}>
           <div className={t.modal} onClick={(e) => e.stopPropagation()}>
             <div className={t.modalHead}>
-              <h2 className={t.modalTitle}>{editProduct._new ? "Add New Product" : "Edit Product"}</h2>
-              <button className={t.modalClose} onClick={() => setEditProduct(null)}><X size={18} /></button>
+              <h2 className={t.modalTitle}>Product Details</h2>
+              <button className={t.modalClose} onClick={() => setViewProduct(null)}><X size={18} /></button>
             </div>
-            <form onSubmit={saveProduct}>
-              <div className={t.modalBody}>
-                <div className={t.formRow}>
-                  <div className={t.formGroup} style={{ gridColumn: "1 / -1" }}>
-                    <label className={t.label}>Product Name</label>
-                    <input className={t.input} value={editProduct.name} onChange={(e) => setEditProduct({ ...editProduct, name: e.target.value })} required placeholder="e.g. Silk Evening Gown" />
-                  </div>
-                  <div className={t.formGroup}>
-                    <label className={t.label}>Vendor</label>
-                    <input className={t.input} value={editProduct.vendor} onChange={(e) => setEditProduct({ ...editProduct, vendor: e.target.value })} required placeholder="Vendor name" />
-                  </div>
-                  <div className={t.formGroup}>
-                    <label className={t.label}>Category</label>
-                    <select className={t.select} value={editProduct.category} onChange={(e) => setEditProduct({ ...editProduct, category: e.target.value })}>
-                      {CATEGORIES.filter((c) => c !== "All").map((c) => <option key={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div className={t.formGroup}>
-                    <label className={t.label}>Price</label>
-                    <input className={t.input} value={editProduct.price} onChange={(e) => setEditProduct({ ...editProduct, price: e.target.value })} required placeholder="EGP 0.00" />
-                  </div>
-                  <div className={t.formGroup}>
-                    <label className={t.label}>Stock</label>
-                    <input className={t.input} type="number" min={0} value={editProduct.stock} onChange={(e) => setEditProduct({ ...editProduct, stock: parseInt(e.target.value) || 0 })} />
-                  </div>
+            <div className={t.modalBody}>
+              <div className={t.avatarCell}>
+                <ProductImage url={viewProduct.images?.[0]?.url} name={viewProduct.name} />
+                <div>
+                  <span className={t.avatarName}>{viewProduct.name}</span>
+                  <span className={t.avatarSub}>{viewProduct.vendor?.brandName}</span>
                 </div>
-                <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13.5 }}>
-                    <label className={t.toggle}>
-                      <input type="checkbox" className={t.toggleInput} checked={editProduct.vton} onChange={(e) => setEditProduct({ ...editProduct, vton: e.target.checked })} />
-                      <span className={t.toggleSlider} />
-                    </label>
-                    VTON Enabled
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13.5 }}>
-                    <label className={t.toggle}>
-                      <input type="checkbox" className={t.toggleInput} checked={editProduct.visible} onChange={(e) => setEditProduct({ ...editProduct, visible: e.target.checked })} />
-                      <span className={t.toggleSlider} />
-                    </label>
-                    Visible in Store
-                  </label>
+                <div style={{ marginLeft: "auto" }}><StatusBadge status={viewProduct.status} /></div>
+              </div>
+              <div className={t.formRow}>
+                <div className={t.formGroup}>
+                  <label className={t.label}>Base Price</label>
+                  <p style={{ margin: 0, fontWeight: 700 }}>{formatPrice(viewProduct.basePrice)}</p>
+                </div>
+                <div className={t.formGroup}>
+                  <label className={t.label}>Total Sold</label>
+                  <p style={{ margin: 0, fontWeight: 700 }}>{viewProduct.totalSold}</p>
+                </div>
+                <div className={t.formGroup}>
+                  <label className={t.label}>Created</label>
+                  <p style={{ margin: 0 }}>{fmt(viewProduct.createdAt)}</p>
                 </div>
               </div>
-              <div className={t.modalFoot}>
-                <button type="button" className={`${t.btn} ${t.btnOutline}`} onClick={() => setEditProduct(null)}>Cancel</button>
-                <button type="submit" className={`${t.btn} ${t.btnPrimary}`}><Check size={14} /> {editProduct._new ? "Add Product" : "Save Changes"}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirm */}
-      {confirmDelete && (
-        <div className={t.modalBackdrop} onClick={() => setConfirmDelete(null)}>
-          <div className={`${t.modal} ${t.modalSm}`} onClick={(e) => e.stopPropagation()}>
-            <div className={t.modalBody} style={{ alignItems: "center", textAlign: "center", paddingTop: 28, paddingBottom: 28 }}>
-              <div className={t.confirmIcon}><AlertTriangle size={24} /></div>
-              <h3 className={t.modalTitle}>Delete Product?</h3>
-              <p className={t.confirmText}>This will permanently remove <strong>{confirmDelete.name}</strong> from the catalog.</p>
             </div>
-            <div className={t.modalFoot} style={{ justifyContent: "center" }}>
-              <button className={`${t.btn} ${t.btnOutline}`} onClick={() => setConfirmDelete(null)}>Cancel</button>
-              <button className={`${t.btn} ${t.btnDanger}`} onClick={() => deleteProduct(confirmDelete.id)}><Trash2 size={14} /> Delete</button>
+            <div className={t.modalFoot}>
+              <button className={`${t.btn} ${t.btnOutline}`} onClick={() => setViewProduct(null)}>Close</button>
             </div>
           </div>
         </div>

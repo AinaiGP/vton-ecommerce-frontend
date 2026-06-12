@@ -16,7 +16,7 @@ const roles = [
     id: "customer",
     title: "Customer",
     description:
-      "Browse, try on, and shop the latest fashion with virtual try-on technology.",
+      "Browse and shop the latest fashion from top designers and vendors.",
     icon: ShoppingBag,
     accent: "burgundy",
     link: "/browse",

@@ -1,19 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import apiClient from "../../utils/apiClient";
 import { formatPrice, getProductImage } from "../../utils/productHelpers";
 import styles from "../../styles/FloatingChatWidget.module.css";
+import ConfirmModal from "../common/ConfirmModal";
+import UpgradeModal from "../modal/UpgradeModal";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Renders a single line of inline markdown into React nodes.
- * Handles: **bold** → <strong>, everything else as plain text.
- * The caller strips leading bullet characters before passing the line in.
+ * Returns inline markdown nodes (bold, plain text) without a wrapper element.
+ * Used when the caller supplies its own wrapper (e.g. a heading <p>).
  */
-function renderInline(line, key) {
+function renderInlineNodes(line) {
   const BOLD_RE = /\*\*([^*]+)\*\*/g;
   const parts = [];
   let last = 0;
@@ -32,21 +34,60 @@ function renderInline(line, key) {
     parts.push(<span key={idx++}>{line.slice(last)}</span>);
   }
 
-  return <p key={key} className={styles.messageText}>{parts}</p>;
+  return parts;
+}
+
+/**
+ * Renders a single line of inline markdown into React nodes.
+ * Handles: **bold** → <strong>, everything else as plain text.
+ * The caller strips leading bullet characters before passing the line in.
+ */
+function renderInline(line, key) {
+  return <p key={key} className={styles.messageText}>{renderInlineNodes(line)}</p>;
 }
 
 /**
  * Renders a text segment, handling line-by-line markdown:
- *  - Lines starting with `* ` or `- ` have the bullet stripped
+ *  - Lines starting with `# `, `## `, `### ` become styled headings
+ *  - Lines starting with `* `, `- `, `• `, or `1. ` have bullet/number stripped
  *  - **bold** is rendered as <strong>
+ *  - Lines that are just `---` are rendered as <hr>
  *  - Blank lines become spacing
  */
 function renderTextSegment(text, segKey) {
   const lines = text.split("\n");
   return lines.map((rawLine, i) => {
-    // Strip leading bullet: `* `, `- `, or `• `
-    const line = rawLine.replace(/^[\*\-•]\s+/, "").trimEnd();
-    if (!line) return null;
+    const trimmed = rawLine.trimEnd();
+    if (!trimmed) return null;
+
+    // Heading markers → styled heading
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const headingText = headingMatch[2];
+      const className =
+        level === 1
+          ? styles.chatHeading1
+          : level === 2
+          ? styles.chatHeading2
+          : styles.chatHeading3;
+      return (
+        <p key={`${segKey}-${i}`} className={className}>
+          {renderInlineNodes(headingText)}
+        </p>
+      );
+    }
+
+    // Horizontal rule
+    if (/^---+$/.test(trimmed)) {
+      return <hr key={`${segKey}-${i}`} className={styles.chatHr} />;
+    }
+
+    // Strip leading bullet or numbered list marker
+    const line = trimmed
+      .replace(/^\d+\.\s+/, "")   // numbered list: "1. "
+      .replace(/^[*\-•]\s+/, ""); // bullet: "- ", "* ", "• "
+
     return renderInline(line, `${segKey}-${i}`);
   });
 }
@@ -85,6 +126,8 @@ function parseReplySegments(reply) {
 
 function ChatProductCard({ imageUrl, altName }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated } = useAuth();
   const [product, setProduct] = useState(null);
   const [status, setStatus] = useState("loading"); // loading | found | notfound
 
@@ -166,11 +209,22 @@ function ChatProductCard({ imageUrl, altName }) {
           </button>
           <button
             className={`${styles.chatProductCardBtn} ${styles.chatProductCardBtnSecondary}`}
-            onClick={() =>
+            onClick={() => {
+              if (!isAuthenticated) {
+                navigate("/auth", { 
+                  state: { 
+                    from: { 
+                      pathname: `/product/${product.id}`, 
+                      state: { autoTriggerTryOn: true } 
+                    } 
+                  } 
+                });
+                return;
+              }
               navigate(`/product/${product.id}`, {
                 state: { autoTriggerTryOn: true },
-              })
-            }
+              });
+            }}
           >
             Try This On
           </button>
@@ -253,6 +307,8 @@ export default function FloatingChatWidget() {
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState(null);
   const [lastFailedMessage, setLastFailedMessage] = useState(null);
+  const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -295,10 +351,21 @@ export default function FloatingChatWidget() {
         setMessages((prev) => [...prev, { role: "model", content: reply }]);
         setHistory(updatedHistory);
       } catch (err) {
-        const msg =
-          err?.response?.status === 503
-            ? "Sorry, I'm having trouble connecting. Please try again later."
-            : "Something went wrong. Please try again.";
+        let msg;
+        if (err?.response?.data?.limitReached) {
+          msg = err.response.data.message;
+          if (!err.response.data.isPro) {
+            setShowUpgradeModal(true);
+          }
+        } else if (err?.response?.data?.sessionLimitReached) {
+          msg = err.response.data.message;
+        } else if (err?.response?.status === 401) {
+          msg = "Please log in to chat with the AINAI assistant.";
+        } else if (err?.response?.status === 503) {
+          msg = "Sorry, I'm having trouble connecting. Please try again later.";
+        } else {
+          msg = "Something went wrong. Please try again.";
+        }
         setError(msg);
         setLastFailedMessage(trimmed);
         setMessages((prev) => [
@@ -320,19 +387,20 @@ export default function FloatingChatWidget() {
   };
 
   const handleNewChat = () => {
-    if (
-      messages.length > 1 &&
-      !window.confirm(
-        "Start a new chat? This will clear the current conversation.",
-      )
-    ) {
+    if (messages.length > 1) {
+      setShowNewChatConfirm(true);
       return;
     }
+    confirmNewChat();
+  };
+
+  const confirmNewChat = () => {
     setMessages([WELCOME_MESSAGE]);
     setHistory([]);
     setInputValue("");
     setError(null);
     setLastFailedMessage(null);
+    setShowNewChatConfirm(false);
   };
 
   const handleKeyDown = (e) => {
@@ -430,6 +498,22 @@ export default function FloatingChatWidget() {
           </svg>
         )}
       </button>
+
+      <ConfirmModal
+        isOpen={showNewChatConfirm}
+        onClose={() => setShowNewChatConfirm(false)}
+        onConfirm={confirmNewChat}
+        title="Start a new chat?"
+        message="This will clear the current conversation. Do you want to proceed?"
+        confirmText="Start New Chat"
+        isDanger={true}
+      />
+
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        feature="chatbot messages"
+      />
     </div>
   );
 }

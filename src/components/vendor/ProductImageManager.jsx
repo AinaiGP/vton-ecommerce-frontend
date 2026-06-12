@@ -208,11 +208,15 @@ export default function ProductImageManager({ product, onClose, onSave }) {
   /* ── Save ── */
   const handleSave = async () => {
     setSaving(true);
-    await new Promise(r => setTimeout(r, 600)); // simulate async
-    onSave?.(images);
-    setSaving(false);
-    showToast("Images saved successfully!");
-    setTimeout(onClose, 1000);
+    try {
+      await onSave?.(images);
+      showToast("Images saved successfully!");
+      // Parent closes it
+    } catch (err) {
+      showToast("Failed to save images.", false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   /* ── Derived counts ── */

@@ -1,163 +1,758 @@
-import { useState, useRef } from "react";
-import { Search, Filter, Plus, X, ChevronUp, ChevronDown, Paperclip, Send, UserCheck, AlertCircle, ShieldAlert, CheckCircle } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+  Search,
+  Filter,
+  X,
+  Paperclip,
+  Send,
+  ShieldAlert,
+  CheckCircle,
+  AlertCircle,
+  ArrowUpRight,
+  Copy,
+  Check,
+  ChevronLeft,
+} from "lucide-react";
 import SupportLayout from "../../components/support/SupportLayout";
+import { useAuth } from "../../context/AuthContext";
+import apiClient, { multipartClient } from "../../utils/apiClient";
 import p from "../../styles/SupportPage.module.css";
 
-const ALL_TICKETS = [
-  { id: "TKT-1089", user: "Sara Al-Rashid",   role: "Customer", subject: "Payment failed during checkout",      status: "Open",     priority: "High",   agent: "Jamie S.", updated: "2m ago",    sla: "slaWarn" },
-  { id: "TKT-1088", user: "Urban Threads",     role: "Vendor",   subject: "VTON quota exceeded",                status: "Progress", priority: "Medium", agent: "Mike R.",  updated: "15m ago",   sla: "slaOk" },
-  { id: "TKT-1087", user: "Omar Ali",          role: "Customer", subject: "Cannot reset password",              status: "Open",     priority: "Urgent", agent: "—",        updated: "3h ago",    sla: "slaBreached" },
-  { id: "TKT-1086", user: "Noor Fashion",      role: "Vendor",   subject: "Product images not uploading",       status: "Resolved", priority: "Low",    agent: "Elena V.", updated: "5h ago",    sla: "slaOk" },
-  { id: "TKT-1085", user: "Layla Hassan",      role: "Customer", subject: "Order not delivered (ORD-2841)",     status: "Progress", priority: "High",   agent: "Jamie S.", updated: "45m ago",   sla: "slaWarn" },
-  { id: "TKT-1084", user: "Desert Rose",       role: "Vendor",   subject: "Withdrawal request not processed",   status: "Open",     priority: "High",   agent: "—",        updated: "1h ago",    sla: "slaWarn" },
-  { id: "TKT-1083", user: "Dina Mansour",      role: "Customer", subject: "Wrong size received",                status: "Closed",   priority: "Low",    agent: "David K.", updated: "2d ago",    sla: "slaOk" },
-  { id: "TKT-1082", user: "Blossom & Bloom",  role: "Vendor",   subject: "Analytics page not loading",         status: "Progress", priority: "Medium", agent: "Mike R.",  updated: "3h ago",    sla: "slaOk" },
-  { id: "TKT-1081", user: "Ali Hamdan",        role: "Customer", subject: "Coupon code not applying",           status: "Resolved", priority: "Low",    agent: "Elena V.", updated: "1d ago",    sla: "slaOk" },
-  { id: "TKT-1080", user: "Silk & Satin",     role: "Vendor",   subject: "Tax invoice missing from dashboard", status: "Open",     priority: "Medium", agent: "—",        updated: "4h ago",    sla: "slaWarn" },
-];
+const STATUS_MAP = {
+  PENDING: "bOpen",
+  OPEN: "bOpen",
+  IN_PROGRESS: "bProgress",
+  AWAITING_RESPONSE: "bProgress",
+  ESCALATED: "bProgress",
+  RESOLVED: "bResolved",
+  CLOSED: "bClosed",
+  CANCELED: "bClosed",
+};
 
-const STATUS_MAP   = { Open: "bOpen", Progress: "bProgress", Resolved: "bResolved", Closed: "bClosed" };
-const PRIORITY_MAP = { Urgent: "pUrgent", High: "pHigh", Medium: "pMed", Low: "pLow" };
-const ROLE_MAP     = { Customer: "rCustomer", Vendor: "rVendor" };
-const SLA_LABEL    = { slaOk: "On Track", slaWarn: "Warning", slaBreached: "Breached" };
+const STATUS_LABEL = {
+  PENDING: "Pending",
+  OPEN: "Open",
+  IN_PROGRESS: "In Progress",
+  AWAITING_RESPONSE: "Awaiting Response",
+  ESCALATED: "Escalated",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed",
+  CANCELED: "Canceled",
+};
 
-const MSGS = [
-  { from: "user",  text: "Hello, I tried to complete my payment three times but it keeps failing. I'm using a Visa card.", time: "10:32 AM" },
-  { from: "agent", text: "Hi Sara, sorry to hear that! Could you let me know if you're seeing any error code on the payment screen?", time: "10:35 AM" },
-  { from: "user",  text: 'Yes — it says "CARD_DECLINED" but my bank says there\'s no issue on their end.', time: "10:37 AM" },
-  { from: "agent", text: "Understood, this can sometimes happen due to our 3DS verification. Let me escalate this to our payments team right away.", time: "10:40 AM" },
-];
+const PRIORITY_MAP = {
+  LOW: "pLow",
+  NORMAL: "pMed",
+  HIGH: "pHigh",
+  URGENT: "pUrgent",
+};
+
+const PRIORITY_LABEL = {
+  LOW: "Low",
+  NORMAL: "Normal",
+  HIGH: "High",
+  URGENT: "Urgent",
+};
+
+const TERMINAL_STATUSES = ["RESOLVED", "CLOSED", "CANCELED"];
+
+const TYPE_CFG = {
+  GENERAL_SUPPORT: { color: "#0369a1", bg: "#e0f2fe", label: "General Support" },
+  GENERAL_INQUIRY: { color: "#0369a1", bg: "#e0f2fe", label: "General Inquiry" },
+  SYSTEM_BUG: { color: "#b91c1c", bg: "#fee2e2", label: "System Bug" },
+  TECHNICAL_ISSUE: { color: "#b91c1c", bg: "#fee2e2", label: "Technical Issue" },
+  ORDER_DISPUTE: { color: "#c2410c", bg: "#ffedd5", label: "Order Dispute" },
+  RETURN_REQUEST: { color: "#4d7c0f", bg: "#ecfccb", label: "Return Request" },
+  ACCOUNT_SUPPORT: { color: "#6d28d9", bg: "#ede9fe", label: "Account Support" },
+  VENDOR_VIOLATION: { color: "#be123c", bg: "#ffe4e6", label: "Vendor Violation" },
+};
+
+function TypeBadge({ type, typeLabel }) {
+  const c = TYPE_CFG[type] || {
+    color: "#475569",
+    bg: "#f8fafc",
+    label: typeLabel || type,
+  };
+  return (
+    <span className={p.badge} style={{ background: c.bg, color: c.color, border: `1px solid ${c.color}30` }}>
+      {c.label}
+    </span>
+  );
+}
+
+function RoleBadge({ role }) {
+  if (!role) return "—";
+  const norm = role.toLowerCase().replace(/_/g, " ");
+  const isVendor = norm.includes("vendor");
+  const bg = isVendor ? "#fef3c7" : "#e0e7ff";
+  const color = isVendor ? "#d97706" : "#4338ca";
+  return (
+    <span className={p.badge} style={{ background: bg, color, border: `1px solid ${color}30`, textTransform: "capitalize" }}>
+      {norm}
+    </span>
+  );
+}
+
+function isImageUrl(url) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url);
+}
+
+function extractLegacyAttachment(content) {
+  if (!content) return { text: "", urls: [] };
+  const match = content.match(/\(attachment:\s*(https?:\/\/[^\s)]+)\)/i);
+  if (!match) return { text: content, urls: [] };
+  const cleaned = content.replace(match[0], "").trim();
+  return { text: cleaned || "Attachment", urls: [match[1]] };
+}
+
+function roleLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin":
+      return "Admin";
+    case "technical_support":
+      return "Support";
+    case "vendor":
+      return "Vendor";
+    case "customer":
+      return "Customer";
+    default:
+      return "User";
+  }
+}
+
+function getInitials(label) {
+  if (!label) return "U";
+  const parts = label.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase()).join("") || "U";
+}
+
+function profileKeyLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin": return "Admin ID";
+    case "technical_support": return "Support ID";
+    case "vendor": return "Vendor ID";
+    case "customer": return "Customer ID";
+    default: return "Profile ID";
+  }
+}
+
+function assigneeLabel(raw, userId) {
+  if (!raw.assigneeId) return { text: "Unassigned", style: "unassigned" };
+  if (String(raw.assigneeRole || "").toUpperCase() === "ADMIN")
+    return { text: "Admin Claimed", style: "admin" };
+  if (raw.assigneeId === userId)
+    return { text: "Support Claimed (You)", style: "mine" };
+  return { text: "Support Claimed", style: "other" };
+}
+
+function mapTicket(raw, userId) {
+  const messages = (raw.messages || [])
+    .map((m) => {
+      const legacy = extractLegacyAttachment(m.content);
+      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
+        Boolean,
+      );
+      const role = String(m.senderRole || "").toLowerCase();
+      const sender = m.sender || null;
+      const senderName = sender?.name || sender?.email || roleLabel(role);
+      return {
+        from:
+          role === "technical_support" || role === "admin" ? "agent" : "user",
+        text: legacy.text || m.content,
+        time: new Date(m.createdAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        senderName,
+        senderAvatar: sender?.avatarUrl || null,
+        senderRole: role,
+        attachments: attachmentUrls.map((url) => ({
+          url,
+          name: url.split("/").pop() || "Attachment",
+          isImage: isImageUrl(url),
+        })),
+        isSystemMessage: m.isSystemMessage,
+      };
+    });
+
+  return {
+    id: raw.id,
+    subject: raw.subject,
+    user: raw.creator?.name || raw.creator?.email || raw.creatorId || "Unknown",
+    role:
+      (raw.creatorRole || "").toLowerCase() === "vendor"
+        ? "Vendor"
+        : "Customer",
+    status: raw.status,
+    priority: raw.priority || "NORMAL",
+    type: raw.type?.replace(/_/g, " "),
+    updated: new Date(raw.updatedAt).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }),
+    agentLabel: assigneeLabel(raw, userId),
+    messages,
+    _raw: raw,
+  };
+}
+
+function fmt(date) {
+  if (!date) return "—";
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+const AGENT_LABEL_STYLES = {
+  mine: { color: "#7c3aed", background: "#f5f3ff" },
+  other: { color: "#0369a1", background: "#e0f2fe" },
+  admin: { color: "#dc2626", background: "#fee2e2" },
+  unassigned: { color: "#64748b", background: "#f1f5f9" },
+};
 
 export default function SupportTickets() {
-  const [tickets, setTickets] = useState(ALL_TICKETS);
-  const [messages, setMessages] = useState({ [ALL_TICKETS[0].id]: [...MSGS] });
-  const [search,   setSearch]  = useState("");
-  const [status,   setStatus]  = useState("All");
-  const [priority, setPriority]= useState("All");
-  const [role,     setRole]    = useState("All");
-  const [sort,     setSort]    = useState({ col: "updated", dir: "asc" });
-  const [selected, setSelected]= useState(null);
-  const [reply,    setReply]   = useState("");
-  const [page,     setPage]    = useState(1);
-  const [newOpen,  setNewOpen] = useState(false);
-  const fileRef = useRef(null);
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const limit = 20;
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [claimedByMe, setClaimedByMe] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [reply, setReply] = useState("");
   const [file, setFile] = useState(null);
-  const PER_PAGE = 6;
+  const [sending, setSending] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+  const [showUninvitedModal, setShowUninvitedModal] = useState(false);
 
-  const getMessages = (id) => messages[id] || [];
-
-  const sendReply = () => {
-    if (!reply.trim() && !file) return;
-    const msg = { from: "agent", text: reply, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), ...(file ? { att: file.name } : {}) };
-    setMessages(prev => ({ ...prev, [selected]: [...(prev[selected] || MSGS), msg] }));
-    setReply(""); setFile(null);
+  const copyToClipboard = (value, key) => {
+    if (!value) return;
+    navigator.clipboard.writeText(value).then(() => {
+      setCopiedId(key);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
   };
 
-  const changeStatus = (id, newStatus) => {
-    setTickets(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
+  const fileRef = useRef(null);
+  const bottomRef = useRef(null);
+
+  const fetchTickets = useCallback(() => {
+    setLoading(true);
+    const params = { page, limit };
+    if (statusFilter) params.status = statusFilter;
+    if (typeFilter) params.type = typeFilter;
+    if (claimedByMe) params.claimedByMe = true;
+    apiClient
+      .get("/tech-support/support/tickets", { params })
+      .then((r) => {
+        let data = r.data.data || r.data || [];
+        if (search) {
+          const q = search.toLowerCase();
+          data = data.filter(
+            (tk) =>
+              tk.subject?.toLowerCase().includes(q) ||
+              tk.id?.toLowerCase().includes(q),
+          );
+        }
+        setTickets(data.map((tk) => mapTicket(tk, user?.id)));
+        setTotal(r.data.total ?? data.length);
+      })
+      .catch(() => setError("Failed to load tickets."))
+      .finally(() => setLoading(false));
+  }, [page, limit, statusFilter, typeFilter, claimedByMe, search, user?.id]);
+
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
+
+  useEffect(() => {
+    const id = setInterval(fetchTickets, 30000);
+    return () => clearInterval(id);
+  }, [fetchTickets]);
+
+  useEffect(() => {
+    if (selected) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [selected?.messages]);
+
+  const openTicket = async (tk) => {
+    try {
+      const res = await apiClient.get(`/tech-support/support/tickets/${tk.id}`);
+      setSelected(mapTicket(res.data, user?.id));
+      setSearchParams({ ticketId: tk.id }, { replace: true });
+    } catch {
+      setError("Failed to load ticket.");
+    }
   };
 
-  const escalate = (id) => {
-    setTickets(prev => prev.map(t => t.id === id ? { ...t, status: "Escalated", priority: "Urgent" } : t));
-    const msg = { from: "agent", text: "This ticket has been escalated to Admin for further review.", time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
-    setMessages(prev => ({ ...prev, [id]: [...(prev[id] || MSGS), msg] }));
+  useEffect(() => {
+    const tid = searchParams.get("ticketId");
+    if (tid && tickets.length > 0 && !selected) {
+      const tk = tickets.find((t) => t.id === tid);
+      if (tk) {
+        openTicket(tk);
+      }
+    } else if (!tid && selected) {
+      setSelected(null);
+    }
+  }, [searchParams, tickets, selected]);
+
+  const refetchSelected = async (id) => {
+    const res = await apiClient.get(`/tech-support/support/tickets/${id}`);
+    const updated = mapTicket(res.data, user?.id);
+    setSelected(updated);
+    fetchTickets();
   };
 
-  const filtered = tickets.filter(t =>
-    (status   === "All" || t.status   === status) &&
-    (priority === "All" || t.priority === priority) &&
-    (role     === "All" || t.role     === role) &&
-    (t.subject.toLowerCase().includes(search.toLowerCase()) ||
-     t.user.toLowerCase().includes(search.toLowerCase()) ||
-     t.id.toLowerCase().includes(search.toLowerCase()))
-  );
+  const isUninvited = () => {
+    if (selected && (selected._raw.type === "RETURN_REQUEST" || selected._raw.type === "ORDER_DISPUTE") && !selected._raw.supportInvited) {
+      setShowUninvitedModal(true);
+      return true;
+    }
+    return false;
+  };
 
-  const total  = filtered.length;
-  const paged  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
-  const pages  = Math.ceil(total / PER_PAGE);
+  const sendReply = async () => {
+    if (isUninvited()) return;
+    if (!selected || (!reply.trim() && !file)) return;
+    setSending(true);
+    try {
+      let attachmentUrl = null;
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await multipartClient.post(
+          `/tech-support/support/tickets/${selected.id}/messages/attachments`,
+          formData,
+        );
+        attachmentUrl = res.data?.url || null;
+      }
+      const content = reply.trim() || "Attachment";
+      await apiClient.post(
+        `/tech-support/support/tickets/${selected.id}/messages`,
+        {
+          content,
+          attachments: attachmentUrl ? [attachmentUrl] : undefined,
+        },
+      );
+      setReply("");
+      setFile(null);
+      await refetchSelected(selected.id);
+    } catch {
+      setError("Failed to send message.");
+    } finally {
+      setSending(false);
+    }
+  };
 
-  const toggleSort = (col) => setSort(s => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }));
-  const SortIcon = ({ col }) => sort.col === col
-    ? (sort.dir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
-    : null;
+  const handleClaim = async () => {
+    if (isUninvited()) return;
+    if (!selected) return;
+    setActionLoading(true);
+    try {
+      await apiClient.patch(
+        `/tech-support/support/tickets/${selected.id}/claim`,
+      );
+      await refetchSelected(selected.id);
+    } catch {
+      setError("Failed to claim ticket.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
-  const ticket = ALL_TICKETS.find(t => t.id === selected);
+  const handleEscalate = async () => {
+    if (isUninvited()) return;
+    if (!selected) return;
+    setActionLoading(true);
+    try {
+      await apiClient.patch(
+        `/tech-support/support/tickets/${selected.id}/escalate`,
+      );
+      await refetchSelected(selected.id);
+    } catch {
+      setError("Failed to escalate ticket.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResolve = async () => {
+    if (isUninvited()) return;
+    if (!selected) return;
+    setActionLoading(true);
+    try {
+      await apiClient.patch(
+        `/tech-support/support/tickets/${selected.id}/resolve`,
+        {},
+      );
+      await refetchSelected(selected.id);
+    } catch {
+      setError("Failed to resolve ticket.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleClose = async () => {
+    if (isUninvited()) return;
+    if (!selected) return;
+    setActionLoading(true);
+    try {
+      await apiClient.patch(
+        `/tech-support/support/tickets/${selected.id}/close`,
+        {},
+      );
+      await refetchSelected(selected.id);
+    } catch {
+      setError("Failed to close ticket.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const isTerminal = selected
+    ? TERMINAL_STATUSES.includes(selected.status)
+    : false;
+  const isClaimedByMe = selected && selected._raw.assigneeId === user?.id;
+  const hasAssignee = selected && selected._raw.assigneeId != null;
+  const totalPages = Math.ceil(total / limit);
 
   return (
     <SupportLayout
       pageTitle="Tickets"
       pageSubtitle="Manage and resolve all customer and vendor tickets."
       breadcrumb="Tickets"
-      headerAction={
-        <button className={`${p.btn} ${p.btnPrimary}`} onClick={() => setNewOpen(true)}>
-          <Plus size={14} /> New Ticket
-        </button>
-      }
     >
+      {error && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 16px",
+            borderRadius: 8,
+            background: "#fee2e2",
+            color: "#dc2626",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            fontSize: 13,
+          }}
+        >
+          {error}
+          <button
+            onClick={() => setError(null)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "#dc2626",
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {showUninvitedModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowUninvitedModal(false)}>
+          <div style={{ background: "white", padding: 24, borderRadius: 12, maxWidth: 400, width: "100%" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <div style={{ background: "#fee2e2", color: "#dc2626", padding: 8, borderRadius: "50%" }}>
+                <AlertCircle size={24} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Action Not Allowed</h3>
+            </div>
+            <p style={{ color: "var(--sup-text-muted)", fontSize: 14, lineHeight: 1.5, marginBottom: 24 }}>
+              You haven't been invited to this ticket yet. Customers and vendors must explicitly request support before you can interfere in their return or dispute.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button className={`${p.btn} ${p.btnPrimary}`} onClick={() => setShowUninvitedModal(false)}>Understood</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selected ? (
         /* ── Ticket Detail Split View ── */
         <div className={p.splitLayout}>
           {/* Left: conversation */}
           <div className={p.splitMain}>
             <div className={p.panelHead}>
-              <div>
-                <p style={{ fontSize: 12, color: "var(--sup-text-muted)", marginBottom: 4 }}>
-                  <span style={{ fontWeight: 700, color: "var(--sup-accent)" }}>{ticket.id}</span> · opened by {ticket.user}
-                </p>
-                <h2 style={{ font: "700 16px/1.3 Inter, sans-serif", color: "var(--sup-text)", margin: 0 }}>{ticket.subject}</h2>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <button className={p.backBtn} onClick={() => setSearchParams({}, { replace: true })} style={{ marginTop: 2 }}>
+                  <ChevronLeft size={18} /> Back
+                </button>
+                <div>
+                  <p
+                    style={{
+                      fontSize: 12,
+                      color: "var(--sup-text-muted)",
+                      marginBottom: 4,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6
+                    }}
+                  >
+                    <span style={{ fontFamily: "monospace", color: "var(--sup-text)" }}>
+                      #{selected.id}
+                    </span>
+                    <button onClick={() => copyToClipboard(selected.id, "ticketId")} className={p.actionBtn} style={{ padding: 2, height: "auto", width: "auto" }} title="Copy ID">
+                      {copiedId === "ticketId" ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
+                    </button>
+                    · {selected.user}
+                  </p>
+                  <h2
+                    style={{
+                      font: "700 16px/1.3 Inter, sans-serif",
+                      color: "var(--sup-text)",
+                      margin: 0,
+                    }}
+                  >
+                    {selected.subject}
+                  </h2>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                <select
-                  value={ticket.status}
-                  onChange={e => changeStatus(ticket.id, e.target.value)}
-                  style={{ padding: "5px 9px", border: "1px solid var(--sup-border)", borderRadius: 7, fontSize: 12, background: "var(--sup-surface)", color: "var(--sup-text)" }}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span
+                  className={`${p.badge} ${p[STATUS_MAP[selected.status]] || p.bOpen}`}
                 >
-                  {["Open","Progress","Resolved","Closed"].map(s => <option key={s}>{s}</option>)}
-                </select>
-                <span className={`${p.badge} ${p[STATUS_MAP[ticket.status]]}`}>{ticket.status}</span>
-                <button className={`${p.btn} ${p.btnGhost} ${p.btnSm}`} onClick={() => setSelected(null)}><X size={14} /></button>
+                  {STATUS_LABEL[selected.status] || selected.status}
+                </span>
+                <TypeBadge type={selected._raw?.type || selected.type} typeLabel={selected.typeLabel || selected.type} />
               </div>
             </div>
 
             {/* Messages */}
             <div className={p.ticketConv}>
-              {getMessages(selected).map((m, i) => (
-                <div key={i} className={`${p.msgRow} ${m.from === "agent" ? p.mine : ""}`}>
-                  <div className={p.msgAvat}>{m.from === "agent" ? "SP" : ticket.user.slice(0, 2).toUpperCase()}</div>
-                  <div>
-                    <div className={p.msgBubble}>{m.text}{m.att && <span style={{ display: "block", fontSize: 11, opacity: 0.7, marginTop: 4 }}>📎 {m.att}</span>}</div>
-                    <span className={p.msgTime}>{m.time}</span>
+              {selected.messages.length === 0 && (
+                <p
+                  style={{
+                    textAlign: "center",
+                    color: "var(--sup-text-muted)",
+                    fontSize: 13,
+                    padding: "20px 0",
+                  }}
+                >
+                  No messages yet.
+                </p>
+              )}
+              {selected.messages.map((m, i) => {
+                if (m.isSystemMessage) {
+                  return (
+                    <div key={i} className={p.msgSysEvent}>
+                      <span>{m.text}</span>
+                    </div>
+                  );
+                }
+                const isAgent = m.from === "agent";
+                return (
+                  <div
+                    key={i}
+                    className={`${p.msgRow} ${isAgent ? p.mine : ""}`}
+                  >
+                    {!isAgent && (
+                      <div className={p.msgAvat}>
+                        {m.senderAvatar ? (
+                          <img
+                            src={m.senderAvatar}
+                            alt={m.senderName}
+                            className={p.msgAvatarImg}
+                          />
+                        ) : (
+                          getInitials(m.senderName)
+                        )}
+                      </div>
+                    )}
+                    <div className={`${p.msgBubble} ${isAgent ? p.msgBubbleMine : p.msgBubbleUser}`}>
+                      <div className={p.msgSender}>
+                        {m.senderName}
+                        <span className={p.msgRole}>
+                          {m.senderRole || (isAgent ? "Agent" : "User")}
+                        </span>
+                      </div>
+                      <p style={{ margin: "0 0 6px 0", lineHeight: 1.4 }}>{m.text}</p>
+                      {m.attachments?.map((att) =>
+                        att.isImage ? (
+                          <a
+                            key={att.url}
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <img
+                              src={att.url}
+                              alt={att.name}
+                              style={{
+                                display: "block",
+                                maxWidth: 160,
+                                maxHeight: 120,
+                                marginTop: 6,
+                                borderRadius: 6,
+                                objectFit: "cover",
+                              }}
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            key={att.url}
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: "block",
+                              fontSize: 11,
+                              opacity: 0.8,
+                              marginTop: 4,
+                            }}
+                          >
+                            📎 {att.name}
+                          </a>
+                        ),
+                      )}
+                      <span className={p.msgTime} style={{ display: "block", marginTop: 4, opacity: 0.7 }}>{m.time}</span>
+                    </div>
+                    {isAgent && (
+                      <div className={p.msgAvat} style={{ background: "var(--sup-accent-light)", color: "var(--sup-accent)" }}>
+                        {m.senderAvatar ? (
+                          <img
+                            src={m.senderAvatar}
+                            alt={m.senderName}
+                            className={p.msgAvatarImg}
+                          />
+                        ) : (
+                          getInitials(m.senderName)
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
+              <div ref={bottomRef} />
             </div>
 
             {/* Reply box */}
-            <div className={p.ticketReply}>
-              <textarea
-                className={p.replyInput}
-                placeholder="Type your reply..."
-                value={reply}
-                onChange={e => setReply(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendReply(); } }}
-              />
-              <div className={p.replyActions}>
-                <button className={`${p.btn} ${p.btnGhost} ${p.btnSm}`} onClick={() => fileRef.current?.click()}><Paperclip size={14} /> {file ? file.name.slice(0, 12) + "…" : "Attach"}</button>
-                <input ref={fileRef} type="file" style={{ display: "none" }} onChange={e => setFile(e.target.files[0] || null)} />
-                <button
-                  className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
-                  style={{ color: "#dc2626", borderColor: "#fca5a5" }}
-                  onClick={() => escalate(ticket.id)}
-                >
-                  <ShieldAlert size={14} /> Escalate to Admin
-                </button>
-                <button className={`${p.btn} ${p.btnOutline} ${p.btnSm}`} onClick={() => changeStatus(ticket.id, "Resolved")}><CheckCircle size={14} /> Resolve</button>
-                <button className={`${p.btn} ${p.btnOutline} ${p.btnSm}`} onClick={() => changeStatus(ticket.id, "Closed")}><AlertCircle size={14} /> Close</button>
-                <button className={`${p.btn} ${p.btnPrimary}`} disabled={!reply.trim() && !file} onClick={sendReply}>
-                  <Send size={14} /> Send Reply
-                </button>
+            {!isTerminal && isClaimedByMe && (
+              <div className={p.ticketReply}>
+                {file && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 12,
+                      color: "var(--sup-text-muted)",
+                      marginBottom: 6,
+                    }}
+                  >
+                    <Paperclip size={12} />
+                    <span>{file.name}</span>
+                    <button
+                      onClick={() => setFile(null)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--sup-text-muted)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
+                <textarea
+                  className={p.replyInput}
+                  placeholder="Type your reply…"
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendReply();
+                    }
+                  }}
+                />
+                <div className={p.replyActions}>
+                  <button
+                    className={`${p.btn} ${p.btnGhost} ${p.btnSm}`}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Paperclip size={14} />{" "}
+                    {file ? file.name.slice(0, 12) + "…" : "Attach"}
+                  </button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    style={{ display: "none" }}
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={(e) => setFile(e.target.files[0] || null)}
+                  />
+                  {selected.status !== "ESCALATED" && (
+                    <button
+                      className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
+                      style={{ color: "#dc2626", borderColor: "#fca5a5" }}
+                      onClick={handleEscalate}
+                      disabled={actionLoading}
+                    >
+                      <ShieldAlert size={14} /> Escalate to Admin
+                    </button>
+                  )}
+                  <button
+                    className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
+                    onClick={handleResolve}
+                    disabled={actionLoading}
+                  >
+                    <CheckCircle size={14} /> Resolve
+                  </button>
+                  <button
+                    className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
+                    onClick={handleClose}
+                    disabled={actionLoading}
+                  >
+                    <AlertCircle size={14} /> Close
+                  </button>
+                  <button
+                    className={`${p.btn} ${p.btnPrimary}`}
+                    disabled={(!reply.trim() && !file) || sending}
+                    onClick={sendReply}
+                  >
+                    <Send size={14} /> {sending ? "Sending…" : "Send Reply"}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
+            {isTerminal && (
+              <div
+                style={{
+                  padding: "14px 20px",
+                  textAlign: "center",
+                  fontSize: 13,
+                  color: "var(--sup-text-muted)",
+                  borderTop: "1px solid var(--sup-border)",
+                }}
+              >
+                This ticket is {STATUS_LABEL[selected.status]?.toLowerCase()}.
+              </div>
+            )}
           </div>
 
           {/* Right: meta panels */}
@@ -166,143 +761,425 @@ export default function SupportTickets() {
               <div className={p.metaHead}>Ticket Details</div>
               <div className={p.metaBody}>
                 {[
-                  ["Status",   <span className={`${p.badge} ${p[STATUS_MAP[ticket.status]]}`}>{ticket.status}</span>],
-                  ["Priority", <span className={`${p.badge} ${p[PRIORITY_MAP[ticket.priority]]}`}>{ticket.priority}</span>],
-                  ["SLA",      <span className={`${p.badge} ${p[ticket.sla]}`}>{SLA_LABEL[ticket.sla]}</span>],
-                  ["Assigned", <span style={{ fontWeight: 600 }}>{ticket.agent}</span>],
-                  ["Updated",  <span style={{ color: "var(--sup-text-muted)" }}>{ticket.updated}</span>],
+                  [
+                    "Status",
+                    <span
+                      key="status"
+                      className={`${p.badge} ${p[STATUS_MAP[selected.status]] || p.bOpen}`}
+                    >
+                      {STATUS_LABEL[selected.status] || selected.status}
+                    </span>,
+                  ],
+                  [
+                    "Priority",
+                    <span
+                      key="priority"
+                      className={`${p.badge} ${p[PRIORITY_MAP[selected.priority]] || p.pMed}`}
+                    >
+                      {PRIORITY_LABEL[selected.priority] || selected.priority}
+                    </span>,
+                  ],
+                  [
+                    "Updated",
+                    <span
+                      key="updated"
+                      style={{ color: "var(--sup-text-muted)" }}
+                    >
+                      {selected.updated}
+                    </span>,
+                  ],
+                  [
+                    "Assigned",
+                    <span
+                      key="assigned"
+                      className={p.badge}
+                      style={{
+                        ...AGENT_LABEL_STYLES[
+                          selected.agentLabel?.style || "unassigned"
+                        ],
+                      }}
+                    >
+                      {selected.agentLabel?.text || "Unassigned"}
+                    </span>,
+                  ],
                 ].map(([l, v]) => (
-                  <div key={l} className={p.metaRow}><span className={p.metaLabel}>{l}</span>{v}</div>
+                  <div key={l} className={p.metaRow}>
+                    <span className={p.metaLabel}>{l}</span>
+                    {v}
+                  </div>
                 ))}
               </div>
             </div>
 
-            <div className={p.metaCard}>
-              <div className={p.metaHead}>Requester</div>
-              <div className={p.metaBody}>
-                <div className={p.avatarCell}>
-                  <div className={p.avatar} style={{ width: 40, height: 40, fontSize: 14 }}>{ticket.user.slice(0, 2).toUpperCase()}</div>
-                  <div>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>{ticket.user}</p>
-                    <span className={`${p.badge} ${p[ROLE_MAP[ticket.role]]}`} style={{ marginTop: 4 }}>{ticket.role}</span>
+            {(() => {
+              const raw = selected._raw || {};
+              const participants = [
+                raw.creatorId ? {
+                  label: "Creator",
+                  role: roleLabel(raw.creatorRole),
+                  rawRole: raw.creatorRole,
+                  userId: raw.creatorId,
+                  entityId: raw.creator?.entityId,
+                } : null,
+                raw.counterpartyId ? {
+                  label: "Counterparty",
+                  role: roleLabel(raw.counterpartyRole),
+                  rawRole: raw.counterpartyRole,
+                  userId: raw.counterpartyId,
+                  entityId: raw.counterparty?.entityId,
+                } : null,
+                raw.assigneeId ? {
+                  label: "Assignee",
+                  role: roleLabel(raw.assigneeRole),
+                  rawRole: raw.assigneeRole,
+                  userId: raw.assigneeId,
+                  entityId: raw.assignee?.entityId,
+                } : null,
+              ].filter(Boolean);
+              if (!participants.length) return null;
+              return (
+                <div className={p.metaCard}>
+                  <div className={p.metaHead}>Participants</div>
+                  <div className={`${p.metaBody} ${p.supParticipantScroll}`}>
+                    {participants.map((pt) => {
+                      const userKey = `${pt.label}-user`;
+                      const profileKey = `${pt.label}-profile`;
+                      return (
+                        <div key={pt.label} className={p.supParticipantEntry}>
+                          <span className={p.supParticipantTitle}>
+                            {pt.label}{" "}
+                            <span className={p.supParticipantRole}>{pt.role}</span>
+                          </span>
+                          <button
+                            className={`${p.supCopyIdBtn} ${copiedId === userKey ? p.supCopyIdBtnCopied : ""}`}
+                            onClick={() => copyToClipboard(pt.userId, userKey)}
+                            title="Click to copy User ID"
+                          >
+                            <div className={p.supCopyIdHeader}>
+                              <span className={p.supCopyIdKey}>User ID</span>
+                              {copiedId === userKey ? <Check size={13} /> : <Copy size={13} />}
+                            </div>
+                            <span className={p.supCopyIdVal}>{pt.userId || "—"}</span>
+                          </button>
+                          {pt.entityId && (
+                            <button
+                              className={`${p.supCopyIdBtn} ${copiedId === profileKey ? p.supCopyIdBtnCopied : ""}`}
+                              onClick={() => copyToClipboard(pt.entityId, profileKey)}
+                              title={`Click to copy ${profileKeyLabel(pt.rawRole)}`}
+                            >
+                              <div className={p.supCopyIdHeader}>
+                                <span className={p.supCopyIdKey}>{profileKeyLabel(pt.rawRole)}</span>
+                                {copiedId === profileKey ? <Check size={13} /> : <Copy size={13} />}
+                              </div>
+                              <span className={p.supCopyIdVal}>{pt.entityId}</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
-            <div className={p.metaCard}>
-              <div className={p.metaHead}>Quick Actions</div>
-              <div className={p.metaBody}>
-                <button className={`${p.btn} ${p.btnPrimary}`} style={{ width: "100%" }}>Mark as Resolved</button>
-                <button className={`${p.btn} ${p.btnOutline}`} style={{ width: "100%" }}>Reassign Agent</button>
-                <button className={`${p.btn} ${p.btnDanger}`} style={{ width: "100%" }}>Close Ticket</button>
+            {!isTerminal && (
+              <div className={p.metaCard}>
+                <div className={p.metaHead}>Quick Actions</div>
+                <div className={p.metaBody}>
+                  {!selected._raw?.assigneeId &&
+                    selected._raw?.status !== "ESCALATED" && (
+                      <button
+                        className={`${p.btn} ${p.btnOutline}`}
+                        style={{ width: "100%" }}
+                        onClick={handleClaim}
+                        disabled={actionLoading}
+                      >
+                        <ArrowUpRight size={14} /> Claim Ticket
+                      </button>
+                    )}
+                  <button
+                    className={`${p.btn} ${p.btnPrimary}`}
+                    style={{ width: "100%" }}
+                    onClick={handleResolve}
+                    disabled={actionLoading}
+                  >
+                    <CheckCircle size={14} /> Mark as Resolved
+                  </button>
+                  <button
+                    className={`${p.btn} ${p.btnDanger}`}
+                    style={{ width: "100%" }}
+                    onClick={handleClose}
+                    disabled={actionLoading}
+                  >
+                    <AlertCircle size={14} /> Close Ticket
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       ) : (
         /* ── Tickets Table ── */
         <div className={p.panel}>
-          {/* Filter bar */}
           <div className={p.filterBar}>
             <div className={p.searchWrap}>
               <Search size={14} className={p.searchIcon} />
-              <input className={p.searchInput} placeholder="Search tickets, users..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+              <input
+                className={p.searchInput}
+                placeholder="Search tickets…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+              />
             </div>
-            <select className={p.filterSelect} value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
-              <option value="All">All Status</option>
-              {["Open","Progress","Resolved","Closed"].map(s => <option key={s}>{s}</option>)}
+            <select
+              className={p.filterSelect}
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All Status</option>
+              {Object.entries(STATUS_LABEL).map(([val, label]) => (
+                <option key={val} value={val}>
+                  {label}
+                </option>
+              ))}
             </select>
-            <select className={p.filterSelect} value={priority} onChange={e => { setPriority(e.target.value); setPage(1); }}>
-              <option value="All">All Priority</option>
-              {["Urgent","High","Medium","Low"].map(s => <option key={s}>{s}</option>)}
+            <select
+              className={p.filterSelect}
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All Types</option>
+              <option value="GENERAL_INQUIRY">General Inquiry</option>
+              <option value="TECHNICAL_ISSUE">Technical Issue</option>
+              <option value="ACCOUNT_SUPPORT">Account Support</option>
+              <option value="ORDER_DISPUTE">Order Dispute</option>
+              <option value="RETURN_REQUEST">Return Request</option>
+              <option value="VENDOR_VIOLATION">Vendor Violation</option>
             </select>
-            <select className={p.filterSelect} value={role} onChange={e => { setRole(e.target.value); setPage(1); }}>
-              <option value="All">All Users</option>
-              <option>Customer</option><option>Vendor</option>
-            </select>
-            <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--sup-text-muted)" }}>{total} ticket{total !== 1 ? "s" : ""}</span>
+            <label 
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "4px 12px",
+                background: claimedByMe ? "var(--sup-accent-light)" : "#f1f5f9",
+                color: claimedByMe ? "var(--sup-accent)" : "#64748b",
+                borderRadius: 20,
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+                border: `1px solid ${claimedByMe ? "var(--sup-accent)" : "#cbd5e1"}`,
+                transition: "all 0.2s",
+                userSelect: "none"
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={claimedByMe}
+                onChange={(e) => {
+                  setClaimedByMe(e.target.checked);
+                  setPage(1);
+                }}
+                style={{ display: "none" }}
+              />
+              {claimedByMe && <Check size={14} />}
+              Claimed by Me
+            </label>
+            <span
+              style={{
+                marginLeft: "auto",
+                fontSize: 12,
+                color: "var(--sup-text-muted)",
+              }}
+            >
+              {total} ticket{total !== 1 ? "s" : ""}
+            </span>
           </div>
 
           <div className={p.tableWrap}>
             <table className={p.table}>
               <thead>
                 <tr>
-                  <th onClick={() => toggleSort("id")} style={{ cursor: "pointer" }}>ID <SortIcon col="id" /></th>
-                  <th>User</th>
+                  <th>#</th>
+                  <th>Creator</th>
                   <th>Subject</th>
                   <th>Status</th>
-                  <th>Priority</th>
-                  <th>SLA</th>
+                  <th>Type</th>
                   <th>Assigned</th>
-                  <th onClick={() => toggleSort("updated")} style={{ cursor: "pointer" }}>Updated <SortIcon col="updated" /></th>
+                  <th>Updated</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {paged.length === 0 ? (
-                  <tr><td colSpan={8}><div className={p.emptyState}><div className={p.emptyIcon}><Filter size={40} /></div><p className={p.emptyTitle}>No tickets found</p><p style={{ margin: 0, fontSize: 13 }}>Try adjusting your filters</p></div></td></tr>
-                ) : paged.map(t => (
-                  <tr key={t.id} className={p.clickable} onClick={() => setSelected(t.id)}>
-                    <td style={{ fontWeight: 700, color: "var(--sup-accent)" }}>{t.id}</td>
-                    <td>
-                      <div className={p.avatarCell}>
-                        <div className={p.avatar}>{t.user.slice(0, 2).toUpperCase()}</div>
-                        <div>
-                          <span style={{ fontWeight: 600, fontSize: 13, display: "block" }}>{t.user}</span>
-                          <span className={`${p.badge} ${p[ROLE_MAP[t.role]]}`} style={{ fontSize: 10 }}>{t.role}</span>
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      style={{
+                        textAlign: "center",
+                        padding: 32,
+                        color: "var(--sup-text-muted)",
+                      }}
+                    >
+                      Loading…
+                    </td>
+                  </tr>
+                ) : tickets.length === 0 ? (
+                  <tr>
+                    <td colSpan={8}>
+                      <div className={p.emptyState}>
+                        <div className={p.emptyIcon}>
+                          <Filter size={40} />
                         </div>
+                        <p className={p.emptyTitle}>No tickets found</p>
+                        <p style={{ margin: 0, fontSize: 13 }}>
+                          Try adjusting your filters
+                        </p>
                       </div>
                     </td>
-                    <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.subject}</td>
-                    <td><span className={`${p.badge} ${p[STATUS_MAP[t.status]]}`}>{t.status}</span></td>
-                    <td><span className={`${p.badge} ${p[PRIORITY_MAP[t.priority]]}`}>{t.priority}</span></td>
-                    <td><span className={`${p.badge} ${p[t.sla]}`}>{SLA_LABEL[t.sla]}</span></td>
-                    <td style={{ fontSize: 13, color: "var(--sup-text-muted)" }}>{t.agent}</td>
-                    <td style={{ fontSize: 12, color: "var(--sup-text-subtle)" }}>{t.updated}</td>
                   </tr>
-                ))}
+                ) : (
+                  tickets.map((tk, idx) => (
+                    <tr
+                      key={tk.id}
+                      className={p.clickable}
+                      onClick={() => openTicket(tk)}
+                    >
+                      <td
+                        style={{
+                          fontWeight: 700,
+                          color: "var(--sup-text-main)",
+                          fontSize: 13,
+                        }}
+                      >
+                        {(page - 1) * limit + idx + 1}
+                      </td>
+                      <td>
+                        <div className={p.avatarCell}>
+                          <div className={p.avatar}>
+                            {tk.user.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <span
+                              style={{
+                                fontWeight: 600,
+                                fontSize: 13,
+                                display: "block",
+                              }}
+                            >
+                              {tk.user}
+                            </span>
+                            <RoleBadge role={tk.role} />
+                          </div>
+                        </div>
+                      </td>
+                      <td
+                        style={{
+                          maxWidth: 200,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {tk.subject}
+                      </td>
+                      <td>
+                        {(tk._raw.type === "RETURN_REQUEST" || tk._raw.type === "ORDER_DISPUTE") && !tk._raw.supportInvited ? (
+                          <span className={p.badge} style={{ background: "#f1f5f9", color: "#64748b", border: "1px solid #cbd5e1" }}>
+                            Customer & Vendor
+                          </span>
+                        ) : (
+                          <span
+                            className={`${p.badge} ${p[STATUS_MAP[tk.status]] || p.bOpen}`}
+                          >
+                            {STATUS_LABEL[tk.status] || tk.status}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <TypeBadge type={tk._raw.type} typeLabel={tk.type} />
+                      </td>
+                      <td>
+                        <span
+                          className={p.badge}
+                          style={{
+                            ...AGENT_LABEL_STYLES[tk.agentLabel.style],
+                            fontSize: 11,
+                          }}
+                        >
+                          {tk.agentLabel.text}
+                        </span>
+                      </td>
+                      <td
+                        style={{
+                          fontSize: 12,
+                          color: "var(--sup-text-subtle)",
+                        }}
+                      >
+                        {tk.updated}
+                      </td>
+                      <td>
+                        <button
+                          className={`${p.actionBtn} ${p.approve}`}
+                          title="Open Ticket"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openTicket(tk);
+                          }}
+                        >
+                          <ArrowUpRight size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
-          {pages > 1 && (
+          {totalPages > 1 && (
             <div className={p.pagination}>
-              <span className={p.pageInfo}>Showing {(page-1)*PER_PAGE+1}–{Math.min(page*PER_PAGE,total)} of {total}</span>
+              <span className={p.pageInfo}>
+                Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)}{" "}
+                of {total}
+              </span>
               <div className={p.pageButtons}>
-                <button className={p.pageBtn} onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}>‹</button>
-                {Array.from({ length: pages }, (_, i) => (
-                  <button key={i+1} className={`${p.pageBtn} ${page===i+1 ? p.active : ""}`} onClick={() => setPage(i+1)}>{i+1}</button>
+                <button
+                  className={p.pageBtn}
+                  onClick={() => setPage((v) => Math.max(1, v - 1))}
+                  disabled={page === 1}
+                >
+                  ‹
+                </button>
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => (
+                  <button
+                    key={i + 1}
+                    className={`${p.pageBtn} ${page === i + 1 ? p.active : ""}`}
+                    onClick={() => setPage(i + 1)}
+                  >
+                    {i + 1}
+                  </button>
                 ))}
-                <button className={p.pageBtn} onClick={() => setPage(p => Math.min(pages, p+1))} disabled={page===pages}>›</button>
+                <button
+                  className={p.pageBtn}
+                  onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
+                  disabled={page === totalPages}
+                >
+                  ›
+                </button>
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* New Ticket Modal */}
-      {newOpen && (
-        <div className={p.modalBackdrop} onClick={e => e.target === e.currentTarget && setNewOpen(false)}>
-          <div className={p.modal}>
-            <div className={p.modalHead}>
-              <h3 className={p.modalTitle}>Create New Ticket</h3>
-              <button className={`${p.btn} ${p.btnGhost} ${p.btnIcon}`} onClick={() => setNewOpen(false)}><X size={16} /></button>
-            </div>
-            <div className={p.modalBody}>
-              <div className={p.formGroup}><label className={p.label}>Subject</label><input className={p.input} placeholder="Brief description of the issue" /></div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className={p.formGroup}><label className={p.label}>Priority</label><select className={p.select}><option>Low</option><option>Medium</option><option selected>High</option><option>Urgent</option></select></div>
-                <div className={p.formGroup}><label className={p.label}>User Type</label><select className={p.select}><option>Customer</option><option>Vendor</option></select></div>
-              </div>
-              <div className={p.formGroup}><label className={p.label}>User Name / ID</label><input className={p.input} placeholder="Search user..." /></div>
-              <div className={p.formGroup}><label className={p.label}>Description</label><textarea className={p.textarea} placeholder="Detailed description of the issue..." /></div>
-              <div className={p.formGroup}><label className={p.label}>Assign To</label><select className={p.select}><option>Jamie Sullivan</option><option>Mike R.</option><option>Elena V.</option><option>David K.</option></select></div>
-            </div>
-            <div className={p.modalFoot}>
-              <button className={`${p.btn} ${p.btnOutline}`} onClick={() => setNewOpen(false)}>Cancel</button>
-              <button className={`${p.btn} ${p.btnPrimary}`}>Create Ticket</button>
-            </div>
-          </div>
         </div>
       )}
     </SupportLayout>

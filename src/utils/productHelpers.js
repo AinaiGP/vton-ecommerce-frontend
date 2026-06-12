@@ -1,8 +1,24 @@
+import { formatPrice as baseFormatPrice } from "./formatPrice";
+
 export function getProductImage(product) {
   const primary = product?.images?.find((img) => img?.isPrimary);
   if (primary?.s3Url) return primary.s3Url;
   if (product?.images?.[0]?.s3Url) return product.images[0].s3Url;
   return null;
+}
+
+export function getVariantImage(variant, product) {
+  const variantImage = variant?.variantImageLinks?.find(
+    (link) => link?.image?.s3Url,
+  )?.image?.s3Url;
+  if (variantImage) return variantImage;
+  return getProductImage(product);
+}
+
+export function getVariantImageForColor(product, colorId) {
+  if (!product?.variants?.length || !colorId) return getProductImage(product);
+  const variant = product.variants.find((item) => item?.color?.id === colorId);
+  return getVariantImage(variant, product);
 }
 
 export function getPrimaryVariantForColor(product, colorId) {
@@ -38,23 +54,14 @@ export function getUniqueSizes(product) {
     if (!size?.id || unique.has(size.id)) continue;
     unique.set(size.id, {
       id: size.id,
-      label: size.label,
+      label: size.label || size.name,
     });
   }
 
   return Array.from(unique.values());
 }
 
-export function formatPrice(amount, currency) {
-  if (typeof amount !== "number" || Number.isNaN(amount)) return "";
-
-  if (currency === "EGP") {
-    return `EGP ${amount.toFixed(2)}`;
-  }
-
-  const normalizedCurrency = currency || "EGP";
-  return `${normalizedCurrency} ${amount.toFixed(2)}`;
-}
+export const formatPrice = baseFormatPrice;
 
 export function getSizeRange(product) {
   const sizes = getUniqueSizes(product);

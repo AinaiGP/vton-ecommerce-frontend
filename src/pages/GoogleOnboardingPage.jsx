@@ -1,19 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import { Phone, User } from "lucide-react";
-import apiClient from "../../utils/apiClient";
-import styles from "../../styles/GoogleOnboardingModal.module.css";
+import { completeGoogleOnboarding } from "../utils/authFunctions";
+import { useAuth } from "../context/AuthContext";
+import styles from "../styles/GoogleOnboardingPage.module.css";
 
-export default function GoogleOnboardingModal({ onComplete }) {
+export default function GoogleOnboardingPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
+  
+  const onboardingToken = location.state?.onboardingToken;
+  const initialFirstName = location.state?.firstName || "";
+  const initialLastName = location.state?.lastName || "";
+
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
+    firstName: initialFirstName,
+    lastName: initialLastName,
     gender: "",
     phoneNumber: "",
     street: "",
     city: "",
+    addressLabel: "Home",
+    customAddressLabel: "",
   });
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  if (!onboardingToken) {
+    return <Navigate to="/auth" replace />;
+  }
 
   const isNameValid =
     formData.firstName.trim().length > 0 && formData.lastName.trim().length > 0;
@@ -21,10 +38,12 @@ export default function GoogleOnboardingModal({ onComplete }) {
   const handleChange = (event) => {
     const { name, value } = event.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setError("");
   };
 
   const buildPayload = () => {
     const payload = {
+      onboardingToken,
       firstName: formData.firstName.trim(),
       lastName: formData.lastName.trim(),
     };
@@ -39,6 +58,9 @@ export default function GoogleOnboardingModal({ onComplete }) {
 
     if (formData.street.trim()) {
       payload.shippingAddress = {
+        label: formData.addressLabel === "Other" 
+          ? (formData.customAddressLabel.trim() || "Other") 
+          : formData.addressLabel.trim(),
         street: formData.street.trim(),
         city: formData.city.trim(),
       };
@@ -64,10 +86,33 @@ export default function GoogleOnboardingModal({ onComplete }) {
     setIsSubmitting(true);
 
     try {
-      await apiClient.post("/customers/onboarding", buildPayload());
-      onComplete();
-    } catch (requestError) {
-      const backendMessage = requestError?.response?.data?.message;
+      const result = await completeGoogleOnboarding(buildPayload());
+      
+      const accessToken = result?.accessToken;
+      if (!accessToken) throw new Error("No token returned");
+      
+      // Decode JWT
+      const base64 = accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const normalized = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+      const payload = JSON.parse(atob(normalized));
+
+      const user = {
+        id: payload?.sub || payload?.id || null,
+        email: payload?.email || null,
+        role: payload?.role || null,
+        isOnboardingComplete: payload?.isOnboardingComplete ?? true,
+        authProvider: payload?.authProvider,
+        firstName: payload?.firstName,
+        lastName: payload?.lastName,
+        brandName: payload?.brandName,
+        vendorId: payload?.vendorId,
+        isSubscribedToNewsletter: payload?.isSubscribedToNewsletter ?? false,
+      };
+
+      login(user, accessToken, result.refreshToken, false);
+      navigate("/", { replace: true });
+    } catch (err) {
+      const backendMessage = err?.response?.data?.message;
       const message = Array.isArray(backendMessage)
         ? backendMessage.join(", ")
         : backendMessage || "Unable to complete onboarding.";
@@ -78,8 +123,8 @@ export default function GoogleOnboardingModal({ onComplete }) {
   };
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true">
-      <div className={styles.modalCard}>
+    <div className={styles.pageShell}>
+      <div className={styles.pageCard}>
         <h2 className={styles.title}>Complete your profile</h2>
         <p className={styles.subtitle}>
           Just a few details to personalize AINAI.
@@ -174,19 +219,54 @@ export default function GoogleOnboardingModal({ onComplete }) {
           </div>
 
           {formData.street.trim() && (
-            <div className={styles.field}>
-              <label htmlFor="google-city" className={styles.label}>
-                City
-              </label>
-              <input
-                id="google-city"
-                name="city"
-                value={formData.city}
-                onChange={handleChange}
-                className={styles.inputNoIcon}
-                placeholder="Cairo"
-              />
-            </div>
+            <>
+              <div className={styles.field}>
+                <label htmlFor="google-address-label" className={styles.label}>
+                  Address Label
+                </label>
+                <select
+                  id="google-address-label"
+                  name="addressLabel"
+                  value={formData.addressLabel}
+                  onChange={handleChange}
+                  className={styles.select}
+                >
+                  <option value="Home">Home</option>
+                  <option value="Work">Work</option>
+                  <option value="Other">Other...</option>
+                </select>
+              </div>
+
+              {formData.addressLabel === "Other" && (
+                <div className={styles.field}>
+                  <label htmlFor="google-custom-label" className={styles.label}>
+                    Custom Label Name
+                  </label>
+                  <input
+                    id="google-custom-label"
+                    name="customAddressLabel"
+                    value={formData.customAddressLabel}
+                    onChange={handleChange}
+                    className={styles.inputNoIcon}
+                    placeholder="e.g. Gym, Parent's House"
+                  />
+                </div>
+              )}
+
+              <div className={styles.field}>
+                <label htmlFor="google-city" className={styles.label}>
+                  City
+                </label>
+                <input
+                  id="google-city"
+                  name="city"
+                  value={formData.city}
+                  onChange={handleChange}
+                  className={styles.inputNoIcon}
+                  placeholder="Cairo"
+                />
+              </div>
+            </>
           )}
 
           {!isNameValid && (

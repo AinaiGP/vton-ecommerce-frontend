@@ -28,8 +28,6 @@ export default function FilterSidebar({
     { label: t("gender.all"), value: "" },
     { label: t("gender.men"), value: "MEN" },
     { label: t("gender.women"), value: "WOMEN" },
-    { label: t("gender.boys"), value: "BOYS" },
-    { label: t("gender.girls"), value: "GIRLS" },
     { label: t("gender.unisex"), value: "UNISEX" },
   ];
 

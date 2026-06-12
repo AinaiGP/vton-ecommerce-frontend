@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import GoogleOnboardingModal from "../components/auth/GoogleOnboardingModal";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import { useAuth } from "../context/AuthContext";
+import { getRedirectPathByRole } from "../utils/authFunctions";
 
 const decodeJwtPayload = (token) => {
   const payloadPart = token?.split(".")[1];
@@ -29,32 +29,9 @@ export default function AuthCallbackPage() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const accessToken = params.get("accessToken");
   const refreshToken = params.get("refreshToken");
-  const isNewUser = params.get("isNewUser") === "true";
   const payload = decodeJwtPayload(accessToken);
+  const isOnboardingComplete = payload?.isOnboardingComplete ?? true;
   const callbackRole = payload?.role || null;
-  const [showOnboarding, setShowOnboarding] = useState(isNewUser);
-
-  const redirectByRole = useMemo(
-    () => (role) => {
-      if (role === "vendor") {
-        navigate("/vendor", { replace: true });
-        return;
-      }
-
-      if (role === "admin") {
-        navigate("/admin", { replace: true });
-        return;
-      }
-
-      navigate("/", { replace: true });
-    },
-    [navigate],
-  );
-
-  const handleOnboardingComplete = () => {
-    setShowOnboarding(false);
-    redirectByRole(callbackRole);
-  };
 
   useEffect(() => {
     if (!accessToken || !refreshToken) {
@@ -69,6 +46,12 @@ export default function AuthCallbackPage() {
       id: payload?.sub || payload?.id || null,
       email: payload?.email || null,
       role: payload?.role || null,
+      isOnboardingComplete: isOnboardingComplete,
+      authProvider: 'google',
+      firstName: payload?.firstName,
+      lastName: payload?.lastName,
+      brandName: payload?.brandName,
+      vendorId: payload?.vendorId,
     };
 
     if (!user.id || !user.email || !user.role) {
@@ -81,32 +64,30 @@ export default function AuthCallbackPage() {
       return;
     }
 
-    login(user, accessToken, refreshToken);
+    login(user, accessToken, refreshToken, true);
 
-    if (isNewUser) {
+    // Block redirect if onboarding is incomplete
+    if (user.isOnboardingComplete === false) {
+      navigate("/onboarding", { replace: true });
       return;
     }
 
-    redirectByRole(user.role);
+    navigate(getRedirectPathByRole(user.role), { replace: true });
   }, [
     accessToken,
-    isNewUser,
+    isOnboardingComplete,
     login,
     navigate,
     payload?.email,
     payload?.id,
     payload?.role,
     payload?.sub,
-    redirectByRole,
     refreshToken,
   ]);
 
   return (
     <>
       <LoadingSpinner message="Signing you in with Google..." />
-      {showOnboarding && (
-        <GoogleOnboardingModal onComplete={handleOnboardingComplete} />
-      )}
     </>
   );
 }

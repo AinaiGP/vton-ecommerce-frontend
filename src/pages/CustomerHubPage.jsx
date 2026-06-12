@@ -1,25 +1,74 @@
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
-  User, ShoppingBag, Heart, RotateCcw, MessageSquare, Package,
-  Shirt, Zap, Home, ChevronRight, Star, ArrowRight, Eye,
+  User,
+  ShoppingBag,
+  Heart,
+  RotateCcw,
+  MessageSquare,
+  Package,
+  Shirt,
+  Zap,
+  Home,
+  ChevronRight,
+  Star,
+  ArrowRight,
+  Eye,
   Ticket,
+  Loader2,
+  Sparkles,
+  Store,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
-import { DEMO_PRODUCTS } from "../utils/demoProducts";
-import { formatPrice, getProductImage } from "../utils/productHelpers";
+import apiClient from "../utils/apiClient";
+import { formatPrice } from "../utils/productHelpers";
+import styles from "../styles/CustomerHub.module.css";
+import { useAuth } from "../context/AuthContext";
+import VtonModal from "../components/vton/VtonModal";
 
 /* ─── Page sections ─── */
+import { useSubscription } from "../context/SubscriptionContext";
+import { useLocation, useNavigate } from "react-router-dom";
+import WelcomeProModal from "../components/modal/WelcomeProModal";
+import CancelSubscriptionModal from "../components/modal/CancelSubscriptionModal";
+
 const CUSTOMER_PAGES = [
   {
     group: "My Account",
     color: "#8B4852",
     bg: "#fdf2f3",
     items: [
-      { to: "/profile",   icon: User,         label: "My Profile",          desc: "Personal info, addresses & security" },
-      { to: "/orders",    icon: Package,       label: "My Orders",           desc: "Track and manage your orders" },
-      { to: "/wishlist",  icon: Heart,         label: "Wishlist",            desc: "Your saved favourite items" },
-      { to: "/wardrobe",  icon: Shirt,         label: "My Wardrobe",         desc: "AI-powered digital wardrobe" },
+      {
+        to: "/profile",
+        icon: User,
+        label: "My Profile",
+        desc: "Personal info, addresses & security",
+      },
+      {
+        to: "/orders",
+        icon: Package,
+        label: "My Orders",
+        desc: "Track and manage your orders",
+      },
+      {
+        to: "/wishlist",
+        icon: Heart,
+        label: "Wishlist",
+        desc: "Your saved favourite items",
+      },
+      {
+        to: "/wardrobe",
+        icon: Shirt,
+        label: "My Wardrobe",
+        desc: "AI-powered digital wardrobe",
+      },
+      {
+        to: "/apply-vendor",
+        icon: Store,
+        label: "Vendor Application",
+        desc: "Apply to become a vendor",
+      },
     ],
   },
   {
@@ -27,8 +76,18 @@ const CUSTOMER_PAGES = [
     color: "#1d4ed8",
     bg: "#eff6ff",
     items: [
-      { to: "/tickets",   icon: MessageSquare, label: "Support Tickets",     desc: "Get help from our support team" },
-      { to: "/returns",   icon: RotateCcw,     label: "Returns & Refunds",   desc: "Request returns and track refunds" },
+      {
+        to: "/tickets",
+        icon: MessageSquare,
+        label: "Support Tickets",
+        desc: "Get help from our support team",
+      },
+      {
+        to: "/returns",
+        icon: RotateCcw,
+        label: "Returns & Refunds",
+        desc: "Request returns and track refunds",
+      },
     ],
   },
   {
@@ -36,215 +95,350 @@ const CUSTOMER_PAGES = [
     color: "#065f46",
     bg: "#f0fdf9",
     items: [
-      { to: "/browse",    icon: ShoppingBag,   label: "Shop All Products",   desc: "Browse our full collection" },
-      { to: "/cart",      icon: ShoppingBag,   label: "My Cart",             desc: "Items ready for checkout" },
-      { to: "/checkout",  icon: ArrowRight,    label: "Checkout",            desc: "Complete your purchase" },
-      { to: "/ai-try-on", icon: Zap,           label: "AI Virtual Try-On",   desc: "Try clothes on virtually using AI" },
+      {
+        to: "/browse",
+        icon: ShoppingBag,
+        label: "Shop All Products",
+        desc: "Browse our full collection",
+      },
+      {
+        to: "/cart",
+        icon: ShoppingBag,
+        label: "My Cart",
+        desc: "Items ready for checkout",
+      },
+      {
+        to: "/checkout",
+        icon: ArrowRight,
+        label: "Checkout",
+        desc: "Complete your purchase",
+      },
     ],
   },
 ];
 
-function StarRow({ value }) {
-  return (
-    <span style={{ display: "inline-flex", gap: 2 }}>
-      {[1,2,3,4,5].map(n => (
-        <Star key={n} size={13} fill={value >= n ? "#D4AF7A" : "none"} stroke="#D4AF7A" />
-      ))}
-    </span>
-  );
-}
-
 export default function CustomerHubPage() {
-  const featured = DEMO_PRODUCTS.slice(0, 6);
+  const { user } = useAuth();
+  const { subscription, isPro, refreshSubscription } = useSubscription();
+  const [stats, setStats] = useState({ orders: 0, tickets: 0, wardrobe: 0 });
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [vtonOpen, setVtonOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+
+  useEffect(() => {
+    if (location.state?.subscriptionSuccess) {
+      setShowWelcomeModal(true);
+      // Clear the state so it doesn't show again on refresh
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+
+    const queryParams = new URLSearchParams(location.search);
+    if (queryParams.get("openVton") === "true") {
+      setVtonOpen(true);
+      // Remove query param to avoid reopening on refresh
+      navigate(location.pathname, { replace: true });
+    }
+
+    fetchHubData();
+  }, [location, navigate]);
+
+  const fetchHubData = async () => {
+    setLoading(true);
+    try {
+      const [ordersRes, ticketsRes, wardrobeRes] = await Promise.all([
+        apiClient.get("/customers/orders", { params: { limit: 3 } }),
+        apiClient.get("/customers/support/tickets"),
+        apiClient.get("/customers/wardrobe", { params: { limit: 1 } }),
+      ]);
+
+      setRecentOrders(ordersRes.data.data || []);
+      setStats({
+        orders: ordersRes.data.total || ordersRes.data.data?.length || 0,
+        tickets:
+          ticketsRes.data.data?.filter(
+            (t) =>
+              t.status !== "CLOSED" &&
+              t.status !== "RESOLVED" &&
+              t.status !== "CANCELED",
+          ).length || 0,
+        wardrobe: wardrobeRes.data.total || 0,
+      });
+    } catch (err) {
+      console.error("Failed to fetch hub data", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    setCancelling(true);
+    try {
+      await apiClient.post("/subscriptions/cancel");
+      await refreshSubscription();
+      setShowCancelModal(false);
+    } catch (err) {
+      console.error("Failed to cancel subscription", err);
+      alert("An error occurred. Please try again.");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleResumeSubscription = async () => {
+    setCancelling(true); // Using cancelling state for the loading spinner
+    try {
+      await apiClient.post("/subscriptions/resume");
+      await refreshSubscription();
+    } catch (err) {
+      console.error("Failed to resume subscription", err);
+      alert("An error occurred. Please try again.");
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--ivory, #f8f6f3)", display: "flex", flexDirection: "column" }}>
+    <div className={styles.page}>
       <Header />
-
-      <main style={{ flex: 1, maxWidth: 1200, margin: "0 auto", padding: "32px 20px", width: "100%" }}>
-
-        {/* ── Hero banner ── */}
-        <div style={{
-          background: "linear-gradient(135deg, var(--burgundy, #8B4852) 0%, #5a2d33 100%)",
-          borderRadius: 20,
-          padding: "36px 40px",
-          marginBottom: 36,
-          color: "white",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 20,
-          boxShadow: "0 8px 32px rgba(139,72,82,0.25)",
-        }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <Home size={18} opacity={0.8} />
-              <span style={{ fontSize: 13, opacity: 0.8, fontWeight: 600 }}>Customer Portal</span>
-            </div>
-            <h1 style={{ margin: "0 0 8px", fontFamily: "var(--font-serif, Georgia, serif)", fontSize: 32, fontWeight: 800, letterSpacing: "-0.02em" }}>
-              My Account
+      <main className={styles.main}>
+        {/* Welcome Section */}
+        <section className={styles.welcomeHero}>
+          <div className={styles.welcomeText}>
+            <p className={styles.welcomePre}>Welcome back,</p>
+            <h1 className={styles.welcomeName}>
+              {user?.firstName
+                ? `${user.firstName} ${user.lastName || ""}`
+                : user?.email}
             </h1>
-            <p style={{ margin: 0, opacity: 0.85, fontSize: 15, maxWidth: 420, lineHeight: 1.6 }}>
-              Access all your customer pages — orders, profile, wishlist, returns, support, and more — from one place.
+            <p className={styles.welcomeSub}>
+              Everything you need to manage your Ainai experience.
             </p>
           </div>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Link to="/browse" style={{
-              display: "flex", alignItems: "center", gap: 7,
-              padding: "11px 22px", borderRadius: 12,
-              background: "rgba(255,255,255,0.18)", backdropFilter: "blur(8px)",
-              color: "white", textDecoration: "none", fontWeight: 700, fontSize: 14,
-              border: "1px solid rgba(255,255,255,0.3)",
-              transition: "background 0.15s",
-            }}>
-              <ShoppingBag size={16} /> Shop Now
-            </Link>
-            <Link to="/ai-try-on" style={{
-              display: "flex", alignItems: "center", gap: 7,
-              padding: "11px 22px", borderRadius: 12,
-              background: "var(--gold, #D4AF7A)", color: "#1a1210",
-              textDecoration: "none", fontWeight: 700, fontSize: 14,
-              transition: "filter 0.15s",
-            }}>
-              <Eye size={16} /> Virtual Try-On
-            </Link>
-          </div>
-        </div>
-
-        {/* ── Quick-access page sections ── */}
-        {CUSTOMER_PAGES.map(section => (
-          <div key={section.group} style={{ marginBottom: 32 }}>
-            <h2 style={{
-              fontFamily: "var(--font-serif, Georgia, serif)",
-              fontSize: 20, fontWeight: 800, color: "var(--charcoal, #1a1210)",
-              margin: "0 0 14px", display: "flex", alignItems: "center", gap: 8,
-            }}>
-              <span style={{ width: 4, height: 20, background: section.color, borderRadius: 2, display: "inline-block" }} />
-              {section.group}
-            </h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
-              {section.items.map(item => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 14,
-                      padding: "16px 18px", borderRadius: 14,
-                      background: "white", border: `1.5px solid ${section.color}20`,
-                      textDecoration: "none", transition: "all 0.15s",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                      e.currentTarget.style.boxShadow = `0 6px 20px ${section.color}25`;
-                      e.currentTarget.style.borderColor = section.color;
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.transform = "";
-                      e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.04)";
-                      e.currentTarget.style.borderColor = `${section.color}20`;
-                    }}
-                  >
-                    <div style={{
-                      width: 42, height: 42, borderRadius: 11,
-                      background: section.bg, display: "flex",
-                      alignItems: "center", justifyContent: "center",
-                      flexShrink: 0, color: section.color,
-                    }}>
-                      <Icon size={19} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: "0 0 2px", fontWeight: 700, fontSize: 14, color: "var(--charcoal, #1a1210)" }}>
-                        {item.label}
-                      </p>
-                      <p style={{ margin: 0, fontSize: 12, color: "var(--charcoal-muted, #7a6a60)", lineHeight: 1.4 }}>
-                        {item.desc}
-                      </p>
-                    </div>
-                    <ChevronRight size={15} style={{ color: "#ccc", flexShrink: 0 }} />
-                  </Link>
-                );
-              })}
+          <div className={styles.statsRow}>
+            <div className={styles.statBox}>
+              <span className={styles.statVal}>{stats.orders}</span>
+              <span className={styles.statLabel}>Orders</span>
+            </div>
+            <div className={styles.statBox}>
+              <span className={styles.statVal}>{stats.tickets}</span>
+              <span className={styles.statLabel}>Active Tickets</span>
+            </div>
+            <div className={styles.statBox}>
+              <span className={styles.statVal}>{stats.wardrobe}</span>
+              <span className={styles.statLabel}>Wardrobe Items</span>
             </div>
           </div>
-        ))}
+        </section>
 
-        {/* ── Featured products preview ── */}
-        <div style={{ marginTop: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-            <h2 style={{ fontFamily: "var(--font-serif, Georgia, serif)", fontSize: 20, fontWeight: 800, color: "var(--charcoal, #1a1210)", margin: 0 }}>
-              Featured Products
-            </h2>
-            <Link to="/browse" style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--burgundy, #8B4852)", textDecoration: "none", fontWeight: 700, fontSize: 14 }}>
-              View All <ArrowRight size={15} />
-            </Link>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
-            {featured.map(product => {
-              const img = getProductImage(product);
-              const genderColor = { Women: "#8B4852", Men: "#1d4ed8", Unisex: "#6c5b7b" };
-              return (
-                <Link
-                  key={product.id}
-                  to={`/product/${product.id}`}
-                  style={{ textDecoration: "none", display: "block" }}
-                >
-                  <div style={{
-                    background: "white", borderRadius: 14, overflow: "hidden",
-                    border: "1px solid #ede8e1", transition: "all 0.18s",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-                  }}
-                    onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.1)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.05)"; }}
-                  >
-                    <div style={{ position: "relative", aspectRatio: "3/4", overflow: "hidden", background: "#f5f0e8" }}>
-                      {img ? (
-                        <img src={img} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                      ) : (
-                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#ccc" }}>
-                          {product.name.slice(0,2).toUpperCase()}
-                        </div>
-                      )}
-                      {product.isLowStock && (
-                        <span style={{ position: "absolute", top: 8, left: 8, background: "#f97316", color: "white", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20 }}>
-                          Low Stock
-                        </span>
-                      )}
-                      <span style={{
-                        position: "absolute", top: 8, right: 8,
-                        background: genderColor[product.gender] || "#6c5b7b",
-                        color: "white", fontSize: 10, fontWeight: 700,
-                        padding: "2px 8px", borderRadius: 20,
-                      }}>
-                        {product.gender}
-                      </span>
-                    </div>
-                    <div style={{ padding: "12px 14px" }}>
-                      <p style={{ margin: "0 0 2px", fontSize: 11, color: "#9a8070", fontWeight: 600 }}>{product.vendor.brandName}</p>
-                      <p style={{ margin: "0 0 6px", fontSize: 13.5, fontWeight: 700, color: "#1a1210", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                        {product.name}
-                      </p>
-                      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
-                        <StarRow value={Math.round(product.rating)} />
-                        <span style={{ fontSize: 11, color: "#9a8070" }}>({product.reviewCount})</span>
+        <div className={styles.hubGrid}>
+          {/* Main Quick Links */}
+          <div className={styles.linksColumn}>
+            {CUSTOMER_PAGES.map((group) => (
+              <div key={group.group} className={styles.groupSection}>
+                <h3 className={styles.groupTitle}>{group.group}</h3>
+                <div className={styles.itemGrid}>
+                  {group.items.map((item) => (
+                    <Link
+                      key={item.label}
+                      to={item.to}
+                      className={styles.hubItem}
+                      style={{ "--hover-bg": group.bg }}
+                    >
+                      <div
+                        className={styles.itemIcon}
+                        style={{ color: group.color, background: group.bg }}
+                      >
+                        <item.icon size={22} />
                       </div>
-                      <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: "var(--burgundy, #8B4852)" }}>
-                        {formatPrice(product.basePrice, product.currency)}
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
+                      <div className={styles.itemMeta}>
+                        <h4 className={styles.itemLabel}>{item.label}</h4>
+                        <p className={styles.itemDesc}>{item.desc}</p>
+                      </div>
+                      <ChevronRight className={styles.itemArrow} size={18} />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-      </main>
 
+          {/* Side Info Panel */}
+          <aside className={styles.sideColumn}>
+            <div className={styles.sidePanel}>
+              <div className={styles.panelHead}>
+                <h3 className={styles.panelTitle}>Recent Orders</h3>
+                <Link to="/orders" className={styles.panelLink}>
+                  View all
+                </Link>
+              </div>
+              <div className={styles.panelBody}>
+                {loading ? (
+                  <div className={styles.sideLoading}>
+                    <Loader2 size={24} className={styles.spin} />
+                  </div>
+                ) : recentOrders.length === 0 ? (
+                  <div className={styles.panelEmpty}>
+                    <Package size={32} />
+                    <p>No recent orders found.</p>
+                  </div>
+                ) : (
+                  recentOrders.map((order) => (
+                    <div key={order.id} className={styles.miniOrder}>
+                      <div className={styles.miniOrderHeader}>
+                        <span className={styles.miniOrderId}>
+                          #{order.orderNumber}
+                        </span>
+                        <span className={styles.miniOrderStatus}>
+                          {order.status}
+                        </span>
+                      </div>
+                      <p className={styles.miniOrderDate}>
+                        {new Date(order.createdAt).toLocaleDateString()}
+                      </p>
+                      <div className={styles.miniOrderPrice}>
+                        {formatPrice(order.total || 0)}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className={`${styles.sidePanel} ${styles.wardrobeTeaser}`}>
+              <div className={styles.teaserIcon}>
+                <Shirt size={28} />
+              </div>
+              <h3 className={styles.teaserTitle}>Virtual Wardrobe</h3>
+              <p className={styles.teaserText}>
+                Use AI to organize your clothes and see how they look on you.
+              </p>
+              <Link to="/wardrobe" className={styles.teaserBtn}>
+                Explore Wardrobe
+              </Link>
+            </div>
+          </aside>
+        </div>
+
+        {/* Subscription Management Section */}
+        {subscription && (
+          <section className={styles.subSection}>
+            <div className={styles.subCard}>
+              <div className={styles.subHeader}>
+                <div className={styles.subIconWrap}>
+                  <Zap size={24} className={styles.subIcon} />
+                </div>
+                <div className={styles.subTitleWrap}>
+                  <h2 className={styles.subTitle}>AINAI Pro Subscription</h2>
+                  <span className={`${styles.subBadge} ${isPro ? styles.activeBadge : ""}`}>
+                    {isPro ? "ACTIVE" : "EXPIRED"}
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.subDetails}>
+                <div className={styles.subInfoItem}>
+                  <span className={styles.subLabel}>Status:</span>
+                  <span className={styles.subValue}>
+                    {subscription.isCancelled && isPro
+                      ? "Cancels at end of billing cycle"
+                      : isPro 
+                      ? "Active (Renews monthly)"
+                      : "Expired"}
+                  </span>
+                </div>
+                <div className={styles.subInfoItem}>
+                  <span className={styles.subLabel}>Current Period Ends:</span>
+                  <span className={styles.subValue}>
+                    {new Date(subscription.expiresAt).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+
+              {isPro && !subscription.isCancelled && (
+                <div className={styles.subActions}>
+                  <button 
+                    className={styles.cancelBtn} 
+                    onClick={() => setShowCancelModal(true)}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? "Cancelling..." : "Cancel Subscription"}
+                  </button>
+                  <p className={styles.cancelNotice}>
+                    You will retain Pro features until {new Date(subscription.expiresAt).toLocaleDateString()}.
+                  </p>
+                </div>
+              )}
+
+              {isPro && subscription.isCancelled && (
+                <div className={styles.subActions}>
+                  <button 
+                    className={styles.resumeBtn} 
+                    onClick={handleResumeSubscription}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? "Processing..." : "Resume Subscription"}
+                  </button>
+                  <p className={styles.resumeNotice}>
+                    Your subscription will continue without interruption.
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* AI Features Section */}
+        <section className={styles.aiSection}>
+          <div className={styles.aiCard}>
+            <div className={styles.aiCardContent}>
+              <h2 className={styles.aiCardTitle}>
+                <Sparkles size={28} />
+                Virtual Try-On
+                <span className={styles.aiTag}>AI</span>
+              </h2>
+              <p className={styles.aiCardDesc}>
+                Upload any garment photo and see how it looks on you instantly.
+                Our AI blends the item onto your photo for a realistic preview.
+              </p>
+            </div>
+            <div className={styles.aiCardAction}>
+              <button 
+                className={styles.aiCardBtn}
+                onClick={() => setVtonOpen(true)}
+              >
+                <Sparkles size={20} />
+                Try It Now
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
       <Footer />
+
+      {/* Standalone Virtual Try-On Modal */}
+      <VtonModal
+        isOpen={vtonOpen}
+        onClose={() => setVtonOpen(false)}
+        mode="standalone"
+      />
+
+      <WelcomeProModal 
+        isOpen={showWelcomeModal}
+        onClose={() => setShowWelcomeModal(false)}
+      />
+
+      <CancelSubscriptionModal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleCancelSubscription}
+        isCancelling={cancelling}
+        expiryDate={subscription?.expiresAt}
+      />
     </div>
   );
 }

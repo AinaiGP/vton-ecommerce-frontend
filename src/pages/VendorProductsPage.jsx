@@ -1,144 +1,372 @@
-import { useState, useRef } from "react";
-import { Plus, Search, Pencil, Trash2, Eye, X, Check, AlertTriangle, ImageIcon, Package } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  Eye,
+  X,
+  Check,
+  AlertTriangle,
+  ImageIcon,
+  Package,
+  PlusCircle,
+  MinusCircle,
+  ImagePlus,
+  Info,
+  ChevronRight,
+} from "lucide-react";
 import VendorLayout from "../components/vendor/VendorLayout";
+import ProductImageManager from "../components/vendor/ProductImageManager";
 import p from "../styles/VendorPage.module.css";
+import apiClient, { multipartClient } from "../utils/apiClient";
+import { formatPrice } from "../utils/formatPrice";
 
-const INITIAL_PRODUCTS = [
-  { id: 1, name: "Silk Evening Gown", category: "Dresses", price: "EGP 389.00", stock: 24, status: "Active", vton: true, image: null },
-  { id: 2, name: "Cashmere Wrap Dress", category: "Dresses", price: "EGP 275.00", stock: 18, status: "Active", vton: true, image: null },
-  { id: 3, name: "Embroidered Kaftan", category: "Traditional", price: "EGP 450.00", stock: 7, status: "Active", vton: false, image: null },
-  { id: 4, name: "Linen Palazzo Set", category: "Casual", price: "EGP 195.00", stock: 0, status: "Out of Stock", vton: true, image: null },
-  { id: 5, name: "Beaded Clutch Bag", category: "Accessories", price: "EGP 120.00", stock: 42, status: "Active", vton: false, image: null },
-  { id: 6, name: "Velvet Abaya", category: "Traditional", price: "EGP 520.00", stock: 12, status: "Draft", vton: true, image: null },
-  { id: 7, name: "Satin Blazer", category: "Outerwear", price: "EGP 310.00", stock: 15, status: "Active", vton: true, image: null },
-];
+const PAGE_SIZE = 10;
 
-const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
-const COLORS = [
-  { name: "Black", hex: "#1a1a1a" }, { name: "White", hex: "#f8f6f0" },
-  { name: "Red", hex: "#dc2626" }, { name: "Blue", hex: "#2563eb" },
-  { name: "Green", hex: "#16a34a" }, { name: "Pink", hex: "#ec4899" },
-  { name: "Gold", hex: "#d97706" }, { name: "Purple", hex: "#7c3aed" },
-];
-const CATEGORIES = ["Dresses", "Traditional", "Casual", "Accessories", "Outerwear", "Sportswear", "Formal"];
-const PAGE_SIZE = 5;
+const STATUS_BADGE = {
+  active: p.badgeActive,
+  oos: p.badgeOOS,
+  draft: p.badgeDraft,
+  archived: p.badgeCancelled,
+};
 
-const STATUS_BADGE = { Active: p.badgeActive, "Out of Stock": p.badgeOOS, Draft: p.badgeDraft };
-const BLANK = { name: "", category: "Dresses", price: "", stock: 0, status: "Active", vton: false, image: null, description: "", sizes: [], colors: [], _new: true };
+const BLANK = {
+  name: "",
+  description: "",
+  basePrice: "",
+  categoryId: "",
+  gender: "UNISEX",
+  status: "draft",
+  mainImage: null,
+  variants: [
+    { colorId: "", sizeId: "", physicalQuantity: 10, sku: "", priceOverride: "", image: null }
+  ],
+  _new: true,
+};
 
-function ProductModal({ product, onClose, onSave }) {
+function ProductModal({ product, options, onClose, onSave, onManageImages, onPublish, onArchive }) {
   const [form, setForm] = useState({ ...product });
-  const [preview, setPreview] = useState(product.image || null);
-  const fileRef = useRef(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const toggleSize = (s) => setForm(f => ({ ...f, sizes: f.sizes?.includes(s) ? f.sizes.filter(x => x !== s) : [...(f.sizes || []), s] }));
-  const toggleColor = (c) => setForm(f => ({ ...f, colors: f.colors?.includes(c) ? f.colors.filter(x => x !== c) : [...(f.colors || []), c] }));
-
-  const handleFile = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    setForm(f => ({ ...f, image: url }));
+  const updateVariant = (idx, field, val) => {
+    const next = [...form.variants];
+    next[idx] = { ...next[idx], [field]: val };
+    setForm({ ...form, variants: next });
   };
 
-  const handleSubmit = (e) => { e.preventDefault(); onSave(form); };
+  const addVariant = () => {
+    setForm({
+      ...form,
+      variants: [...form.variants, { colorId: "", sizeId: "", physicalQuantity: 10, sku: "", priceOverride: "", image: null }]
+    });
+  };
+
+  const removeVariant = (idx) => {
+    if (form.variants.length === 1) return;
+    setForm({ ...form, variants: form.variants.filter((_, i) => i !== idx) });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      if (form._new) {
+        const formData = new FormData();
+        formData.append("name", form.name);
+        formData.append("description", form.description || "");
+        formData.append("basePrice", Math.round(parseFloat(form.basePrice || "0") * 100));
+        if (form.categoryId) formData.append("categoryId", form.categoryId);
+        if (form.gender) formData.append("gender", form.gender);
+
+        const variants = form.variants.map(v => ({
+          colorId: v.colorId || undefined,
+          sizeId: v.sizeId || undefined,
+          physicalQuantity: parseInt(v.physicalQuantity) || 0,
+          priceOverride: v.priceOverride ? Math.round(parseFloat(v.priceOverride) * 100) : null,
+          status: v.status || "active"
+        }));
+        formData.append("variants", JSON.stringify(variants));
+
+        // Images handling
+        const images = [];
+        const variantImageMappings = {};
+
+        if (form.mainImage) {
+          images.push(form.mainImage);
+          formData.append("primaryImageIndex", "0");
+        }
+
+        form.variants.forEach((v, idx) => {
+          if (v.image) {
+            const imgIdx = images.length;
+            images.push(v.image);
+            variantImageMappings[idx] = imgIdx;
+          }
+        });
+
+        images.forEach(img => formData.append("images", img));
+        formData.append("variantImageMappings", JSON.stringify(variantImageMappings));
+
+        await onSave(formData);
+      } else {
+        // Edit flow (JSON) — include id so saveProduct routes to PATCH
+        // Note: status is NOT sent here — use Archive/Publish buttons for status changes
+        const payload = {
+          id: form.id,
+          name: form.name,
+          basePrice: Math.round(parseFloat(form.basePrice || "0") * 100),
+          categoryId: form.categoryId || undefined,
+          gender: form.gender || undefined,
+          variants: form.variants.map(v => ({
+            id: v.id || undefined,
+            colorId: v.colorId || undefined,
+            sizeId: v.sizeId || undefined,
+            physicalQuantity: parseInt(v.physicalQuantity) || 0,
+            priceOverride: v.priceOverride ? Math.round(parseFloat(v.priceOverride) * 100) : null,
+            status: v.status || "active"
+          }))
+        };
+        if (form.description && form.description.trim().length >= 10) {
+          payload.description = form.description.trim();
+        }
+        await onSave(payload);
+      }
+    } catch (err) {
+      console.error("Save failed", err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className={p.modalBackdrop} onClick={onClose}>
-      <div className={`${p.modal} ${p.modalLg}`} onClick={e => e.stopPropagation()}>
+      <div className={`${p.modal} ${p.modalLg}`} onClick={(e) => e.stopPropagation()}>
         <div className={p.modalHead}>
           <h2 className={p.modalTitle}>{form._new ? "Add New Product" : "Edit Product"}</h2>
           <button className={p.modalClose} onClick={onClose}><X size={17} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className={p.modalBody}>
-            {/* Image upload */}
-            <div className={p.formGroup}>
-              <label className={p.label}>Product Images</label>
-              <label className={p.uploadZone} onClick={() => fileRef.current?.click()}>
-                {preview
-                  ? <img src={preview} alt="Preview" className={p.uploadPreview} />
-                  : <>
-                      <div className={p.uploadIcon}><ImageIcon size={32} /></div>
-                      <p className={p.uploadTitle}>Click to upload or drag & drop</p>
-                      <p className={p.uploadSub}>PNG, JPG, WEBP · Max 5MB · High-quality flat lay recommended</p>
-                    </>
-                }
-                <input ref={fileRef} type="file" style={{ display: "none" }} accept="image/*" onChange={handleFile} />
-              </label>
-            </div>
-
             <div className={p.formRow}>
               <div className={p.formGroup} style={{ gridColumn: "1 / -1" }}>
                 <label className={p.label}>Product Name *</label>
-                <input className={p.input} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required placeholder="e.g. Silk Evening Gown" />
+                <input
+                  className={p.input}
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  required
+                />
               </div>
               <div className={p.formGroup} style={{ gridColumn: "1 / -1" }}>
                 <label className={p.label}>Description</label>
-                <textarea className={p.textarea} value={form.description || ""} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe your product..." rows={3} />
+                <textarea
+                  className={p.textarea}
+                  value={form.description || ""}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  rows={3}
+                />
               </div>
               <div className={p.formGroup}>
-                <label className={p.label}>Price *</label>
-                <input className={p.input} value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} required placeholder="EGP 0.00" />
-              </div>
-              <div className={p.formGroup}>
-                <label className={p.label}>Stock Quantity</label>
-                <input className={p.input} type="number" min={0} value={form.stock} onChange={e => setForm(f => ({ ...f, stock: parseInt(e.target.value) || 0 }))} />
+                <label className={p.label}>Base Price (EGP) *</label>
+                <input
+                  className={p.input}
+                  type="number"
+                  step="0.01"
+                  value={form.basePrice}
+                  onChange={(e) => setForm({ ...form, basePrice: e.target.value })}
+                  required
+                />
               </div>
               <div className={p.formGroup}>
                 <label className={p.label}>Category</label>
-                <select className={p.select} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                <select
+                  className={p.select}
+                  value={form.categoryId}
+                  onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                  required
+                >
+                  <option value="">Select Category</option>
+                  {options.categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className={p.formGroup}>
+                <label className={p.label}>Gender</label>
+                <select
+                  className={p.select}
+                  value={form.gender}
+                  onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                >
+                  <option value="MEN">Men</option>
+                  <option value="WOMEN">Women</option>
+                  <option value="UNISEX">Unisex</option>
                 </select>
               </div>
               <div className={p.formGroup}>
                 <label className={p.label}>Status</label>
-                <select className={p.select} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                  <option>Active</option><option>Draft</option><option>Out of Stock</option>
+                <select
+                  className={p.select}
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                >
+                  <option value="draft">Draft</option>
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
                 </select>
               </div>
             </div>
 
-            {/* Sizes */}
-            <div className={p.formGroup}>
-              <label className={p.label}>Available Sizes</label>
-              <div className={p.chipGroup}>
-                {SIZES.map(s => (
-                  <button key={s} type="button" className={`${p.chip} ${form.sizes?.includes(s) ? p.selected : ""}`} onClick={() => toggleSize(s)}>{s}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Colors */}
-            <div className={p.formGroup}>
-              <label className={p.label}>Available Colors</label>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                {COLORS.map(c => (
-                  <div key={c.name} title={c.name}>
-                    <div
-                      className={`${p.colorChip} ${form.colors?.includes(c.name) ? p.selected : ""}`}
-                      style={{ background: c.hex }}
-                      onClick={() => toggleColor(c.name)}
-                    />
+            {/* Images */}
+            <div className={p.formGroup} style={{ marginTop: 20 }}>
+              <label className={p.label}>Product Images</label>
+              <div style={{ padding: "12px", background: "#f8fafc", borderRadius: 10, border: "1px dashed #cbd5e1" }}>
+                {!form._new ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Media Manager</p>
+                      <p style={{ margin: 0, fontSize: 12, color: "var(--vdr-text-muted)" }}>Manage product gallery and color-specific images.</p>
+                    </div>
+                    <button type="button" className={p.btn} onClick={() => onManageImages(form)}>
+                      <ImagePlus size={14} /> Manage Images
+                    </button>
                   </div>
-                ))}
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Main Product Image *</p>
+                    <label className={`${p.btn} ${p.btnOutline}`} style={{ display: "inline-flex", width: "fit-content", cursor: "pointer", alignItems: "center", gap: 6 }}>
+                      <ImagePlus size={16} />
+                      {form.mainImage ? form.mainImage.name : "Upload Image"}
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        style={{ display: "none" }}
+                        onChange={(e) => setForm({ ...form, mainImage: e.target.files[0] })}
+                      />
+                    </label>
+                    <p style={{ margin: 0, fontSize: 12, color: "var(--vdr-text-muted)" }}>This will be the primary image for the product listing.</p>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* VTON toggle */}
-            <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-              <label className={p.toggle}>
-                <input type="checkbox" className={p.toggleInput} checked={form.vton} onChange={e => setForm(f => ({ ...f, vton: e.target.checked }))} />
-                <span className={p.toggleSlider} />
-              </label>
-              <span style={{ fontSize: 13.5, fontWeight: 500 }}>Enable Virtual Try-On (VTON)</span>
-            </label>
+            {/* Variants */}
+            <div className={p.formGroup} style={{ marginTop: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <label className={p.label} style={{ margin: 0 }}>Product Variants *</label>
+                <button type="button" className={p.btn} style={{ fontSize: 12, padding: "4px 8px" }} onClick={addVariant}>
+                  <Plus size={14} /> Add Variant
+                </button>
+              </div>
+              <div className={p.tableWrap} style={{ background: "#f8fafc", borderRadius: 10, border: "1px solid #e2e8f0" }}>
+                <table className={p.table} style={{ fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th>Color</th>
+                      <th>Size</th>
+                      <th>Stock</th>
+                      <th>Price Override</th>
+                      {form._new && <th>Image</th>}
+                      {!form._new && <th>Sold</th>}
+                      <th>Status</th>
+                      <th style={{ width: 40 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {form.variants.map((v, idx) => (
+                      <tr key={idx}>
+                        <td>
+                          <select className={p.select} value={v.colorId} onChange={e => updateVariant(idx, "colorId", e.target.value)} required>
+                            <option value="">Color</option>
+                            {options.colors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </td>
+                        <td>
+                          <select className={p.select} value={v.sizeId} onChange={e => updateVariant(idx, "sizeId", e.target.value)} required>
+                            <option value="">Size</option>
+                            {options.sizes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                        </td>
+                        <td>
+                          <input className={p.input} type="number" min="0" value={v.physicalQuantity} onChange={e => updateVariant(idx, "physicalQuantity", e.target.value)} required />
+                        </td>
+                        <td>
+                          <input className={p.input} type="number" step="0.01" placeholder="Optional" value={v.priceOverride} onChange={e => updateVariant(idx, "priceOverride", e.target.value)} />
+                        </td>
+                        {form._new && (
+                          <td>
+                            <label className={`${p.btn} ${p.btnOutline}`} style={{ fontSize: 11, padding: "4px 8px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                              <ImagePlus size={12} />
+                              {v.image ? "Change" : "Upload"}
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                style={{ display: "none" }}
+                                onChange={(e) => updateVariant(idx, "image", e.target.files[0])}
+                              />
+                            </label>
+                            {v.image && (
+                              <div style={{ fontSize: 10, color: "var(--vdr-text-muted)", marginTop: 4, maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {v.image.name}
+                              </div>
+                            )}
+                          </td>
+                        )}
+                        {!form._new && <td style={{ textAlign: "center", fontWeight: 700 }}>{v.totalSold || 0}</td>}
+                        <td>
+                          <select className={p.select} value={v.status || "active"} onChange={e => updateVariant(idx, "status", e.target.value)}>
+                            <option value="active">Active</option>
+                            <option value="draft">Draft</option>
+                            <option value="archived">Archived</option>
+                          </select>
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button type="button" style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer" }} onClick={() => removeVariant(idx)}>
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
           <div className={p.modalFoot}>
-            <button type="button" className={`${p.btn} ${p.btnOutline}`} onClick={onClose}>Cancel</button>
-            <button type="submit" className={`${p.btn} ${p.btnPrimary}`}><Check size={14} />{form._new ? "Add Product" : "Save Changes"}</button>
+            <button type="button" className={p.btn} onClick={onClose} disabled={submitting}>Cancel</button>
+            
+            {!form._new && (
+              <>
+                {form.status !== "archived" && (
+                  <button 
+                    type="button" 
+                    className={`${p.btn} ${p.btnDanger}`} 
+                    onClick={() => onArchive(form.id)}
+                    disabled={submitting}
+                  >
+                    Archive Product
+                  </button>
+                )}
+                {form.status !== "active" && (
+                  <button 
+                    type="button" 
+                    className={`${p.btn} ${p.btnPrimary}`} 
+                    onClick={() => onPublish(form.id)}
+                    disabled={submitting}
+                  >
+                    Publish to Store
+                  </button>
+                )}
+              </>
+            )}
+
+            <button type="submit" className={`${p.btn} ${p.btnPrimary}`} disabled={submitting}>
+              {submitting ? "Saving..." : (form._new ? "Create Product" : "Save Changes")}
+            </button>
           </div>
         </form>
       </div>
@@ -147,141 +375,415 @@ function ProductModal({ product, onClose, onSave }) {
 }
 
 export default function VendorProductsPage() {
-  const [products, setProducts] = useState(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [options, setOptions] = useState({ categories: [], colors: [], sizes: [] });
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [editProduct, setEditProduct] = useState(null);
+  const [imgManager, setImgManager] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
-  const filtered = products.filter(pr => {
-    const ms = pr.name.toLowerCase().includes(search.toLowerCase());
-    const mc = catFilter === "All" || pr.category === catFilter;
-    const mst = statusFilter === "All" || pr.status === statusFilter;
-    return ms && mc && mst;
-  });
+  useEffect(() => {
+    fetchOptions();
+  }, []);
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      fetchProducts();
+    }, 300);
 
-  const deleteProduct = (id) => { setProducts(products.filter(pr => pr.id !== id)); setConfirmDelete(null); };
-  const saveProduct = (form) => {
-    if (form._new) setProducts([...products, { ...form, id: Date.now() }]);
-    else setProducts(products.map(pr => pr.id === form.id ? form : pr));
-    setEditProduct(null);
+    return () => clearTimeout(delayDebounceFn);
+  }, [page, catFilter, statusFilter, search]);
+
+  const fetchOptions = async () => {
+    try {
+      const [cats, cols, sizs] = await Promise.all([
+        apiClient.get("/categories"),
+        apiClient.get("/colors"),
+        apiClient.get("/sizes")
+      ]);
+      setOptions({
+        categories: cats.data || [],
+        colors: cols.data || [],
+        sizes: sizs.data || []
+      });
+    } catch (err) {
+      console.error("Failed to fetch options", err);
+    }
+  };
+
+  const fetchProducts = async () => {
+    setLoading(true);
+    try {
+      const params = {
+        page,
+        limit: PAGE_SIZE,
+        search: search || undefined,
+        status: statusFilter === "All" ? undefined : statusFilter
+      };
+      if (catFilter !== "All") params.categoryIds = [catFilter];
+
+      const res = await apiClient.get("/products/my/products", { params });
+      setProducts(res.data?.data || []);
+      setTotal(res.data?.total || 0);
+    } catch (err) {
+      console.error("Failed to fetch products", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveProduct = async (data) => {
+    try {
+      if (data instanceof FormData) {
+        await multipartClient.post("/products", data);
+      } else if (data.id) {
+        // ID is usually stripped from payload in handleSubmit, but data here might still have it if passed directly
+        const { id, ...payload } = data;
+        await apiClient.patch(`/products/${data.id}`, payload);
+      } else {
+        await apiClient.post("/products", data);
+      }
+      fetchProducts();
+      setEditProduct(null);
+    } catch (err) {
+      console.error("Failed to save", err);
+      alert("Failed to save product. Check console.");
+    }
+  };
+
+  const publishProduct = async (id) => {
+    try {
+      await apiClient.patch(`/products/${id}/publish`);
+      fetchProducts();
+      setEditProduct(null);
+    } catch (err) {
+      console.error("Failed to publish", err);
+      alert(err.response?.data?.message || "Failed to publish product.");
+    }
+  };
+
+  const archiveProduct = async (id) => {
+    if (!window.confirm("Are you sure you want to archive this product? It will be hidden from the catalog.")) return;
+    try {
+      await apiClient.patch(`/products/${id}/archive`);
+      fetchProducts();
+      setEditProduct(null);
+    } catch (err) {
+      console.error("Failed to archive", err);
+      alert("Failed to archive product.");
+    }
+  };
+
+  const saveProductImages = async (updatedImages, productId, originalImages, variants) => {
+    try {
+      setImgManager(null);
+      setLoading(true);
+
+      const originalIds = (originalImages || []).map(img => img.id);
+      const updatedIds = updatedImages.filter(img => !img.file).map(img => img.id);
+      const deletedIds = originalIds.filter(id => !updatedIds.includes(id));
+
+      for (const imageId of deletedIds) {
+        await apiClient.delete(`/products/${productId}/images/${imageId}`);
+      }
+
+      const newImages = updatedImages.filter(img => img.file);
+      for (const img of newImages) {
+        const formData = new FormData();
+        formData.append("images", img.file);
+        
+        if (img.colorId) {
+          const variant = variants.find(v => (v.colorId || v.color?.id) === img.colorId);
+          if (variant) {
+            await multipartClient.post(`/products/${productId}/variants/${variant.id}/images`, formData);
+          }
+        } else {
+          await multipartClient.post(`/products/${productId}/images`, formData);
+        }
+      }
+
+      const newPrimary = updatedImages.find(img => img.isPrimary);
+      const oldPrimary = (originalImages || []).find(img => img.isPrimary);
+      
+      if (newPrimary && newPrimary.id !== oldPrimary?.id && !newPrimary.file) {
+        await apiClient.patch(`/products/${productId}/images/${newPrimary.id}/primary`);
+      }
+
+      fetchProducts();
+    } catch (err) {
+      console.error("Failed to sync images", err);
+      alert(err.response?.data?.message || "Failed to update images.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteProduct = async (id) => {
+    try {
+      await apiClient.delete(`/products/${id}`);
+      fetchProducts();
+      setConfirmDelete(null);
+    } catch (err) {
+      console.error("Failed to delete", err);
+    }
   };
 
   const addBtn = (
-    <button className={`${p.btn} ${p.btnPrimary}`} onClick={() => setEditProduct({ ...BLANK })}>
+    <button
+      className={`${p.btn} ${p.btnPrimary}`}
+      onClick={() => setEditProduct({ ...BLANK })}
+    >
       <Plus size={15} /> Add Product
     </button>
   );
 
   return (
-    <VendorLayout pageTitle="My Products" pageSubtitle={`${products.length} products in your store`} breadcrumb="Products" headerAction={addBtn}>
-
-      {/* Toolbar */}
+    <VendorLayout
+      pageTitle="My Products"
+      pageSubtitle={`${total} products in your store`}
+      breadcrumb="Products"
+      headerAction={addBtn}
+    >
       <div className={p.toolbar}>
         <div className={p.toolbarLeft}>
           <div className={p.searchBox}>
             <Search size={14} className={p.searchIcon} />
-            <input className={p.searchInput} placeholder="Search products..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+            <input
+              className={p.searchInput}
+              placeholder="Search products..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onKeyDown={(e) => e.key === "Enter" && fetchProducts()}
+            />
           </div>
-          <select className={p.filterSelect} value={catFilter} onChange={e => { setCatFilter(e.target.value); setPage(1); }}>
+          <select
+            className={p.filterSelect}
+            value={catFilter}
+            onChange={(e) => setCatFilter(e.target.value)}
+          >
             <option value="All">All Categories</option>
-            {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+            {options.categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
           </select>
-          <select className={p.filterSelect} value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
+          <select
+            className={p.filterSelect}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
             <option value="All">All Status</option>
-            <option>Active</option><option>Draft</option><option>Out of Stock</option>
+            <option value="active">Active</option>
+            <option value="draft">Draft</option>
+            <option value="archived">Archived</option>
           </select>
         </div>
       </div>
 
-      {/* Table */}
       <div className={p.tableCard}>
         <div className={p.tableWrap}>
           <table className={p.table}>
             <thead>
               <tr>
+                <th style={{ width: 28 }}></th>
                 <th>Product</th>
                 <th>Category</th>
-                <th>Price</th>
+                <th>Base Price</th>
                 <th>Stock</th>
+                <th>Views</th>
+                <th>Tries</th>
+                <th>Sold</th>
                 <th>Status</th>
-                <th>VTON</th>
                 <th style={{ width: 100 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {paged.length === 0 ? (
-                <tr><td colSpan={7}>
-                  <div className={p.emptyState}>
-                    <div className={p.emptyIcon}><Package size={22} /></div>
-                    <h3 className={p.emptyTitle}>No products found</h3>
-                    <p className={p.emptyText}>Try a different search or add your first product.</p>
-                  </div>
-                </td></tr>
-              ) : paged.map(pr => (
-                <tr key={pr.id}>
-                  <td>
-                    <div className={p.productCell}>
-                      <div className={p.productThumb}>
-                        {pr.image ? <img src={pr.image} alt={pr.name} /> : <ImageIcon size={16} />}
-                      </div>
-                      <div>
-                        <span className={p.productName}>{pr.name}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td><span className={`${p.badge} ${p.badgeDraft}`}>{pr.category}</span></td>
-                  <td style={{ fontWeight: 700 }}>{pr.price}</td>
-                  <td><span style={{ fontWeight: 700, color: pr.stock === 0 ? "#dc2626" : "inherit" }}>{pr.stock === 0 ? "Out" : pr.stock}</span></td>
-                  <td><span className={`${p.badge} ${STATUS_BADGE[pr.status]}`}><span className={p.badgeDot} />{pr.status}</span></td>
-                  <td>{pr.vton ? <span className={p.vtonOn}><Eye size={13} /> On</span> : <span className={p.vtonOff}>Off</span>}</td>
-                  <td>
-                    <div className={p.actions}>
-                      <button className={`${p.actionBtn} ${p.edit}`} title="Edit" onClick={() => setEditProduct({ ...pr })}><Pencil size={14} /></button>
-                      <button className={`${p.actionBtn} ${p.delete}`} title="Delete" onClick={() => setConfirmDelete(pr)}><Trash2 size={14} /></button>
+              {loading ? (
+                <tr><td colSpan="10" className={p.skeleton} style={{ height: 100 }}></td></tr>
+              ) : products.length === 0 ? (
+                <tr>
+                  <td colSpan="9">
+                    <div className={p.emptyState}>
+                      <div className={p.emptyIcon}><Package size={22} /></div>
+                      <h3 className={p.emptyTitle}>No products found</h3>
                     </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                products.map((pr) => {
+                  const isExpanded = expandedId === pr.id;
+                  const primaryImg = pr.images?.find(i => i.isPrimary) || pr.images?.[0];
+                  return (
+                    <>
+                      <tr key={pr.id}>
+                        <td>
+                          <button
+                            className={p.expandBtn}
+                            title={isExpanded ? "Collapse variants" : "Expand variants"}
+                            onClick={() => setExpandedId(isExpanded ? null : pr.id)}
+                          >
+                            <span className={`${p.chevron} ${isExpanded ? p.chevronOpen : ""}`}>
+                              <ChevronRight size={15} />
+                            </span>
+                          </button>
+                        </td>
+                        <td>
+                          <div className={p.productCell}>
+                            <div className={p.productThumb}>
+                              {primaryImg ? <img src={primaryImg.s3Url || primaryImg.url} alt="" /> : <ImageIcon size={16} />}
+                            </div>
+                            <span className={p.productName}>{pr.name}</span>
+                          </div>
+                        </td>
+                        <td><span className={`${p.badge} ${p.badgeDraft}`}>{pr.category?.name}</span></td>
+                        <td style={{ fontWeight: 700 }}>{formatPrice(pr.basePrice)}</td>
+                        <td>{pr.variants?.reduce((s, v) => s + v.physicalQuantity, 0) || 0}</td>
+                        <td>{pr.views || 0}</td>
+                        <td>{pr.tries || 0}</td>
+                        <td style={{ fontWeight: 600, color: "var(--vdr-accent)" }}>{pr.purchases || 0}</td>
+                        <td>
+                          <span className={`${p.badge} ${STATUS_BADGE[pr.status] || p.badgeDraft}`}>
+                            <span className={p.badgeDot} />
+                            {pr.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div className={p.actions}>
+                            <button className={`${p.actionBtn} ${p.edit}`} onClick={() => setEditProduct({ ...pr, basePrice: (pr.basePrice / 100).toFixed(2), variants: pr.variants?.map(v => ({ ...v, priceOverride: v.priceOverride ? (v.priceOverride / 100).toFixed(2) : "" })) || [] })}>
+                              <Pencil size={14} />
+                            </button>
+                            <button className={`${p.actionBtn} ${p.delete}`} onClick={() => setConfirmDelete(pr)}>
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${pr.id}-variants`} className={p.variantExpandRow}>
+                          <td colSpan="9">
+                            <div className={p.variantExpandInner}>
+                              {!pr.variants?.length ? (
+                                <p style={{ padding: "12px 16px", margin: 0, fontSize: 13, color: "var(--vdr-text-muted)" }}>No variants found.</p>
+                              ) : (
+                                <table className={p.variantSubTable}>
+                                  <thead>
+                                    <tr>
+                                      <th>Image</th>
+                                      <th>Color</th>
+                                      <th>Size</th>
+                                      <th>SKU</th>
+                                      <th>Physical Qty</th>
+                                      <th>Reserved</th>
+                                      <th>Available</th>
+                                      <th>Price</th>
+                                      <th>Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {pr.variants.map((v) => {
+                                      const variantImg = v.variantImageLinks?.[0]?.image?.s3Url || primaryImg?.s3Url || primaryImg?.url;
+                                      const available = (v.physicalQuantity || 0) - (v.reservedQuantity || 0);
+                                      const effectivePrice = v.priceOverride ?? pr.basePrice;
+                                      return (
+                                        <tr key={v.id}>
+                                          <td>
+                                            {variantImg ? (
+                                              <img src={variantImg} alt="" className={p.variantThumb} />
+                                            ) : (
+                                              <div className={p.variantThumbPlaceholder}><ImageIcon size={14} /></div>
+                                            )}
+                                          </td>
+                                          <td>
+                                            {v.color ? (
+                                              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                {v.color.hexCode && (
+                                                  <span className={p.variantColorDot} style={{ background: v.color.hexCode }} />
+                                                )}
+                                                {v.color.name}
+                                              </span>
+                                            ) : "—"}
+                                          </td>
+                                          <td>{v.size?.name || "—"}</td>
+                                          <td style={{ fontFamily: "monospace", fontSize: 11 }}>{v.sku || "—"}</td>
+                                          <td>{v.physicalQuantity ?? 0}</td>
+                                          <td>{v.reservedQuantity ?? 0}</td>
+                                          <td className={available <= 0 ? p.variantQtyLow : (available <= 5 ? p.variantQtyLow : p.variantQtyOk)}>{available}</td>
+                                          <td style={{ fontWeight: 600 }}>{formatPrice(effectivePrice)}</td>
+                                          <td>
+                                            <span className={`${p.badge} ${STATUS_BADGE[v.status] || p.badgeDraft}`} style={{ fontSize: 10 }}>
+                                              {v.status}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
 
-        {totalPages > 1 && (
+        {total > PAGE_SIZE && (
           <div className={p.pagination}>
-            <span className={p.pageInfo}>Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+            <span className={p.pageInfo}>
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+            </span>
             <div className={p.pageButtons}>
               <button className={p.pageBtn} onClick={() => setPage(v => v - 1)} disabled={page === 1}>←</button>
-              {Array.from({ length: totalPages }, (_, i) => (
-                <button key={i + 1} className={`${p.pageBtn} ${page === i + 1 ? p.pageBtnActive : ""}`} onClick={() => setPage(i + 1)}>{i + 1}</button>
-              ))}
-              <button className={p.pageBtn} onClick={() => setPage(v => v + 1)} disabled={page === totalPages}>→</button>
+              <button className={p.pageBtn} onClick={() => setPage(v => v + 1)} disabled={page * PAGE_SIZE >= total}>→</button>
             </div>
           </div>
         )}
       </div>
 
-      {editProduct && <ProductModal product={editProduct} onClose={() => setEditProduct(null)} onSave={saveProduct} />}
+      {editProduct && (
+        <ProductModal
+          product={editProduct}
+          options={options}
+          onClose={() => setEditProduct(null)}
+          onSave={saveProduct}
+          onManageImages={(p) => setImgManager(p)}
+          onPublish={publishProduct}
+          onArchive={archiveProduct}
+        />
+      )}
 
       {confirmDelete && (
         <div className={p.modalBackdrop} onClick={() => setConfirmDelete(null)}>
-          <div className={`${p.modal} ${p.modalSm}`} onClick={e => e.stopPropagation()}>
-            <div className={p.modalBody} style={{ alignItems: "center", textAlign: "center", paddingTop: 28, paddingBottom: 28 }}>
+          <div className={`${p.modal} ${p.modalSm}`} onClick={(e) => e.stopPropagation()}>
+            <div className={p.modalBody} style={{ alignItems: "center", textAlign: "center", padding: "28px" }}>
               <div className={p.confirmIcon}><AlertTriangle size={22} /></div>
               <h3 className={p.modalTitle} style={{ marginTop: 8 }}>Delete Product?</h3>
-              <p className={p.confirmText}>This will permanently remove <strong>{confirmDelete.name}</strong> from your store.</p>
+              <p className={p.confirmText}>This will permanently remove <strong>{confirmDelete.name}</strong>.</p>
             </div>
             <div className={p.modalFoot} style={{ justifyContent: "center" }}>
               <button className={`${p.btn} ${p.btnOutline}`} onClick={() => setConfirmDelete(null)}>Cancel</button>
-              <button className={`${p.btn} ${p.btnDanger}`} onClick={() => deleteProduct(confirmDelete.id)}><Trash2 size={14} /> Delete</button>
+              <button className={`${p.btn} ${p.btnDanger}`} onClick={() => deleteProduct(confirmDelete.id)}>Delete</button>
             </div>
           </div>
         </div>
+      )}
+
+      {imgManager && (
+        <ProductImageManager
+          product={imgManager}
+          onClose={() => setImgManager(null)}
+          onSave={(updatedImages) => saveProductImages(updatedImages, imgManager.id, imgManager.images, imgManager.variants)}
+        />
       )}
     </VendorLayout>
   );

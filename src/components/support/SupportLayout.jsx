@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { NavLink, useNavigate, Link } from "react-router-dom";
 import {
-  LayoutDashboard, Ticket, MessageCircle, Users, BarChart3,
+  LayoutDashboard, Ticket, MessageCircle, Users,
   Settings, ChevronLeft, Bell, Search, Menu,
   ChevronDown, LogOut, User, Moon, Sun, Headphones, X, Globe, Home
 } from "lucide-react";
@@ -11,19 +11,13 @@ import { useAuth } from "../../context/AuthContext";
 
 const NAV = [
   { label: "Dashboard",  to: "/support",         icon: LayoutDashboard },
-  { label: "Tickets",    to: "/support/tickets",  icon: Ticket,          badge: 12 },
-  { label: "Live Chat",  to: "/support/chat",     icon: MessageCircle,   badge: 3 },
+  { label: "Tickets",    to: "/support/tickets",  icon: Ticket },
+  { label: "Live Chat",  to: "/support/chat",     icon: MessageCircle },
   { label: "Users",      to: "/support/users",    icon: Users },
-  { label: "Reports",    to: "/support/reports",  icon: BarChart3 },
   { label: "Settings",   to: "/support/settings", icon: Settings },
 ];
 
-const NOTIFS = [
-  { id: 1, text: "TKT-1089: New reply from Sara Al-Rashid", time: "2m ago",  unread: true },
-  { id: 2, text: "High-priority ticket assigned to you",    time: "9m ago",  unread: true },
-  { id: 3, text: "TKT-1082 SLA breach warning",            time: "22m ago", unread: true },
-  { id: 4, text: "Live chat request from Urban Threads",    time: "1h ago",  unread: false },
-];
+const NOTIFS = [];
 
 export default function SupportLayout({ children, pageTitle, pageSubtitle, breadcrumb, headerAction }) {
   const [collapsed, setCollapsed]     = useState(false);
@@ -32,12 +26,12 @@ export default function SupportLayout({ children, pageTitle, pageSubtitle, bread
   const [notifOpen, setNotifOpen]     = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen]   = useState(false);
-  const [unread, setUnread]           = useState(3);
+  const [unread, setUnread]           = useState(0);
   const notifRef   = useRef(null);
   const profileRef = useRef(null);
   const navigate   = useNavigate();
   const { lang, toggleLanguage, t } = useLanguage();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   // Persist theme to localStorage and HTML attribute
   useEffect(() => {
@@ -47,10 +41,9 @@ export default function SupportLayout({ children, pageTitle, pageSubtitle, bread
 
   const NAV = [
     { label: t("support.dashboard"), to: "/support",         icon: LayoutDashboard },
-    { label: t("support.tickets"),   to: "/support/tickets",  icon: Ticket,          badge: 12 },
-    { label: t("support.chat"),      to: "/support/chat",     icon: MessageCircle,   badge: 3 },
+    { label: t("support.tickets"),   to: "/support/tickets",  icon: Ticket },
+    { label: t("support.chat"),      to: "/support/chat",     icon: MessageCircle },
     { label: t("support.users"),     to: "/support/users",    icon: Users },
-    { label: t("support.reports"),   to: "/support/reports",  icon: BarChart3 },
     { label: lang === "ar" ? "ملفي الشخصي" : "My Profile", to: "/support/profile", icon: User },
     { label: t("support.settings"),  to: "/support/settings", icon: Settings },
   ];
@@ -151,10 +144,10 @@ export default function SupportLayout({ children, pageTitle, pageSubtitle, bread
         </div>
 
         <div className={s.vendorPill}>
-          <div className={s.vendorAvatar}>JS</div>
+          <div className={s.vendorAvatar}>{(user?.firstName?.[0] || user?.email?.[0] || "S").toUpperCase()}</div>
           {!collapsed && (
             <div className={s.brandText}>
-              <span className={s.vendorName}>Jamie S.</span>
+              <span className={s.vendorName}>{user?.firstName} {user?.lastName?.charAt(0)}.</span>
               <span className={s.vendorHandle}>● Online</span>
             </div>
           )}
@@ -242,15 +235,15 @@ export default function SupportLayout({ children, pageTitle, pageSubtitle, bread
             {/* Profile */}
             <div style={{ position: "relative" }} ref={profileRef}>
               <button className={s.profileBtn} onClick={() => setProfileOpen(o => !o)}>
-                <div className={s.profileAvat}>JS</div>
-                <span className={s.profileName}>Jamie S.</span>
+                <div className={s.profileAvat}>{(user?.firstName?.[0] || user?.email?.[0] || "S").toUpperCase()}</div>
+                <span className={s.profileName}>{user?.firstName} {user?.lastName?.charAt(0)}.</span>
                 <ChevronDown size={13} className={`${s.profileChevron} ${profileOpen ? s.open : ""}`} />
               </button>
               {profileOpen && (
                 <div className={s.profileMenu}>
                   <div className={s.profileInfo}>
-                    <span className={s.profileInfoName}>Jamie Sullivan</span>
-                    <span className={s.profileInfoSub}>{t("support.agent_level")}</span>
+                    <span className={s.profileInfoName}>{user?.firstName} {user?.lastName}</span>
+                    <span className={s.profileInfoSub}>{user?.email}</span>
                   </div>
                   <ul className={s.profileMenuList}>
                     <li>

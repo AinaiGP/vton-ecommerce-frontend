@@ -1,18 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ShoppingBag,
-  Eye,
   Heart,
   ArrowLeft,
   Truck,
   RotateCcw,
   Shield,
+  Plus,
+  Minus,
+  MessageSquare,
+  Star,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
-import VtonModal from "../components/vton/VtonModal";
 import LoadingSpinner from "../components/common/LoadingSpinner";
+import VtonModal from "../components/vton/VtonModal";
+import ProductCard from "../components/common/ProductCard";
+import ReviewProductModal from "../components/modal/ReviewProductModal";
+import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
 import apiClient from "../utils/apiClient";
 import {
   formatPrice,
@@ -31,11 +41,28 @@ function getInitials(name) {
     .toUpperCase();
 }
 
+function StarRow({ value, size = 16 }) {
+  return (
+    <span className={styles.starRow}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          size={size}
+          fill={value >= n ? "var(--gold)" : "none"}
+          stroke={value >= n ? "var(--gold)" : "#ccc"}
+        />
+      ))}
+    </span>
+  );
+}
+
 export default function ProductPage() {
   const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
 
+  const { isAuthenticated, userRole } = useAuth();
+  const { refreshCartCount } = useCart();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -44,16 +71,35 @@ export default function ProductPage() {
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
-  const [isWishlisted, setIsWishlisted] = useState(false);
-  const [vtonOpen, setVtonOpen] = useState(false);
-  const [addedToCart, setAddedToCart] = useState(false);
+  const [wishlistItems, setWishlistItems] = useState([]);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [cartMessage, setCartMessage] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
 
-  useEffect(() => {
-    if (location.state?.autoTriggerTryOn === true) {
-      setVtonOpen(true);
-      navigate(location.pathname, { replace: true, state: {} });
+  // ── Virtual Try-On state ──────────────────────────────────────────────────
+  const [vtonOpen, setVtonOpen] = useState(false);
+  const [vtonMessage, setVtonMessage] = useState("");
+
+  const [reviews, setReviews] = useState([]);
+  const [reviewsTotal, setReviewsTotal] = useState(0);
+  const [averageRating, setAverageRating] = useState(null);
+  const [canReview, setCanReview] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+
+  const [recommendations, setRecommendations] = useState([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const scrollRef = useRef(null);
+
+  const scrollRecommendations = (direction) => {
+    if (scrollRef.current) {
+      const scrollAmount = 300;
+      scrollRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth"
+      });
     }
-  }, [location.pathname, location.state, navigate]);
+  };
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -69,6 +115,26 @@ export default function ProductPage() {
         setSelectedColor(firstColorId);
         setSelectedSize("");
         setSelectedImage(0);
+        setQuantity(1);
+
+        try {
+          const reviewsRes = await apiClient.get(`/products/${id}/reviews`);
+          const rData = reviewsRes.data;
+          setReviewsTotal(rData.totalReviews || 0);
+          setAverageRating(rData?.averageRating != null ? parseFloat(rData.averageRating) : null);
+          setReviews(
+            (rData.data || []).map((r) => ({
+              id: r.id,
+              author: r.customerName || "Customer",
+              avatar: null,
+              date: new Date(r.createdAt).toLocaleDateString(),
+              rating: Number(r.rating) || 5,
+              comment: r.comment || "",
+            }))
+          );
+        } catch (rErr) {
+          console.error("Failed to fetch product reviews:", rErr);
+        }
       } catch (err) {
         setError(err?.response?.status === 404 ? "not_found" : "error");
       } finally {
@@ -78,6 +144,39 @@ export default function ProductPage() {
 
     fetchProduct();
   }, [id, retryKey]);
+
+  useEffect(() => {
+    if (!id) return;
+    const fetchRecommendations = async () => {
+      setLoadingRecommendations(true);
+      try {
+        const response = await apiClient.get(`/products/${id}/recommendations?limit=8`);
+        setRecommendations(Array.isArray(response.data) ? response.data : []);
+      } catch (err) {
+        console.error("Failed to fetch recommendations:", err);
+        setRecommendations([]);
+      } finally {
+        setLoadingRecommendations(false);
+      }
+    };
+    fetchRecommendations();
+  }, [id, retryKey]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      apiClient
+        .get("/customers/wishlist?limit=100")
+        .then((res) => setWishlistItems(res.data.data.map((w) => w.variantId)))
+        .catch(console.error);
+        
+      if (id) {
+        apiClient
+          .get(`/products/${id}/can-review`)
+          .then((res) => setCanReview(res.data.canReview))
+          .catch(console.error);
+      }
+    }
+  }, [isAuthenticated, id, retryKey]);
 
   const sortedImages = useMemo(() => {
     if (!product?.images?.length) return [];
@@ -121,17 +220,123 @@ export default function ProductPage() {
     );
   }, [product, selectedColor, selectedSize]);
 
-  const isAddToCartDisabled =
-    !selectedVariant || (selectedVariant?.availableQuantity ?? 0) <= 0;
+  /**
+   * Cloth image for VTON — prefer variant-specific image, fall back to first product image.
+   * variantImageLinks is populated when the API response includes relation data.
+   */
+  const clothImageUrl = useMemo(() => {
+    if (selectedVariant?.variantImageLinks?.[0]?.image?.s3Url) {
+      return selectedVariant.variantImageLinks[0].image.s3Url;
+    }
+    return product?.images?.[0]?.s3Url || null;
+  }, [selectedVariant, product]);
 
-  const handleAddToCart = () => {
-    if (!selectedVariant || (selectedVariant.availableQuantity ?? 0) <= 0) {
+  const hasSelectedVariant = Boolean(selectedVariant);
+  const availableQty = hasSelectedVariant
+    ? (selectedVariant.physicalQuantity ?? 0) -
+      (selectedVariant.reservedQuantity ?? 0)
+    : 0;
+  const isLowStock =
+    hasSelectedVariant && availableQty > 0 && availableQty < 10;
+  const isOutOfStock = hasSelectedVariant && availableQty <= 0;
+  const isAddToCartDisabled = !hasSelectedVariant || isOutOfStock;
+
+  const isWishlisted = selectedVariant
+    ? wishlistItems.includes(selectedVariant.id)
+    : false;
+
+  const incrementQty = () => {
+    const max = Math.min(availableQty, 5);
+    if (quantity < max) setQuantity((prev) => prev + 1);
+  };
+
+  const decrementQty = () => {
+    if (quantity > 1) setQuantity((prev) => prev - 1);
+  };
+
+  const handleAddToCart = async () => {
+    if (!selectedVariant || isOutOfStock || addingToCart) {
       return;
     }
 
-    console.log("Cart Phase 4", selectedVariant.id);
-    setAddedToCart(true);
-    window.setTimeout(() => setAddedToCart(false), 2000);
+    setAddingToCart(true);
+    setCartMessage("");
+    try {
+      // POST /cart/items — body from AddToCartDto: { productId, variantId, quantity }
+      await apiClient.post("/cart/items", {
+        productId: product.id,
+        variantId: selectedVariant.id,
+        quantity: quantity,
+      });
+      setCartMessage("Added to cart!");
+      await refreshCartCount();
+      window.setTimeout(() => setCartMessage(""), 2000);
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Failed to add to cart.";
+      setCartMessage(Array.isArray(msg) ? msg[0] : msg);
+      window.setTimeout(() => setCartMessage(""), 3000);
+    } finally {
+      setAddingToCart(false);
+    }
+  };
+
+  /**
+   * Handle Virtual Try-On button click.
+   * Guards: must be authenticated + customer role + variant selected.
+   */
+  const handleTryOnClick = () => {
+    if (!isAuthenticated) {
+      navigate("/auth", { state: { from: location } });
+      return;
+    }
+    if (userRole !== "customer") {
+      setVtonMessage("Virtual Try-On is available for customers only.");
+      setTimeout(() => setVtonMessage(""), 4000);
+      return;
+    }
+    if (!selectedColor || !selectedSize) {
+      setVtonMessage("Please select a color and size to try this on.");
+      setTimeout(() => setVtonMessage(""), 4000);
+      return;
+    }
+    setVtonOpen(true);
+  };
+
+  const handleWishlistToggle = async () => {
+    if (!isAuthenticated) {
+      navigate("/auth", { state: { from: location } });
+      return;
+    }
+    if (!selectedVariant) {
+      setCartMessage("Please select a color and size to add to your wishlist");
+      setTimeout(() => setCartMessage(""), 3000);
+      return;
+    }
+
+    setWishlistLoading(true);
+    if (isWishlisted) {
+      setWishlistItems((prev) =>
+        prev.filter((vid) => vid !== selectedVariant.id),
+      );
+      try {
+        await apiClient.delete(`/customers/wishlist/${selectedVariant.id}`);
+      } catch (err) {
+        setWishlistItems((prev) => [...prev, selectedVariant.id]); // rollback
+      }
+    } else {
+      setWishlistItems((prev) => [...prev, selectedVariant.id]);
+      try {
+        await apiClient.post("/customers/wishlist", {
+          productId: product.id,
+          variantId: selectedVariant.id,
+        });
+      } catch (err) {
+        setWishlistItems((prev) =>
+          prev.filter((vid) => vid !== selectedVariant.id),
+        ); // rollback
+      }
+    }
+    setWishlistLoading(false);
   };
 
   if (loading) {
@@ -212,13 +417,13 @@ export default function ProductPage() {
                   src={selectedImageUrl}
                   alt={product.name}
                   className={styles.heroImage}
+                  loading="lazy"
                 />
               ) : (
                 <div className={styles.imagePlaceholder}>
                   {getInitials(product.name)}
                 </div>
               )}
-              <span className={styles.vtonBadge}>VTON Ready</span>
             </div>
 
             {sortedImages.length > 0 && (
@@ -231,7 +436,7 @@ export default function ProductPage() {
                     }`}
                     onClick={() => setSelectedImage(index)}
                   >
-                    <img src={img.s3Url} alt={`View ${index + 1}`} />
+                    <img src={img.s3Url} alt={`View ${index + 1}`} loading="lazy" />
                   </button>
                 ))}
               </div>
@@ -239,16 +444,24 @@ export default function ProductPage() {
           </div>
 
           <div className={styles.productInfo}>
-            <p className={styles.brand}>{product.vendor?.brandName || ""}</p>
-            <Link
-              to={`/vendors/storefront/${product.vendor?.id || ""}`}
-              className={styles.vendorLink}
+            {/* Brand Link */}
+            <Link 
+              to={`/vendors/storefront/${product.vendor?.id || ""}`} 
+              className={styles.brand}
             >
-              View brand
+              {product.vendor?.brandName || ""}
             </Link>
 
             <h1 className={styles.productName}>{product.name}</h1>
-            <p className={styles.reviewHint}>Be the first to review</p>
+            {reviewsTotal > 0 ? (
+              <div className={styles.productRatingSummary}>
+                <StarRow value={Math.round(averageRating || 0)} size={16} />
+                <span className={styles.ratingNumber}>{(averageRating || 0).toFixed(1)}</span>
+                <span className={styles.reviewCount}>({reviewsTotal} reviews)</span>
+              </div>
+            ) : (
+              <p className={styles.reviewHint}>Be the first to review</p>
+            )}
 
             <p className={styles.price}>
               {formatPrice(product.basePrice, product.currency)}
@@ -263,16 +476,17 @@ export default function ProductPage() {
                 {colors.map((color) => (
                   <button
                     key={color.id}
-                    className={`${styles.colorSwatch} ${
+                    className={`${styles.colorButton} ${
                       selectedColor === color.id ? styles.colorActive : ""
                     }`}
-                    style={{ background: color.hexCode }}
                     onClick={() => {
                       setSelectedColor(color.id);
                       setSelectedSize("");
                     }}
                     aria-label={color.name}
-                  />
+                  >
+                    {color.name}
+                  </button>
                 ))}
               </div>
             </div>
@@ -284,8 +498,10 @@ export default function ProductPage() {
                   const variantForSize = variantsForSelectedColor.find(
                     (variant) => variant?.size?.id === size.id,
                   );
-                  const outOfStock =
-                    (variantForSize?.availableQuantity ?? 0) <= 0;
+                  const sizeAvailableQty =
+                    (variantForSize?.physicalQuantity ?? 0) -
+                    (variantForSize?.reservedQuantity ?? 0);
+                  const outOfStock = sizeAvailableQty <= 0;
                   return (
                     <button
                       key={size.id}
@@ -302,20 +518,55 @@ export default function ProductPage() {
               </div>
             </div>
 
+            {isLowStock && (
+              <p className={styles.lowStockNotice}>Only {availableQty} left</p>
+            )}
+            {isOutOfStock && (
+              <p className={styles.outOfStockNotice}>Out of Stock</p>
+            )}
+
+            {/* Quantity Selector */}
+            {!isOutOfStock && hasSelectedVariant && (
+              <div className={styles.quantitySection}>
+                <h4 className={styles.optionLabel}>Quantity</h4>
+                <div className={styles.quantityControl}>
+                  <button
+                    className={styles.qtyBtn}
+                    onClick={decrementQty}
+                    disabled={quantity <= 1}
+                  >
+                    <Minus size={16} />
+                  </button>
+                  <span className={styles.qtyVal}>{quantity}</span>
+                  <button
+                    className={styles.qtyBtn}
+                    onClick={incrementQty}
+                    disabled={quantity >= Math.min(availableQty, 5)}
+                  >
+                    <Plus size={16} />
+                  </button>
+                </div>
+                {quantity >= 5 && (
+                  <p className={styles.limitNote}>Limit: 5 per item</p>
+                )}
+              </div>
+            )}
+
             <div className={styles.actions}>
               <button
                 className={styles.addToCartButton}
                 onClick={handleAddToCart}
-                disabled={isAddToCartDisabled}
+                disabled={isAddToCartDisabled || addingToCart}
               >
                 <ShoppingBag size={20} />
-                <span>{addedToCart ? "Added!" : "Add to Cart"}</span>
+                <span>{addingToCart ? "Adding..." : "Add to Cart"}</span>
               </button>
 
               <button
                 className={styles.wishlistButton}
-                onClick={() => setIsWishlisted(!isWishlisted)}
+                onClick={handleWishlistToggle}
                 aria-label="Add to wishlist"
+                disabled={wishlistLoading}
               >
                 <Heart
                   size={22}
@@ -325,14 +576,39 @@ export default function ProductPage() {
               </button>
             </div>
 
+            {/* ── Virtual Try-On Button ── */}
             <button
+              id="vton-try-on-btn"
               className={styles.tryOnButton}
-              onClick={() => setVtonOpen(true)}
+              onClick={handleTryOnClick}
             >
-              <Eye size={22} />
+              <Sparkles size={20} />
               <span>Virtual Try-On</span>
-              <span className={styles.tryOnTag}>AI Powered</span>
+              <span className={styles.tryOnTag}>AI</span>
             </button>
+
+            {vtonMessage && (
+              <p
+                className={`${styles.cartMessage} ${styles.cartMessageError}`}
+                role="alert"
+              >
+                {vtonMessage}
+              </p>
+            )}
+
+            {cartMessage && (
+              <p
+                className={`${styles.cartMessage} ${
+                  cartMessage.includes("Failed") || 
+                  cartMessage.includes("Error") || 
+                  cartMessage.includes("select") 
+                    ? styles.cartMessageError : ""
+                }`}
+              >
+                {cartMessage}
+              </p>
+            )}
+
 
             <div className={styles.trustBadges}>
               <div className={styles.trustItem}>
@@ -359,14 +635,134 @@ export default function ProductPage() {
             </div>
           </div>
         </div>
+
+        {/* Recommendations Section */}
+        {!loadingRecommendations && recommendations.length > 0 && (
+          <div className={styles.recommendationsSection}>
+            <div className={styles.recommendationsHeader}>
+              <h4 className={styles.detailsTitle}>You May Also Like</h4>
+            </div>
+            <div className={styles.recommendationsContainer}>
+              <button 
+                className={`${styles.scrollBtn} ${styles.scrollBtnLeft}`} 
+                onClick={() => scrollRecommendations("left")}
+                aria-label="Scroll Left"
+              >
+                <ChevronLeft size={24} />
+              </button>
+              
+              <div className={styles.recommendationsScroll} ref={scrollRef}>
+                {recommendations.map((recProduct) => (
+                  <div key={recProduct.id} className={styles.recommendationCardWrapper}>
+                    <ProductCard product={recProduct} />
+                  </div>
+                ))}
+              </div>
+
+              <button 
+                className={`${styles.scrollBtn} ${styles.scrollBtnRight}`} 
+                onClick={() => scrollRecommendations("right")}
+                aria-label="Scroll Right"
+              >
+                <ChevronRight size={24} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Reviews Section */}
+        <section className={styles.reviewsSectionContainer}>
+          <div className={styles.reviewsSectionHead}>
+            <h2 className={styles.detailsTitle} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <MessageSquare size={24} /> Customer Reviews
+            </h2>
+            <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+              {canReview && (
+                <button
+                  onClick={() => setReviewModalOpen(true)}
+                  style={{
+                    padding: "8px 18px",
+                    borderRadius: 8,
+                    border: "1.5px solid var(--gold)",
+                    background: "white",
+                    color: "var(--gold-dark)",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    transition: "all 0.2s"
+                  }}
+                >
+                  <Star size={16} /> Write a Review
+                </button>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <StarRow value={Math.round(averageRating || 0)} size={20} />
+                <strong style={{ fontSize: 20 }}>{(averageRating || 0).toFixed(1)}</strong>
+                <span style={{ color: "var(--charcoal-muted)", fontSize: 15, fontWeight: 500 }}>
+                  ({reviewsTotal} reviews)
+                </span>
+              </div>
+            </div>
+          </div>
+          {reviews.length === 0 ? (
+            <div style={{ padding: "60px 0", textAlign: "center", color: "var(--charcoal-muted)" }}>
+              <MessageSquare size={32} style={{ marginBottom: 16, opacity: 0.3 }} />
+              <h3 style={{ margin: "0 0 8px 0", fontSize: 18, color: "var(--charcoal)" }}>No reviews yet</h3>
+              <p style={{ margin: 0, fontSize: 14 }}>Be the first to share your thoughts on this product!</p>
+            </div>
+          ) : (
+            <div className={styles.reviewsGrid}>
+              {reviews.map((review) => (
+                <div key={review.id} className={styles.reviewCard}>
+                  <div className={styles.reviewMeta}>
+                    {review.avatar ? (
+                      <img
+                        src={review.avatar}
+                        alt={review.author}
+                        className={styles.reviewAvatar}
+                      />
+                    ) : (
+                      <div className={styles.reviewAvatarFallback}>
+                        {review.author[0]}
+                      </div>
+                    )}
+                    <div>
+                      <p className={styles.reviewAuthor}>{review.author}</p>
+                      <p className={styles.reviewDate}>{review.date}</p>
+                    </div>
+                    <div className={styles.reviewStars}>
+                      <StarRow value={review.rating} />
+                    </div>
+                  </div>
+                  <p className={styles.reviewComment}>{review.comment}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
 
       <Footer />
+
+      {/* ── Virtual Try-On Modal ── */}
       <VtonModal
         isOpen={vtonOpen}
         onClose={() => setVtonOpen(false)}
-        productMainImageUrl={selectedImageUrl}
-        productName={product.name}
+        clothImageUrl={clothImageUrl}
+        clothType={product?.category?.bodyPart || 'overall'}
+        productId={product?.id || null}
+      />
+
+      <ReviewProductModal
+        isOpen={reviewModalOpen}
+        onClose={() => setReviewModalOpen(false)}
+        productId={product?.id}
+        onSuccess={() => {
+          setRetryKey((k) => k + 1);
+        }}
       />
     </div>
   );

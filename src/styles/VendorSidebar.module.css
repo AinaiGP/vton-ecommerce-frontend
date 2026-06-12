@@ -30,11 +30,43 @@
 .brand {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: var(--space-3);
   padding: 0 var(--space-5) var(--space-4);
   flex-shrink: 0;
   position: relative;
+}
+
+.brandInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  animation: fadeIn var(--transition-base);
+}
+
+.vendorName {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  color: var(--white);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.vendorEmail {
+  font-size: 11px;
+  color: var(--sidebar-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.6;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-5px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .brandLink {
@@ -49,21 +81,21 @@
 
 .badge {
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: var(--weight-bold);
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
   background: var(--gold);
   color: var(--charcoal);
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: var(--radius-pill);
   position: absolute;
-  top: -2px;
-  right: var(--space-5);
+  top: -4px;
+  right: var(--space-4);
 }
 
-.collapsed .badge {
-  display: none;
+.collapsed .brand {
+  justify-content: center;
 }
 
 /* ── Collapse button ── */
@@ -202,62 +234,7 @@
   flex: 1;
 }
 
-/* ── Store info (bottom pill) ── */
-.storeInfo {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin: var(--space-4) var(--space-4) var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  background: var(--sidebar-bg-hover);
-  border-radius: var(--radius-md);
-  flex-shrink: 0;
-}
 
-.storeAvatar {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-circle);
-  background: var(--gold);
-  color: var(--charcoal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.storeDetails {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.storeName {
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  color: var(--white);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.storeStatus {
-  font-size: var(--text-xs);
-  color: var(--status-delivered);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.storeStatus::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-circle);
-  background: var(--status-delivered);
-  display: inline-block;
-}
 
 /* ── Collapsed overrides ── */
 .collapsed .nav,
