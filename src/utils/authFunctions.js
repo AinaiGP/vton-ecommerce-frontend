@@ -40,12 +40,27 @@ export const loginUser = async (email, password) => {
       password,
     });
 
-    return { status: true, data: response.data };
+    return response.data;
   } catch (error) {
-    return {
-      status: false,
-      message: getErrorMessage(error, "Login failed."),
-    };
+    throw error;
+  }
+};
+
+export const googleLoginUser = async (credential) => {
+  try {
+    const response = await apiClient.post("/auth/google/login", { credential });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const completeGoogleOnboarding = async (payload) => {
+  try {
+    const response = await apiClient.post("/auth/google/complete-onboarding", payload);
+    return response.data;
+  } catch (error) {
+    throw error;
   }
 };
 
@@ -95,4 +110,31 @@ export const forgotPassword = async (email) => {
       ),
     };
   }
+};
+
+export const resendVerificationEmail = async (email) => {
+  try {
+    const response = await apiClient.post("/auth/resend-verification", { email });
+    return { status: true, message: response?.data?.message || "Verification email sent." };
+  } catch (error) {
+    return {
+      status: false,
+      message: getErrorMessage(error, "Failed to resend verification email."),
+    };
+  }
+};
+
+/**
+ * Maps user roles to their respective dashboard or landing paths.
+ * @param {string} role - The user role string from the backend.
+ * @returns {string} The path to redirect to.
+ */
+export const getRedirectPathByRole = (role) => {
+  const map = {
+    customer: "/",
+    vendor: "/vendor",
+    admin: "/admin",
+    technical_support: "/support",
+  };
+  return map[role] || "/auth";
 };

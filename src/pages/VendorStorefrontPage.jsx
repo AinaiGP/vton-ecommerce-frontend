@@ -1,45 +1,34 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Star, ShoppingBag, Eye, ArrowLeft, MapPin, Package, TrendingUp, MessageSquare } from "lucide-react";
+import {
+  Star,
+  ShoppingBag,
+  Eye,
+  ArrowLeft,
+  MapPin,
+  Package,
+  TrendingUp,
+  MessageSquare,
+  User,
+} from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
+import ProductCard from "../components/common/ProductCard";
+import ReviewVendorModal from "../components/modal/ReviewVendorModal";
+import { useAuth } from "../context/AuthContext";
 import styles from "../styles/VendorStorefrontPage.module.css";
-
-/* ── Mock Store Data ── */
-const STORE = {
-  id: "urban-threads",
-  name: "Urban Threads",
-  logo: "https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=120&h=120&fit=crop",
-  banner: "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?w=1200&h=350&fit=crop",
-  description: "Premium streetwear and urban fashion for the modern generation. Curated pieces that blend contemporary style with timeless elegance.",
-  location: "Dubai, UAE",
-  totalSold: 1284,
-  rating: 4.7,
-  reviewCount: 134,
-  memberSince: "January 2023",
-  categories: ["Dresses", "Sets", "Accessories", "Traditional"],
-};
-
-const PRODUCTS = [
-  { id: 1, name: "Silk Evening Gown",   price: 389, image: "https://images.unsplash.com/photo-1566479179817-0b6cf9b3888e?w=300&h=400&fit=crop", category: "Dresses",   badge: "Best Seller" },
-  { id: 2, name: "Cashmere Wrap Dress", price: 275, image: "https://images.unsplash.com/photo-1572804013427-4d7ca7268217?w=300&h=400&fit=crop", category: "Dresses",   badge: null },
-  { id: 3, name: "Embroidered Kaftan",  price: 450, image: "https://images.unsplash.com/photo-1583391733956-6c78276477e2?w=300&h=400&fit=crop", category: "Traditional", badge: "Limited" },
-  { id: 4, name: "Linen Palazzo Set",   price: 195, image: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=300&h=400&fit=crop", category: "Sets",       badge: "New" },
-  { id: 5, name: "Beaded Clutch Bag",   price: 120, image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=300&h=400&fit=crop", category: "Accessories", badge: null },
-  { id: 6, name: "Pearl Drop Earrings", price:  89, image: "https://images.unsplash.com/photo-1630350276620-d30b91a09fa8?w=300&h=400&fit=crop", category: "Accessories", badge: null },
-];
-
-const REVIEWS = [
-  { id: 1, author: "Sara Al-Rashid",   rating: 5, date: "March 2025", comment: "Amazing quality! The fabric is so luxurious. Will definitely order again.", avatar: "https://i.pravatar.cc/48?img=47" },
-  { id: 2, author: "Nour Ahmed",       rating: 4, date: "February 2025", comment: "Fast shipping and beautiful packaging. Very happy with my purchase.", avatar: "https://i.pravatar.cc/48?img=32" },
-  { id: 3, author: "Layla Hassan",     rating: 5, date: "January 2025", comment: "The embroidery detail is exquisite. Perfect for special occasions.", avatar: null },
-];
+import apiClient from "../utils/apiClient";
 
 function StarRow({ value, size = 14 }) {
   return (
     <div style={{ display: "flex", gap: 2 }}>
-      {[1,2,3,4,5].map(n => (
-        <Star key={n} size={size} fill={value >= n ? "var(--gold)" : "none"} stroke={value >= n ? "var(--gold)" : "var(--ivory-darker)"} />
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          size={size}
+          fill={value >= n ? "var(--gold)" : "none"}
+          stroke={value >= n ? "var(--gold)" : "var(--ivory-darker)"}
+        />
       ))}
     </div>
   );
@@ -47,15 +36,95 @@ function StarRow({ value, size = 14 }) {
 
 export default function VendorStorefrontPage() {
   const { id } = useParams();
+  const { isAuthenticated } = useAuth();
   const [activeCategory, setActiveCategory] = useState("All");
   const [cartAdded, setCartAdded] = useState({});
+  const [store, setStore] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [canReview, setCanReview] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const categories = ["All", ...STORE.categories];
-  const filtered = activeCategory === "All" ? PRODUCTS : PRODUCTS.filter(p => p.category === activeCategory);
+  useEffect(() => {
+    fetchStoreData();
+  }, [id, isAuthenticated]);
+
+  const fetchStoreData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Public endpoint: GET /vendors/:id/store
+      const storeRes = await apiClient.get(`/vendors/${id}/store`);
+      setStore(storeRes.data);
+
+      // Public endpoint: GET /products?brandIds=:id
+      const productsRes = await apiClient.get(`/products?brandIds=${id}&limit=50`);
+      const rawProducts = productsRes.data?.data || productsRes.data || [];
+      // Normalize product fields to handle backend shape
+      setProducts(
+        rawProducts.map((p) => ({
+          ...p,
+          // Price is stored as integer cents/piasters — convert to readable float
+          displayPrice: p.basePrice != null ? (p.basePrice / 100).toFixed(2) : p.price ?? 0,
+          // Category is a relation object with a name field
+          categoryName: p.category?.name ?? p.category ?? "",
+          // First image from the images relation array
+          mainImageUrl: p.images?.[0]?.url ?? p.mainImage ?? null,
+        }))
+      );
+      // Public endpoint: GET /vendors/:id/reviews
+      const reviewsRes = await apiClient.get(`/vendors/${id}/reviews`);
+      const rawReviews = reviewsRes.data?.data || [];
+      setReviews(
+        rawReviews.map((r) => ({
+          id: r.id,
+          author: r.customerName || "Customer",
+          avatar: null, // No customer avatar currently in DB
+          date: new Date(r.createdAt).toLocaleDateString(),
+          rating: Number(r.rating) || 5,
+          comment: r.comment || "",
+        }))
+      );
+
+      if (isAuthenticated) {
+        try {
+          const canReviewRes = await apiClient.get(`/vendors/${id}/can-review`);
+          setCanReview(canReviewRes.data.canReview);
+        } catch (e) {
+          console.error("Failed to fetch vendor review eligibility:", e);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch store data", err);
+      setError("Failed to load storefront.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const categories = ["All", ...new Set(products.map((p) => p.categoryName).filter(Boolean))];
+  const filtered =
+    activeCategory === "All"
+      ? products
+      : products.filter((p) => p.categoryName === activeCategory);
+  const bannerSrc = store?.bannerUrl;
+  const storeName = store?.brandName || store?.storeName || "Store";
+  const storeRating = store?.rating ? parseFloat(store.rating) : 5.0;
+  const reviewCount = store?.reviewCount ?? 0;
 
   const addToCart = (productId) => {
-    setCartAdded(prev => ({ ...prev, [productId]: true }));
-    setTimeout(() => setCartAdded(prev => { const c = { ...prev }; delete c[productId]; return c; }), 1800);
+    setCartAdded((prev) => ({ ...prev, [productId]: true }));
+    setTimeout(
+      () =>
+        setCartAdded((prev) => {
+          const c = { ...prev };
+          delete c[productId];
+          return c;
+        }),
+      1800,
+    );
   };
 
   return (
@@ -64,7 +133,11 @@ export default function VendorStorefrontPage() {
 
       {/* Banner */}
       <div className={styles.banner}>
-        <img src={STORE.banner} alt={STORE.name} className={styles.bannerImg} />
+        {bannerSrc ? (
+          <img src={bannerSrc} alt={storeName} className={styles.bannerImg} />
+        ) : (
+          <div className={styles.bannerFallback} />
+        )}
         <div className={styles.bannerOverlay} />
         <Link to="/browse" className={styles.backBtn}>
           <ArrowLeft size={16} /> Back to Shop
@@ -72,118 +145,222 @@ export default function VendorStorefrontPage() {
       </div>
 
       <main className={styles.main}>
-        {/* Store Header Card */}
-        <div className={styles.storeCard}>
-          <img src={STORE.logo} alt={STORE.name} className={styles.storeLogo} />
-          <div className={styles.storeInfo}>
-            <h1 className={styles.storeName}>{STORE.name}</h1>
-            <div className={styles.storeMeta}>
-              <div className={styles.ratingRow}>
-                <StarRow value={Math.round(STORE.rating)} size={16} />
-                <span className={styles.ratingVal}>{STORE.rating}</span>
-                <span className={styles.ratingCount}>({STORE.reviewCount} reviews)</span>
-              </div>
-              <span className={styles.metaDivider}>·</span>
-              <span className={styles.metaItem}><MapPin size={13} /> {STORE.location}</span>
-              <span className={styles.metaDivider}>·</span>
-              <span className={styles.metaItem}>Since {STORE.memberSince}</span>
+        {loading ? (
+          <div className={styles.emptyState}>
+            <div className={styles.emptyIcon}>
+              <Package size={28} style={{ animation: "spin 1s linear infinite" }} />
             </div>
-            <p className={styles.storeDesc}>{STORE.description}</p>
+            <h3 className={styles.emptyTitle}>Loading storefront…</h3>
           </div>
-          <div className={styles.storeStats}>
-            <div className={styles.statItem}>
-              <span className={styles.statVal}>{STORE.totalSold.toLocaleString()}</span>
-              <span className={styles.statLbl}><Package size={12} /> Total Sold</span>
-            </div>
-            <div className={styles.statItem}>
-              <span className={styles.statVal}>{STORE.rating}</span>
-              <span className={styles.statLbl}><Star size={12} /> Rating</span>
-            </div>
-            <div className={styles.statItem}>
-              <span className={styles.statVal}>{PRODUCTS.length}</span>
-              <span className={styles.statLbl}><TrendingUp size={12} /> Products</span>
-            </div>
+        ) : error ? (
+          <div className={styles.emptyState}>
+            <div className={styles.emptyIcon}><Package size={28} /></div>
+            <h3 className={styles.emptyTitle}>Storefront unavailable</h3>
+            <p className={styles.emptyText}>{error}</p>
           </div>
-        </div>
-
-        {/* Products Section */}
-        <section className={styles.section}>
-          <div className={styles.sectionHead}>
-            <h2 className={styles.sectionTitle}>All Products</h2>
-            <div className={styles.categoryFilter}>
-              {categories.map(cat => (
-                <button
-                  key={cat}
-                  className={`${styles.catBtn} ${activeCategory === cat ? styles.catBtnActive : ""}`}
-                  onClick={() => setActiveCategory(cat)}
-                >
-                  {cat}
-                </button>
-              ))}
+        ) : !store ? (
+          <div className={styles.emptyState}>
+            <div className={styles.emptyIcon}>
+              <StoreIcon />
             </div>
+            <h3 className={styles.emptyTitle}>No data yet.</h3>
+            <p className={styles.emptyText}>
+              Storefront details will appear once this vendor is connected.
+            </p>
           </div>
-
-          <div className={styles.productsGrid}>
-            {filtered.map(product => (
-              <div key={product.id} className={styles.productCard}>
-                <Link to={`/product/${product.id}`} className={styles.productImgWrap}>
-                  <img src={product.image} alt={product.name} className={styles.productImg} />
-                  {product.badge && <span className={styles.productBadge}>{product.badge}</span>}
-                  <div className={styles.productOverlay}>
-                    <Link to={`/product/${product.id}`} className={styles.tryOnBtn}>
-                      <Eye size={16} /> Try On
-                    </Link>
+        ) : (
+          <>
+            {/* Store Header Card */}
+            <div className={styles.storeCard}>
+              <div className={styles.storeLogoWrap}>
+                {store.logoUrl ? (
+                  <img
+                    src={store.logoUrl}
+                    alt={storeName}
+                    className={styles.storeLogo}
+                  />
+                ) : (
+                  <div className={styles.storeLogoFallback} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <User size={48} color="#999" />
                   </div>
-                </Link>
-                <div className={styles.productInfo}>
-                  <span className={styles.productCat}>{product.category}</span>
-                  <Link to={`/product/${product.id}`} className={styles.productNameLink}>
-                    <h3 className={styles.productName}>{product.name}</h3>
-                  </Link>
-                  <p className={styles.productPrice}>EGP {product.price.toLocaleString()}</p>
-                  <button
-                    className={`${styles.addCartBtn} ${cartAdded[product.id] ? styles.addCartBtnAdded : ""}`}
-                    onClick={() => addToCart(product.id)}
-                  >
-                    {cartAdded[product.id] ? "✓ Added!" : <><ShoppingBag size={14} /> Add to Cart</>}
-                  </button>
+                )}
+              </div>
+              <div className={styles.storeInfo}>
+                <h1 className={styles.storeName}>{storeName}</h1>
+                <div className={styles.storeMeta}>
+                  <div className={styles.ratingRow}>
+                    <StarRow value={Math.round(storeRating)} size={16} />
+                    <span className={styles.ratingVal}>{storeRating.toFixed(1)}</span>
+                    <span className={styles.ratingCount}>
+                      ({reviewCount} reviews)
+                    </span>
+                  </div>
+                  <span className={styles.metaDivider}>·</span>
+                  <span className={styles.metaItem}>
+                    <MapPin size={13} /> {store.country || "UAE"}
+                  </span>
+                  <span className={styles.metaDivider}>·</span>
+                  <span className={styles.metaItem}>
+                    Since {new Date(store.createdAt || Date.now()).getFullYear()}
+                  </span>
+                </div>
+                <p className={styles.storeDesc}>{store.description || "Welcome to our store!"}</p>
+              </div>
+              <div className={styles.storeStats}>
+                <div className={styles.statItem}>
+                  <span className={styles.statVal}>
+                    {(store.totalSold || 0).toLocaleString()}
+                  </span>
+                  <span className={styles.statLbl}>
+                    <Package size={12} /> Total Sold
+                  </span>
+                </div>
+                <div className={styles.statItem}>
+                  <span className={styles.statVal}>{storeRating.toFixed(1)}</span>
+                  <span className={styles.statLbl}>
+                    <Star size={12} /> Rating
+                  </span>
+                </div>
+                <div className={styles.statItem}>
+                  <span className={styles.statVal}>{products.length}</span>
+                  <span className={styles.statLbl}>
+                    <TrendingUp size={12} /> Products
+                  </span>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Reviews Section */}
-        <section className={styles.section}>
-          <div className={styles.sectionHead}>
-            <h2 className={styles.sectionTitle}><MessageSquare size={20} /> Customer Reviews</h2>
-            <div className={styles.reviewSummary}>
-              <StarRow value={Math.round(STORE.rating)} size={18} />
-              <strong>{STORE.rating}</strong>
-              <span style={{ color: "var(--charcoal-muted)", fontSize: 13 }}>({STORE.reviewCount} reviews)</span>
             </div>
-          </div>
-          <div className={styles.reviewsGrid}>
-            {REVIEWS.map(review => (
-              <div key={review.id} className={styles.reviewCard}>
-                <div className={styles.reviewMeta}>
-                  {review.avatar
-                    ? <img src={review.avatar} alt={review.author} className={styles.reviewAvatar} />
-                    : <div className={styles.reviewAvatarFallback}>{review.author[0]}</div>
-                  }
-                  <div>
-                    <p className={styles.reviewAuthor}>{review.author}</p>
-                    <p className={styles.reviewDate}>{review.date}</p>
-                  </div>
-                  <div style={{ marginLeft: "auto" }}><StarRow value={review.rating} /></div>
+
+            {/* Products Section */}
+            <section className={styles.section}>
+              <div className={styles.sectionHead}>
+                <h2 className={styles.sectionTitle}>All Products</h2>
+                <div className={styles.categoryFilter}>
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      className={`${styles.catBtn} ${activeCategory === cat ? styles.catBtnActive : ""}`}
+                      onClick={() => setActiveCategory(cat)}
+                    >
+                      {cat}
+                    </button>
+                  ))}
                 </div>
-                <p className={styles.reviewComment}>{review.comment}</p>
               </div>
-            ))}
-          </div>
-        </section>
+
+              {filtered.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <div className={styles.emptyIcon}>
+                    <Package size={24} />
+                  </div>
+                  <h3 className={styles.emptyTitle}>No data yet.</h3>
+                  <p className={styles.emptyText}>
+                    Products will appear once this vendor is connected.
+                  </p>
+                </div>
+              ) : (
+                <div className={styles.productsGrid}>
+                  {filtered.map((product) => (
+                    <div key={product.id} style={{ minWidth: 220 }}>
+                      <ProductCard product={product} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Reviews Section */}
+            <section className={styles.section}>
+              <div className={styles.sectionHead}>
+                <h2 className={styles.sectionTitle}>
+                  <MessageSquare size={20} /> Customer Reviews
+                </h2>
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  {canReview && (
+                    <button
+                      onClick={() => setReviewModalOpen(true)}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: 6,
+                        border: "1.5px solid var(--gold)",
+                        background: "white",
+                        color: "var(--gold-dark)",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6
+                      }}
+                    >
+                      <Star size={14} /> Rate Vendor
+                    </button>
+                  )}
+                  <div className={styles.reviewSummary}>
+                    <StarRow value={Math.round(storeRating)} size={18} />
+                    <strong>{storeRating.toFixed(1)}</strong>
+                    <span className={styles.reviewCount}>
+                      ({reviewCount} reviews)
+                    </span>
+                  </div>
+                </div>
+              </div>
+              {reviews.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <div className={styles.emptyIcon}>
+                    <MessageSquare size={24} />
+                  </div>
+                  <h3 className={styles.emptyTitle}>No data yet.</h3>
+                  <p className={styles.emptyText}>
+                    Reviews will appear once this vendor is connected.
+                  </p>
+                </div>
+              ) : (
+                <div className={styles.reviewsGrid}>
+                  {reviews.map((review) => (
+                    <div key={review.id} className={styles.reviewCard}>
+                      <div className={styles.reviewMeta}>
+                        {review.avatar ? (
+                          <img
+                            src={review.avatar}
+                            alt={review.author}
+                            className={styles.reviewAvatar}
+                          />
+                        ) : (
+                          <div className={styles.reviewAvatarFallback}>
+                            {review.author[0]}
+                          </div>
+                        )}
+                        <div>
+                          <p className={styles.reviewAuthor}>{review.author}</p>
+                          <p className={styles.reviewDate}>{review.date}</p>
+                        </div>
+                        <div className={styles.reviewStars}>
+                          <StarRow value={review.rating} />
+                        </div>
+                      </div>
+                      <p className={styles.reviewComment}>{review.comment}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
+        <ReviewVendorModal
+          isOpen={reviewModalOpen}
+          onClose={() => setReviewModalOpen(false)}
+          vendorId={id}
+          onSuccess={() => {
+            fetchStoreData();
+          }}
+        />
       </main>
       <Footer />
     </div>
   );
+}
+
+function StoreIcon() {
+  return <Package size={28} />;
 }

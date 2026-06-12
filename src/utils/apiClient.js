@@ -3,6 +3,7 @@ import {
   clearAll,
   getAccessToken,
   getRefreshToken,
+  getTokenStorageType,
   setTokens,
 } from "./localStorage";
 
@@ -18,6 +19,7 @@ function createApiClient(contentType = "application/json") {
   return axios.create({
     baseURL,
     headers,
+    withCredentials: true, // required for cart_id cookie (httpOnly, set by backend)
   });
 }
 
@@ -27,6 +29,11 @@ function attachAuthInterceptor(client) {
       const accessToken = getAccessToken();
       if (accessToken) {
         config.headers.Authorization = `Bearer ${accessToken}`;
+      }
+
+      const cartId = localStorage.getItem("cartId");
+      if (cartId) {
+        config.headers["x-cart-id"] = cartId;
       }
 
       return config;
@@ -43,7 +50,18 @@ function attachResponseInterceptor(client, retryClient) {
     async (error) => {
       const originalRequest = error.config;
 
-      if (error?.response?.status !== 401 || originalRequest?._retry) {
+      // Never attempt token refresh for auth endpoints — let the caller handle the error.
+      const isAuthEndpoint =
+        originalRequest?.url?.includes('/auth/login') ||
+        originalRequest?.url?.includes('/auth/register') ||
+        originalRequest?.url?.includes('/auth/forgot-password') ||
+        originalRequest?.url?.includes('/auth/reset-password');
+
+      if (
+        error?.response?.status !== 401 ||
+        originalRequest?._retry ||
+        isAuthEndpoint
+      ) {
         return Promise.reject(error);
       }
 
@@ -75,7 +93,8 @@ function attachResponseInterceptor(client, retryClient) {
 
         const { accessToken, refreshToken: newRefreshToken } =
           refreshResponse.data;
-        setTokens(accessToken, newRefreshToken);
+        const rememberMe = getTokenStorageType() === "local";
+        setTokens(accessToken, newRefreshToken, rememberMe);
 
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return retryClient(originalRequest);

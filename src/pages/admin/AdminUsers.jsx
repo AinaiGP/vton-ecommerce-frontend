@@ -1,96 +1,165 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-  Search, Plus, Pencil, Trash2, Lock, Unlock, Eye, X, AlertTriangle, Check
+  Search,
+  Trash2,
+  Lock,
+  Unlock,
+  Eye,
+  X,
+  AlertTriangle,
+  Users,
 } from "lucide-react";
 import AdminLayout from "../../components/admin/AdminLayout";
+import apiClient from "../../utils/apiClient";
 import t from "../../styles/AdminTable.module.css";
 
-const INITIAL_USERS = [
-  { id: 101, name: "Sara Al-Rashid", email: "sara@example.com", role: "Customer", status: "Active", joined: "Jan 10, 2026", orders: 12 },
-  { id: 102, name: "Layla Hassan", email: "layla@example.com", role: "Customer", status: "Banned", joined: "Feb 14, 2026", orders: 3 },
-  { id: 103, name: "Nour Khalil", email: "nour@example.com", role: "Vendor", status: "Active", joined: "Mar 5, 2026", orders: 28 },
-  { id: 104, name: "Amira Fayed", email: "amira@example.com", role: "Customer", status: "Banned", joined: "Apr 1, 2026", orders: 1 },
-  { id: 105, name: "Fatima Al-Zahra", email: "fatima@example.com", role: "Vendor", status: "Active", joined: "Apr 8, 2026", orders: 45 },
-  { id: 106, name: "Hana Saleh", email: "hana@example.com", role: "Customer", status: "Active", joined: "Apr 12, 2026", orders: 7 },
-  { id: 107, name: "Mariam Khatib", email: "mariam@example.com", role: "Customer", status: "Active", joined: "Apr 15, 2026", orders: 0 },
-];
-
-const PAGE_SIZE = 5;
-
 function getInitials(name) {
-  return name.split(" ").map((p) => p[0]).join("").toUpperCase().slice(0, 2);
+  if (!name) return "U";
+  return name
+    .split(" ")
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 }
 
-function StatusBadge({ status }) {
-  const map = { Active: t.badgeActive, Banned: t.badgeBanned };
-  return <span className={`${t.badge} ${map[status] || t.badgeDraft}`}><span className={t.badgeDot} />{status}</span>;
+function StatusBadge({ isSuspended, isActive }) {
+  if (isSuspended) return <span className={`${t.badge} ${t.badgeSuspended}`}><span className={t.badgeDot} />Suspended</span>;
+  if (!isActive) return <span className={`${t.badge} ${t.badgeClosed}`}><span className={t.badgeDot} />Inactive</span>;
+  return <span className={`${t.badge} ${t.badgeActive}`}><span className={t.badgeDot} />Active</span>;
 }
 
 function RoleBadge({ role }) {
-  const map = { Vendor: t.badgeProcessing, Customer: t.badgeDraft };
-  return <span className={`${t.badge} ${map[role] || t.badgeDraft}`}>{role}</span>;
+  const cls = role === "vendor" ? t.badgeProcessing : t.badgeDraft;
+  return <span className={`${t.badge} ${cls}`}>{role}</span>;
+}
+
+function fmt(date) {
+  if (!date) return "—";
+  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 export default function AdminUsers() {
-  const [users, setUsers] = useState(INITIAL_USERS);
-  const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [editUser, setEditUser] = useState(null);
+  const limit = 20;
+
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [suspendedFilter, setSuspendedFilter] = useState("");
+
   const [viewUser, setViewUser] = useState(null);
+  const [suspendTarget, setSuspendTarget] = useState(null);
+  const [suspendReason, setSuspendReason] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const filtered = users.filter((u) => {
-    const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
-    const matchRole = roleFilter === "All" || u.role === roleFilter;
-    const matchStatus = statusFilter === "All" || u.status === statusFilter;
-    return matchSearch && matchRole && matchStatus;
-  });
+  const fetchUsers = useCallback(() => {
+    setLoading(true);
+    const params = { page, limit };
+    if (search) params.search = search;
+    if (roleFilter) params.role = roleFilter;
+    if (suspendedFilter !== "") params.isSuspended = suspendedFilter;
+    apiClient
+      .get("/admin/users", { params })
+      .then((r) => {
+        setUsers(r.data.data);
+        setTotal(r.data.total);
+      })
+      .catch(() => setError("Failed to load users."))
+      .finally(() => setLoading(false));
+  }, [page, limit, search, roleFilter, suspendedFilter]);
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-  const toggleBan = (id) => {
-    setUsers(users.map((u) => u.id === id ? { ...u, status: u.status === "Active" ? "Banned" : "Active" } : u));
+  const totalPages = Math.ceil(total / limit);
+
+  const handleSuspend = async () => {
+    if (!suspendTarget) return;
+    setActionLoading(true);
+    try {
+      await apiClient.patch(`/admin/users/${suspendTarget.id}/suspend`, { reason: suspendReason || undefined });
+      setSuspendTarget(null);
+      setSuspendReason("");
+      fetchUsers();
+    } catch {
+      setError("Failed to suspend user.");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const deleteUser = (id) => {
-    setUsers(users.filter((u) => u.id !== id));
-    setConfirmDelete(null);
+  const handleUnsuspend = async (user) => {
+    setActionLoading(true);
+    try {
+      await apiClient.patch(`/admin/users/${user.id}/unsuspend`);
+      fetchUsers();
+    } catch {
+      setError("Failed to unsuspend user.");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const saveEdit = (e) => {
-    e.preventDefault();
-    setUsers(users.map((u) => u.id === editUser.id ? editUser : u));
-    setEditUser(null);
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+    setActionLoading(true);
+    try {
+      await apiClient.delete(`/admin/users/${confirmDelete.id}`);
+      setConfirmDelete(null);
+      fetchUsers();
+    } catch {
+      setError("Failed to delete user.");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
-    <AdminLayout pageTitle="User Management" pageSubtitle="Monitor customer accounts and control privileges." breadcrumb="Users">
+    <AdminLayout
+      pageTitle="User Management"
+      pageSubtitle="Monitor customer and vendor accounts."
+      breadcrumb="Users"
+    >
+      {error && (
+        <div className={`${t.badge} ${t.badgeBanned}`} style={{ marginBottom: 12, padding: "10px 16px", borderRadius: 8, display: "block" }}>
+          {error} <button onClick={() => setError(null)} style={{ marginLeft: 8, background: "none", border: "none", cursor: "pointer" }}><X size={14} /></button>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className={t.toolbar}>
         <div className={t.toolbarLeft}>
           <div className={t.searchBox}>
             <Search size={15} className={t.searchIcon} />
-            <input className={t.searchInput} placeholder="Search by name or email..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+            <input
+              className={t.searchInput}
+              placeholder="Search by email..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
           </div>
-          <select className={t.filterSelect} value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}>
-            <option value="All">All Roles</option>
-            <option value="Customer">Customer</option>
-            <option value="Vendor">Vendor</option>
+          <select
+            className={t.filterSelect}
+            value={roleFilter}
+            onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+          >
+            <option value="">All Roles</option>
+            <option value="customer">Customer</option>
+            <option value="vendor">Vendor</option>
           </select>
-          <select className={t.filterSelect} value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
-            <option value="All">All Status</option>
-            <option value="Active">Active</option>
-            <option value="Banned">Banned</option>
+          <select
+            className={t.filterSelect}
+            value={suspendedFilter}
+            onChange={(e) => { setSuspendedFilter(e.target.value); setPage(1); }}
+          >
+            <option value="">All Status</option>
+            <option value="false">Active</option>
+            <option value="true">Suspended</option>
           </select>
-        </div>
-        <div className={t.toolbarRight}>
-          <button className={`${t.btn} ${t.btnPrimary}`} onClick={() => setEditUser({ id: Date.now(), name: "", email: "", role: "Customer", status: "Active", joined: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), orders: 0, _new: true })}>
-            <Plus size={15} /> Add User
-          </button>
         </div>
       </div>
 
@@ -100,54 +169,82 @@ export default function AdminUsers() {
           <table className={t.table}>
             <thead>
               <tr>
-                <th style={{ width: 40 }}>#</th>
+                <th>#</th>
                 <th>User</th>
                 <th>Role</th>
                 <th>Status</th>
-                <th>Orders</th>
                 <th>Joined</th>
-                <th style={{ width: 140 }}>Actions</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {paged.length === 0 ? (
+              {loading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    <td colSpan={6}><span className={`${t.skeleton} ${t.skeletonRow}`} /></td>
+                  </tr>
+                ))
+              ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={6}>
                     <div className={t.emptyState}>
-                      <div className={t.emptyIcon}><Search size={24} /></div>
+                      <div className={t.emptyIcon}><Users size={24} /></div>
                       <h3 className={t.emptyTitle}>No users found</h3>
-                      <p className={t.emptyText}>Try adjusting your search or filter to find results.</p>
+                      <p className={t.emptyText}>Try adjusting your filters.</p>
                     </div>
                   </td>
                 </tr>
-              ) : paged.map((user, i) => (
-                <tr key={user.id} style={{ opacity: user.status === "Banned" ? 0.65 : 1 }}>
-                  <td style={{ color: "var(--adm-text-subtle)", fontWeight: 600 }}>{(page - 1) * PAGE_SIZE + i + 1}</td>
-                  <td>
-                    <div className={t.avatarCell}>
-                      <div className={t.avatar}>{getInitials(user.name || "U")}</div>
-                      <div>
-                        <span className={t.avatarName}>{user.name}</span>
-                        <span className={t.avatarSub}>{user.email}</span>
+              ) : (
+                users.map((user, i) => (
+                  <tr key={user.id}>
+                    <td>{(page - 1) * limit + i + 1}</td>
+                    <td>
+                      <div className={t.avatarCell}>
+                        <div className={t.avatar}>{getInitials(user.name || user.email)}</div>
+                        <div>
+                          <span className={t.avatarName}>{user.name || "—"}</span>
+                          <span className={t.avatarSub}>{user.email}</span>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td><RoleBadge role={user.role} /></td>
-                  <td><StatusBadge status={user.status} /></td>
-                  <td style={{ fontWeight: 600 }}>{user.orders}</td>
-                  <td style={{ color: "var(--adm-text-muted)" }}>{user.joined}</td>
-                  <td>
-                    <div className={t.actions}>
-                      <button className={`${t.actionBtn}`} title="View" onClick={() => setViewUser(user)}><Eye size={15} /></button>
-                      <button className={`${t.actionBtn} ${t.edit}`} title="Edit" onClick={() => setEditUser({ ...user })}><Pencil size={15} /></button>
-                      <button className={`${t.actionBtn}`} title={user.status === "Active" ? "Ban" : "Unban"} onClick={() => toggleBan(user.id)}>
-                        {user.status === "Active" ? <Lock size={15} /> : <Unlock size={15} />}
-                      </button>
-                      <button className={`${t.actionBtn} ${t.delete}`} title="Delete" onClick={() => setConfirmDelete(user)}><Trash2 size={15} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td><RoleBadge role={user.role} /></td>
+                    <td><StatusBadge isSuspended={user.isSuspended} isActive={user.isActive} /></td>
+                    <td>{fmt(user.createdAt)}</td>
+                    <td>
+                      <div className={t.actions}>
+                        <button className={t.actionBtn} title="View" onClick={() => setViewUser(user)}>
+                          <Eye size={15} />
+                        </button>
+                        {user.isSuspended ? (
+                          <button
+                            className={`${t.actionBtn} ${t.approve}`}
+                            title="Unsuspend"
+                            onClick={() => handleUnsuspend(user)}
+                            disabled={actionLoading}
+                          >
+                            <Unlock size={15} />
+                          </button>
+                        ) : (
+                          <button
+                            className={`${t.actionBtn} ${t.reject}`}
+                            title="Suspend"
+                            onClick={() => { setSuspendTarget(user); setSuspendReason(""); }}
+                          >
+                            <Lock size={15} />
+                          </button>
+                        )}
+                        <button
+                          className={`${t.actionBtn} ${t.delete}`}
+                          title="Delete"
+                          onClick={() => setConfirmDelete(user)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -155,13 +252,22 @@ export default function AdminUsers() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className={t.pagination}>
-            <span className={t.pageInfo}>Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} users</span>
+            <span className={t.pageInfo}>
+              Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total} users
+            </span>
             <div className={t.pageButtons}>
-              <button className={t.pageBtn} onClick={() => setPage(p => p - 1)} disabled={page === 1}>←</button>
-              {Array.from({ length: totalPages }, (_, i) => (
-                <button key={i + 1} className={`${t.pageBtn} ${page === i + 1 ? t.pageBtnActive : ""}`} onClick={() => setPage(i + 1)}>{i + 1}</button>
-              ))}
-              <button className={t.pageBtn} onClick={() => setPage(p => p + 1)} disabled={page === totalPages}>→</button>
+              <button className={t.pageBtn} onClick={() => setPage((p) => p - 1)} disabled={page === 1}>←</button>
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                const pg = i + 1;
+                return (
+                  <button
+                    key={pg}
+                    className={`${t.pageBtn} ${page === pg ? t.pageBtnActive : ""}`}
+                    onClick={() => setPage(pg)}
+                  >{pg}</button>
+                );
+              })}
+              <button className={t.pageBtn} onClick={() => setPage((p) => p + 1)} disabled={page === totalPages}>→</button>
             </div>
           </div>
         )}
@@ -176,68 +282,72 @@ export default function AdminUsers() {
               <button className={t.modalClose} onClick={() => setViewUser(null)}><X size={18} /></button>
             </div>
             <div className={t.modalBody}>
-              <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 8 }}>
-                <div className={t.avatar} style={{ width: 56, height: 56, fontSize: 20 }}>{getInitials(viewUser.name)}</div>
+              <div className={t.avatarCell}>
+                <div className={t.avatar} style={{ width: 52, height: 52, fontSize: 18 }}>
+                  {getInitials(viewUser.name || viewUser.email)}
+                </div>
                 <div>
-                  <p style={{ margin: 0, fontWeight: 700, fontSize: 17 }}>{viewUser.name}</p>
-                  <p style={{ margin: "3px 0 0", color: "var(--adm-text-muted)", fontSize: 13 }}>{viewUser.email}</p>
+                  <span className={t.avatarName}>{viewUser.name || "—"}</span>
+                  <span className={t.avatarSub}>{viewUser.email}</span>
                 </div>
               </div>
               <div className={t.formRow}>
-                <div className={t.formGroup}><label className={t.label}>Role</label><div><RoleBadge role={viewUser.role} /></div></div>
-                <div className={t.formGroup}><label className={t.label}>Status</label><div><StatusBadge status={viewUser.status} /></div></div>
-                <div className={t.formGroup}><label className={t.label}>Orders</label><p style={{ margin: 0, fontWeight: 700 }}>{viewUser.orders}</p></div>
-                <div className={t.formGroup}><label className={t.label}>Joined</label><p style={{ margin: 0 }}>{viewUser.joined}</p></div>
+                <div className={t.formGroup}>
+                  <label className={t.label}>Role</label>
+                  <RoleBadge role={viewUser.role} />
+                </div>
+                <div className={t.formGroup}>
+                  <label className={t.label}>Status</label>
+                  <StatusBadge isSuspended={viewUser.isSuspended} isActive={viewUser.isActive} />
+                </div>
+                <div className={t.formGroup}>
+                  <label className={t.label}>Joined</label>
+                  <p style={{ margin: 0 }}>{fmt(viewUser.createdAt)}</p>
+                </div>
+                {viewUser.brandName && (
+                  <div className={t.formGroup}>
+                    <label className={t.label}>Brand</label>
+                    <p style={{ margin: 0 }}>{viewUser.brandName}</p>
+                  </div>
+                )}
               </div>
             </div>
             <div className={t.modalFoot}>
               <button className={`${t.btn} ${t.btnOutline}`} onClick={() => setViewUser(null)}>Close</button>
-              <button className={`${t.btn} ${t.btnPrimary}`} onClick={() => { setEditUser({ ...viewUser }); setViewUser(null); }}><Pencil size={14} /> Edit User</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit/Add Modal */}
-      {editUser && (
-        <div className={t.modalBackdrop} onClick={() => setEditUser(null)}>
-          <div className={t.modal} onClick={(e) => e.stopPropagation()}>
+      {/* Suspend Modal */}
+      {suspendTarget && (
+        <div className={t.modalBackdrop} onClick={() => setSuspendTarget(null)}>
+          <div className={`${t.modal} ${t.modalSm}`} onClick={(e) => e.stopPropagation()}>
             <div className={t.modalHead}>
-              <h2 className={t.modalTitle}>{editUser._new ? "Add New User" : "Edit User"}</h2>
-              <button className={t.modalClose} onClick={() => setEditUser(null)}><X size={18} /></button>
+              <h2 className={t.modalTitle}>Suspend User</h2>
+              <button className={t.modalClose} onClick={() => setSuspendTarget(null)}><X size={18} /></button>
             </div>
-            <form onSubmit={saveEdit}>
-              <div className={t.modalBody}>
-                <div className={t.formRow}>
-                  <div className={t.formGroup}>
-                    <label className={t.label}>Full Name</label>
-                    <input className={t.input} value={editUser.name} onChange={(e) => setEditUser({ ...editUser, name: e.target.value })} required placeholder="Full name" />
-                  </div>
-                  <div className={t.formGroup}>
-                    <label className={t.label}>Email</label>
-                    <input className={t.input} type="email" value={editUser.email} onChange={(e) => setEditUser({ ...editUser, email: e.target.value })} required placeholder="email@example.com" />
-                  </div>
-                  <div className={t.formGroup}>
-                    <label className={t.label}>Role</label>
-                    <select className={t.select} value={editUser.role} onChange={(e) => setEditUser({ ...editUser, role: e.target.value })}>
-                      <option>Customer</option>
-                      <option>Vendor</option>
-                    </select>
-                  </div>
-                  <div className={t.formGroup}>
-                    <label className={t.label}>Status</label>
-                    <select className={t.select} value={editUser.status} onChange={(e) => setEditUser({ ...editUser, status: e.target.value })}>
-                      <option>Active</option>
-                      <option>Banned</option>
-                    </select>
-                  </div>
-                </div>
+            <div className={t.modalBody}>
+              <p className={t.confirmText}>
+                Suspend <strong>{suspendTarget.name || suspendTarget.email}</strong>? They will no longer be able to log in.
+              </p>
+              <div className={t.formGroup}>
+                <label className={t.label}>Reason (optional)</label>
+                <textarea
+                  className={t.textarea}
+                  value={suspendReason}
+                  onChange={(e) => setSuspendReason(e.target.value)}
+                  placeholder="Reason for suspension..."
+                  rows={3}
+                />
               </div>
-              <div className={t.modalFoot}>
-                <button type="button" className={`${t.btn} ${t.btnOutline}`} onClick={() => setEditUser(null)}>Cancel</button>
-                <button type="submit" className={`${t.btn} ${t.btnPrimary}`}><Check size={14} /> {editUser._new ? "Add User" : "Save Changes"}</button>
-              </div>
-            </form>
+            </div>
+            <div className={t.modalFoot}>
+              <button className={`${t.btn} ${t.btnOutline}`} onClick={() => setSuspendTarget(null)}>Cancel</button>
+              <button className={`${t.btn} ${t.btnDanger}`} onClick={handleSuspend} disabled={actionLoading}>
+                <Lock size={14} /> {actionLoading ? "Suspending…" : "Suspend"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -249,11 +359,15 @@ export default function AdminUsers() {
             <div className={t.modalBody} style={{ alignItems: "center", textAlign: "center", paddingTop: 28, paddingBottom: 28 }}>
               <div className={t.confirmIcon}><AlertTriangle size={24} /></div>
               <h3 className={t.modalTitle}>Delete User?</h3>
-              <p className={t.confirmText}>Are you sure you want to permanently delete <strong>{confirmDelete.name}</strong>? This action cannot be undone.</p>
+              <p className={t.confirmText}>
+                Permanently delete <strong>{confirmDelete.name || confirmDelete.email}</strong>? This cannot be undone.
+              </p>
             </div>
             <div className={t.modalFoot} style={{ justifyContent: "center" }}>
               <button className={`${t.btn} ${t.btnOutline}`} onClick={() => setConfirmDelete(null)}>Cancel</button>
-              <button className={`${t.btn} ${t.btnDanger}`} onClick={() => deleteUser(confirmDelete.id)}><Trash2 size={14} /> Delete</button>
+              <button className={`${t.btn} ${t.btnDanger}`} onClick={handleDelete} disabled={actionLoading}>
+                <Trash2 size={14} /> {actionLoading ? "Deleting…" : "Delete"}
+              </button>
             </div>
           </div>
         </div>

@@ -1,29 +1,88 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Heart, ShoppingBag, Trash2, X } from "lucide-react";
+import { Heart, ShoppingBag, Trash2, X, Loader2 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import styles from "../styles/WishlistPage.module.css";
-
-const SEED = [
-  { id: 1, name: "Silk Evening Gown", price: 389, image: "https://images.unsplash.com/photo-1566479179817-0b6cf9b3888e?w=400&h=500&fit=crop", category: "Dresses", badge: "In Stock" },
-  { id: 2, name: "Embroidered Kaftan", price: 450, image: "https://images.unsplash.com/photo-1583391733956-6c78276477e2?w=400&h=500&fit=crop", category: "Traditional", badge: "Limited" },
-  { id: 3, name: "Cashmere Wrap Dress", price: 275, image: "https://images.unsplash.com/photo-1572804013427-4d7ca7268217?w=400&h=500&fit=crop", category: "Dresses", badge: "In Stock" },
-  { id: 4, name: "Gold Cuff Bracelet", price: 89, image: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&h=500&fit=crop", category: "Accessories", badge: "In Stock" },
-];
+import apiClient from "../utils/apiClient";
+import { useCart } from "../context/CartContext";
+import { formatPrice, getVariantImage } from "../utils/productHelpers";
+import ConfirmModal from "../components/common/ConfirmModal";
 
 export default function WishlistPage() {
-  const [items, setItems] = useState(SEED);
+  const [items, setItems] = useState([]);
   const [added, setAdded] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const { addToCart } = useCart();
 
-  const remove = (id) => setItems(prev => prev.filter(i => i.id !== id));
+  useEffect(() => {
+    fetchWishlist();
+  }, []);
 
-  const moveToCart = (id) => {
-    setAdded(prev => ({ ...prev, [id]: true }));
-    setTimeout(() => {
-      setItems(prev => prev.filter(i => i.id !== id));
-      setAdded(prev => { const n = { ...prev }; delete n[id]; return n; });
-    }, 1200);
+  const fetchWishlist = async () => {
+    try {
+      setLoading(true);
+      const res = await apiClient.get("/customers/wishlist?limit=100");
+      const mapped = res.data.data.map((w) => ({
+        id: w.variantId,
+        productId: w.productId,
+        name: w.product?.name || "Product",
+        price: w.variant?.price || w.product?.basePrice || 0,
+        image: getVariantImage(w.variant, w.product) || "/placeholder.png",
+        category: w.product?.category?.name || "Category",
+        badge: w.product?.tags?.[0] || "",
+      }));
+      setItems(mapped);
+    } catch (err) {
+      console.error("Failed to fetch wishlist", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const remove = async (id) => {
+    try {
+      await apiClient.delete(`/customers/wishlist/${id}`);
+      setItems((prev) => prev.filter((i) => i.id !== id));
+    } catch (err) {
+      console.error("Failed to remove item", err);
+    }
+  };
+
+  const moveToCart = async (item) => {
+    try {
+      await addToCart(item.productId, item.id, 1);
+      setAdded((prev) => ({ ...prev, [item.id]: true }));
+      setTimeout(() => {
+        remove(item.id);
+        setAdded((prev) => {
+          const n = { ...prev };
+          delete n[item.id];
+          return n;
+        });
+      }, 1200);
+    } catch (err) {
+      console.error("Failed to move to cart", err);
+    }
+  };
+
+  const handleClearClick = () => {
+    setShowClearConfirm(true);
+  };
+
+  const clearAll = async () => {
+    setShowClearConfirm(false);
+    setLoading(true);
+    for (const item of items) {
+      try {
+        await apiClient.delete(`/customers/wishlist/${item.id}`);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    setItems([]);
+    setLoading(false);
   };
 
   return (
@@ -32,44 +91,94 @@ export default function WishlistPage() {
       <main className={styles.main}>
         <div className={styles.pageHead}>
           <div>
-            <h1 className={styles.title}><Heart size={24} /> Wishlist</h1>
-            <p className={styles.sub}>{items.length} saved item{items.length !== 1 ? "s" : ""}</p>
+            <h1 className={styles.title}>
+              <Heart size={24} /> Wishlist
+            </h1>
+            <p className={styles.sub}>
+              {items.length} saved item{items.length !== 1 ? "s" : ""}
+            </p>
           </div>
           {items.length > 0 && (
-            <button className={styles.clearBtn} onClick={() => setItems([])}>Clear all</button>
+            <button
+              className={styles.clearBtn}
+              onClick={handleClearClick}
+              disabled={loading}
+            >
+              Clear all
+            </button>
           )}
         </div>
 
-        {items.length === 0 ? (
+        {loading && items.length === 0 ? (
+          <div style={{ padding: "40px", textAlign: "center" }}>
+            <Loader2
+              className={styles.spin}
+              size={32}
+              style={{ margin: "auto", color: "var(--burgundy)" }}
+            />
+          </div>
+        ) : items.length === 0 ? (
           <div className={styles.empty}>
-            <div className={styles.emptyIcon}><Heart size={64} strokeWidth={1} /></div>
+            <div className={styles.emptyIcon}>
+              <Heart size={64} strokeWidth={1} />
+            </div>
             <h2>Your wishlist is empty</h2>
-            <p>Save items you love to come back to them later.</p>
-            <Link to="/browse" className={styles.browseCta}>Start Exploring</Link>
+            <p>Start browsing to save items.</p>
+            <Link to="/browse" className={styles.browseCta}>
+              Start Exploring
+            </Link>
           </div>
         ) : (
           <div className={styles.grid}>
-            {items.map(item => (
+            {items.map((item) => (
               <div key={item.id} className={styles.card}>
-                <Link to={`/product/${item.id}`} className={styles.imgWrap}>
-                  <img src={item.image} alt={item.name} className={styles.img} />
-                  <span className={styles.badge}>{item.badge}</span>
-                  <button className={styles.removeBtn} onClick={e => { e.preventDefault(); remove(item.id); }}>
+                <Link
+                  to={`/product/${item.productId}`}
+                  className={styles.imgWrap}
+                >
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    className={styles.img}
+                  />
+                  {item.badge && (
+                    <span className={styles.badge}>{item.badge}</span>
+                  )}
+                  <button
+                    className={styles.removeBtn}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      remove(item.id);
+                    }}
+                  >
                     <X size={14} />
                   </button>
                 </Link>
                 <div className={styles.info}>
                   <span className={styles.cat}>{item.category}</span>
-                  <h3 className={styles.name}>{item.name}</h3>
-                  <p className={styles.price}>EGP {item.price.toFixed(2)}</p>
+                  <Link to={`/product/${item.productId}`} className={styles.name}>
+                    <h3>{item.name}</h3>
+                  </Link>
+                  <p className={styles.price}>{formatPrice(item.price)}</p>
                   <div className={styles.cardActions}>
                     <button
                       className={`${styles.cartBtn} ${added[item.id] ? styles.cartBtnAdded : ""}`}
-                      onClick={() => moveToCart(item.id)}
+                      onClick={() => moveToCart(item)}
                     >
-                      {added[item.id] ? "✓ Added!" : <><ShoppingBag size={14} /> Add to Cart</>}
+                      {added[item.id] ? (
+                        "✓ Added!"
+                      ) : (
+                        <>
+                          <ShoppingBag size={14} /> Add to Cart
+                        </>
+                      )}
                     </button>
-                    <button className={styles.trashBtn} onClick={() => remove(item.id)}><Trash2 size={14} /></button>
+                    <button
+                      className={styles.trashBtn}
+                      onClick={() => remove(item.id)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -78,6 +187,16 @@ export default function WishlistPage() {
         )}
       </main>
       <Footer />
+
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        onConfirm={clearAll}
+        title="Clear Wishlist"
+        message="Are you sure you want to clear your entire wishlist? This action cannot be undone."
+        confirmText="Yes, clear it"
+        isDanger={true}
+      />
     </div>
   );
 }

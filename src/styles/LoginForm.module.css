@@ -1,4 +1,4 @@
-@import './variables.css';
+@import "./variables.css";
 
 /* == Full-screen wrapper == */
 .formWrapper {
@@ -23,7 +23,7 @@
 
 /* Decorative circles */
 .brandPanel::before {
-  content: '';
+  content: "";
   position: absolute;
   width: 340px;
   height: 340px;
@@ -34,7 +34,7 @@
 }
 
 .brandPanel::after {
-  content: '';
+  content: "";
   position: absolute;
   width: 260px;
   height: 260px;
@@ -83,7 +83,7 @@
   align-items: center;
   gap: var(--space-3);
   font-size: var(--text-sm);
-  color: rgba(255, 255, 255, 0.60);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .featureIcon {
@@ -182,7 +182,8 @@
 
 .input {
   width: 100%;
-  padding: var(--space-4) var(--space-4) var(--space-4) calc(var(--space-10) + 4px);
+  padding: var(--space-4) var(--space-4) var(--space-4)
+    calc(var(--space-10) + 4px);
   border: 1.5px solid var(--ivory-dark);
   border-radius: var(--radius-md);
   font-family: var(--font-sans);
@@ -219,6 +220,13 @@
 
 .togglePassword:hover {
   color: var(--burgundy);
+}
+
+.errorMessage {
+  color: #e53e3e;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  font-weight: 500;
 }
 
 /* Remember & Forgot */
@@ -281,7 +289,7 @@
 }
 
 .submitButton::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: -100%;
@@ -328,7 +336,7 @@
 }
 
 .divider::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 0;

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import AinaiLogo from "../common/AinaiLogo";
+import { useAuth } from "../../context/AuthContext";
 import styles from "../../styles/VendorSidebar.module.css";
 
 const navItems = [
@@ -29,23 +30,29 @@ const bottomItems = [
 ];
 
 export default function VendorSidebar({ collapsed, activeRoute }) {
+  const { user } = useAuth();
   return (
     <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ""}`}>
       {/* Brand */}
       <div className={styles.brand}>
         <Link to="/" className={styles.brandLink}>
-          {collapsed ? (
-            <Store size={24} className={styles.brandIconOnly} />
-          ) : (
-            <AinaiLogo
-              size="sm"
-              variant="dark"
-              showArabic={false}
-              showTagline={false}
-            />
-          )}
+          <AinaiLogo
+            size="sm"
+            variant="dark"
+            showArabic={false}
+            showTagline={false}
+            showText={false}
+          />
         </Link>
-        <span className={styles.badge}>Vendor</span>
+        {!collapsed && (
+          <div className={styles.brandInfo}>
+            <span className={styles.vendorName}>
+              {user?.brandName || "My Store"}
+            </span>
+            <span className={styles.vendorEmail}>{user?.email || ""}</span>
+          </div>
+        )}
+        {!collapsed && <span className={styles.badge}>Vendor</span>}
       </div>
 
       {/* Collapse toggle */}
@@ -100,18 +107,7 @@ export default function VendorSidebar({ collapsed, activeRoute }) {
         </ul>
       </nav>
 
-      {/* Store info pill */}
-      {!collapsed && (
-        <div className={styles.storeInfo}>
-          <div className={styles.storeAvatar}>
-            <Store size={16} />
-          </div>
-          <div className={styles.storeDetails}>
-            <span className={styles.storeName}>My Store</span>
-            <span className={styles.storeStatus}>Active</span>
-          </div>
-        </div>
-      )}
+
     </aside>
   );
 }

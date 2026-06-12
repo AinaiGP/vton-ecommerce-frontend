@@ -176,6 +176,38 @@
   white-space: pre-wrap;
 }
 
+/* Chat inline markdown heading styles */
+.chatHeading1 {
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--charcoal);
+  margin: var(--space-2) 0 var(--space-1);
+  line-height: var(--leading-snug);
+}
+
+.chatHeading2 {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--charcoal);
+  margin: var(--space-2) 0 var(--space-1);
+  line-height: var(--leading-snug);
+}
+
+.chatHeading3 {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--burgundy);
+  margin: var(--space-1) 0;
+  line-height: var(--leading-snug);
+}
+
+.chatHr {
+  border: none;
+  border-top: 1px solid var(--ivory-darker);
+  margin: var(--space-2) 0;
+  width: 100%;
+}
+
 /* ── Typing dots ───────────────────────────────────────────── */
 .typingDots {
   display: flex;

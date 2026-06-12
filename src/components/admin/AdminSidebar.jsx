@@ -4,6 +4,7 @@ import {
   Store,
   Folders,
   TicketCheck,
+  MessageCircle,
   Settings,
   LogOut,
   ChevronLeft,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import AinaiLogo from "../common/AinaiLogo";
+import { useAuth } from "../../context/AuthContext";
 // Reusing vendor sidebar styles for consistency
 import styles from "../../styles/VendorSidebar.module.css";
 
@@ -20,6 +22,7 @@ const navItems = [
   { icon: Users, label: "Users", to: "/admin/users" },
   { icon: Folders, label: "Categories", to: "/admin/categories" },
   { icon: TicketCheck, label: "Support Tickets", to: "/admin/tickets" },
+  { icon: MessageCircle, label: "Live Chat", to: "/admin/messages" },
 ];
 
 const bottomItems = [
@@ -28,6 +31,8 @@ const bottomItems = [
 ];
 
 export default function AdminSidebar({ collapsed, activeRoute }) {
+  const { user } = useAuth();
+  const fullName = user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "System";
   return (
     <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ""}`}>
       {/* Brand */}
@@ -106,7 +111,7 @@ export default function AdminSidebar({ collapsed, activeRoute }) {
             <ShieldAlert size={16} />
           </div>
           <div className={styles.storeDetails}>
-            <span className={styles.storeName}>System</span>
+            <span className={styles.storeName}>{fullName}</span>
             <span className={styles.storeStatus}>Administrator</span>
           </div>
         </div>

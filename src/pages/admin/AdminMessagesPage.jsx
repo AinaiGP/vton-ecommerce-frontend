@@ -1,494 +1,1010 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Search, MessageSquare, Send, Paperclip, X, Bell,
-  CheckCircle2, Shield, User, Headphones, Package,
-  ImageIcon, FileText, Clock, ArrowUpRight, Filter,
-  UserCheck, ShieldAlert, RefreshCw, ChevronDown,
+  Search,
+  MessageSquare,
+  Send,
+  Paperclip,
+  X,
+  CheckCircle,
+  XCircle,
+  Shield,
+  User,
+  RefreshCw,
+  Filter,
+  Copy,
+  Check,
 } from "lucide-react";
 import AdminLayout from "../../components/admin/AdminLayout";
+import apiClient, { multipartClient } from "../../utils/apiClient";
 import m from "../../styles/MessagingThread.module.css";
-
-/* ─── Seed data ──────────────────────────── */
-const SEED = [
-  {
-    id: "ADM-MSG-001",
-    subject: "Return Request — Velvet Abaya #ORD-2835",
-    from: { name: "Yasmin Bakr", role: "customer", initials: "YB", color: "#1d4ed8" },
-    assignedTo: "Layla (Support)",
-    priority: "High",
-    status: "In Progress",
-    category: "Return / Refund",
-    relatedOrder: "#ORD-2835",
-    updated: "1 hour ago",
-    unread: true,
-    messages: [
-      { id: 1, from: "customer", name: "Yasmin Bakr", role: "customer", text: "I received the wrong colour for the Velvet Abaya. I want to return it and get a full refund.", time: "Apr 28, 08:00 AM", attachment: { name: "colour_compare.jpg", type: "image" } },
-      { id: 2, from: "support", name: "Layla (Support)", role: "support", text: "Hi Yasmin, I've forwarded this to the vendor. Expecting a response within 24 hours.", time: "Apr 28, 08:45 AM", attachment: null },
-      { id: 3, from: "vendor", name: "Urban Threads", role: "vendor", text: "We apologise for the inconvenience. We can offer a replacement or full refund. Please confirm your preference.", time: "Apr 28, 10:00 AM", attachment: null },
-    ],
-  },
-  {
-    id: "ADM-MSG-002",
-    subject: "VTON Blank Screen on Safari — Escalated",
-    from: { name: "Urban Threads", role: "vendor", initials: "UT", color: "#7c3aed" },
-    assignedTo: "Ahmed (Support)",
-    priority: "High",
-    status: "Escalated to Admin",
-    category: "Technical Issue",
-    relatedOrder: null,
-    updated: "3 hours ago",
-    unread: true,
-    messages: [
-      { id: 1, from: "vendor", name: "Urban Threads", role: "vendor", text: "Customers on Safari are getting a blank screen on the VTON feature. This is affecting sales significantly.", time: "Apr 28, 07:00 AM", attachment: { name: "safari_error.png", type: "image" } },
-      { id: 2, from: "support", name: "Ahmed (Support)", role: "support", text: "This has been escalated to the admin team. We are investigating.", time: "Apr 28, 08:30 AM", attachment: null },
-    ],
-  },
-  {
-    id: "ADM-MSG-003",
-    subject: "Payout Delay — March Settlement #SILK-834",
-    from: { name: "Silk & Satin", role: "vendor", initials: "SS", color: "#0891b2" },
-    assignedTo: null,
-    priority: "High",
-    status: "Open",
-    category: "Payment",
-    relatedOrder: null,
-    updated: "5 hours ago",
-    unread: false,
-    messages: [
-      { id: 1, from: "vendor", name: "Silk & Satin", role: "vendor", text: "Our March payout of EGP 8,400 is 12 days overdue. We'd like an urgent resolution.", time: "Apr 27, 10:00 AM", attachment: null },
-    ],
-  },
-  {
-    id: "ADM-MSG-004",
-    subject: "Order #ORD-2841 — Never Arrived",
-    from: { name: "Sara Al-Rashid", role: "customer", initials: "SA", color: "#0f766e" },
-    assignedTo: "Rania (Support)",
-    priority: "Medium",
-    status: "In Progress",
-    category: "Order Issue",
-    relatedOrder: "#ORD-2841",
-    updated: "1 day ago",
-    unread: false,
-    messages: [
-      { id: 1, from: "customer", name: "Sara Al-Rashid", role: "customer", text: "My order placed on April 12 hasn't arrived and tracking hasn't updated in 8 days.", time: "Apr 27, 09:00 AM", attachment: null },
-      { id: 2, from: "support", name: "Rania (Support)", role: "support", text: "We've contacted the carrier and are investigating. We'll update you within 24 hours.", time: "Apr 27, 10:30 AM", attachment: null },
-      { id: 3, from: "admin", name: "Admin", role: "admin", text: "We've confirmed a carrier delay. A replacement order will be dispatched by Apr 29. We sincerely apologise.", time: "Apr 27, 02:00 PM", attachment: null },
-    ],
-  },
-  {
-    id: "ADM-MSG-005",
-    subject: "Account Suspended — Dispute #Fashion-Hub",
-    from: { name: "Fashion Hub", role: "vendor", initials: "FH", color: "#dc2626" },
-    assignedTo: null,
-    priority: "High",
-    status: "Escalated to Admin",
-    category: "Account",
-    relatedOrder: null,
-    updated: "2 days ago",
-    unread: false,
-    messages: [
-      { id: 1, from: "vendor", name: "Fashion Hub", role: "vendor", text: "Our account was suspended without warning. We believe this was an error and request an urgent review.", time: "Apr 26, 09:00 AM", attachment: { name: "account_docs.pdf", type: "file" } },
-    ],
-  },
-];
-
-const STATUSES = ["Open", "In Progress", "Waiting for Customer", "Waiting for Vendor", "Solved", "Closed", "Escalated to Admin"];
-const AGENTS = ["", "Ahmed (Support)", "Layla (Support)", "Rania (Support)"];
-const CATEGORIES = ["All", "Return / Refund", "Technical Issue", "Payment", "Order Issue", "Account", "Other"];
-const USER_TYPES = ["All", "Customer", "Vendor"];
-const PRIORITIES = ["All", "High", "Medium", "Low"];
+import t from "../../styles/AdminTable.module.css";
 
 const STATUS_CFG = {
-  "Open":                  { dot: "#ef4444", bg: "#fee2e2", color: "#dc2626" },
-  "In Progress":           { dot: "#f59e0b", bg: "#fef3c7", color: "#ca8a04" },
-  "Waiting for Customer":  { dot: "#8b5cf6", bg: "#f5f3ff", color: "#7c3aed" },
-  "Waiting for Vendor":    { dot: "#8b5cf6", bg: "#f5f3ff", color: "#7c3aed" },
-  "Solved":                { dot: "#16a34a", bg: "#dcfce7", color: "#15803d" },
-  "Closed":                { dot: "#94a3b8", bg: "#f1f5f9", color: "#64748b" },
-  "Escalated to Admin":    { dot: "#dc2626", bg: "#fff1f2", color: "#dc2626" },
+  PENDING: {
+    dot: "#64748b",
+    bg: "#f1f5f9",
+    color: "#475569",
+    label: "Pending",
+  },
+  OPEN: { dot: "#ef4444", bg: "#fee2e2", color: "#dc2626", label: "Open" },
+  IN_PROGRESS: {
+    dot: "#f59e0b",
+    bg: "#fef3c7",
+    color: "#ca8a04",
+    label: "In Progress",
+  },
+  AWAITING_RESPONSE: {
+    dot: "#8b5cf6",
+    bg: "#f5f3ff",
+    color: "#7c3aed",
+    label: "Awaiting Response",
+  },
+  ESCALATED: {
+    dot: "#dc2626",
+    bg: "#fff1f2",
+    color: "#dc2626",
+    label: "Escalated",
+  },
+  RESOLVED: {
+    dot: "#16a34a",
+    bg: "#dcfce7",
+    color: "#15803d",
+    label: "Resolved",
+  },
+  CLOSED: { dot: "#94a3b8", bg: "#f1f5f9", color: "#64748b", label: "Closed" },
+  CANCELED: {
+    dot: "#94a3b8",
+    bg: "#f1f5f9",
+    color: "#64748b",
+    label: "Canceled",
+  },
 };
 
-const ROLE_BG = { customer: "#1d4ed8", vendor: "#7c3aed", admin: "#dc2626", support: "#059669" };
-const BUBBLE_MAP = { customer: m.bubbleCustomer, vendor: m.bubbleVendor, admin: m.bubbleAdmin, support: m.bubbleSupport };
+const TICKET_TYPES = {
+  GENERAL_SUPPORT: "General Support",
+  SYSTEM_BUG: "System Bug",
+  ORDER_DISPUTE: "Order Dispute",
+  RETURN_REQUEST: "Return Request",
+  VENDOR_VIOLATION: "Vendor Violation",
+};
+
+const TERMINAL_STATUSES = ["RESOLVED", "CLOSED", "CANCELED"];
+
+const STATUS_FILTERS = [
+  { label: "All Active", value: "" },
+  { label: "In Progress", value: "IN_PROGRESS" },
+  { label: "Awaiting Response", value: "AWAITING_RESPONSE" },
+  { label: "Escalated", value: "ESCALATED" },
+];
+
+function roleLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin":
+      return "Admin";
+    case "technical_support":
+      return "Support";
+    case "vendor":
+      return "Vendor";
+    case "customer":
+      return "Customer";
+    default:
+      return "User";
+  }
+}
+
+function profileKeyLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin": return "Admin ID";
+    case "technical_support": return "Support ID";
+    case "vendor": return "Vendor ID";
+    case "customer": return "Customer ID";
+    default: return "Profile ID";
+  }
+}
+
+function shortId(value) {
+  if (!value) return "—";
+  return `${String(value).slice(0, 8)}…`;
+}
+
+function getInitials(label) {
+  if (!label) return "U";
+  const parts = label.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase()).join("") || "U";
+}
+
+function isImageUrl(url) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url);
+}
+
+function extractLegacyAttachment(content) {
+  if (!content) return { text: "", urls: [] };
+  const match = content.match(/\(attachment:\s*(https?:\/\/[^\s)]+)\)/i);
+  if (!match) return { text: content, urls: [] };
+  const cleaned = content.replace(match[0], "").trim();
+  return { text: cleaned || "Attachment", urls: [match[1]] };
+}
+
+function mapMessages(raw) {
+  return (raw.messages || [])
+    .filter((m) => !m.isSystemMessage)
+    .map((m) => {
+      const legacy = extractLegacyAttachment(m.content);
+      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
+        Boolean,
+      );
+      const role = String(m.senderRole || "").toLowerCase();
+      const sender = m.sender || null;
+      const senderName = sender?.name || sender?.email || roleLabel(role);
+      const senderId = sender?.entityId || sender?.userId || m.senderId || null;
+      return {
+        from: role === "admin" ? "admin" : "user",
+        text: legacy.text || m.content,
+        time: new Date(m.createdAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        senderName,
+        senderId,
+        senderRole: role,
+        senderAvatar: sender?.avatarUrl || null,
+        attachments: attachmentUrls.map((url) => ({
+          url,
+          name: url.split("/").pop() || "Attachment",
+          isImage: isImageUrl(url),
+        })),
+      };
+    });
+}
 
 function StatusBadge({ status }) {
-  const cfg = STATUS_CFG[status] || STATUS_CFG["Closed"];
+  const cfg = STATUS_CFG[status] || STATUS_CFG.CLOSED;
   return (
-    <span className={m.badge} style={{ background: cfg.bg, color: cfg.color }}>
-      <span className={m.badgeDot} style={{ background: cfg.dot }} />
-      {status}
+    <span
+      className={m.badge}
+      style={{
+        background: cfg.bg,
+        color: cfg.color,
+        fontSize: 11,
+        padding: "2px 8px",
+        borderRadius: 20,
+        fontWeight: 600,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+      }}
+    >
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          background: cfg.dot,
+          display: "inline-block",
+        }}
+      />
+      {cfg.label}
     </span>
   );
 }
 
-function PriorityBadge({ priority }) {
-  const cls = { High: m.priorityHigh, Medium: m.priorityMedium, Low: m.priorityLow };
-  return <span className={`${m.badge} ${cls[priority]}`}>{priority}</span>;
-}
-
-function RoleBadge({ role }) {
-  const cls = { customer: m.roleCustomer, vendor: m.roleVendor, admin: m.roleAdmin, support: m.roleSupport };
-  return <span className={`${m.badge} ${cls[role] || ""}`}>{role.charAt(0).toUpperCase() + role.slice(1)}</span>;
-}
-
-function FileAttachment({ att }) {
-  if (!att) return null;
-  return (
-    <div className={m.bubbleAttachment}>
-      {att.type === "image" ? <ImageIcon size={13} /> : <FileText size={13} />}
-      <span>{att.name}</span>
-    </div>
-  );
-}
-
-/* ─── Thread item ─────────────────────────── */
-function ThreadItem({ conv, active, onClick }) {
-  const cfg = STATUS_CFG[conv.status] || STATUS_CFG["Closed"];
-  return (
-    <button
-      className={`${m.threadItem} ${active ? m.threadActive : ""} ${conv.unread ? m.threadItemUnread : ""}`}
-      onClick={onClick}
-      style={{ width: "100%", border: "none", background: "none", textAlign: "left", cursor: "pointer" }}
-    >
-      {conv.unread && <span className={m.threadUnreadDot} />}
-      <div className={m.threadAvatar} style={{ background: conv.from.color }}>{conv.from.initials}</div>
-      <div className={m.threadItemBody}>
-        <div className={m.threadItemTop}>
-          <span className={m.threadItemName}>{conv.from.name}</span>
-          <span className={m.threadItemTime}>{conv.updated}</span>
-        </div>
-        <div className={m.threadItemSubject}>{conv.subject}</div>
-        <div style={{ display: "flex", gap: 5, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
-          <RoleBadge role={conv.from.role} />
-          <span className={m.badge} style={{ background: cfg.bg, color: cfg.color, fontSize: 10, padding: "2px 7px" }}>
-            <span className={m.badgeDot} style={{ background: cfg.dot }} />{conv.status}
-          </span>
-          {conv.priority === "High" && (
-            <span className={`${m.badge} ${m.priorityHigh}`} style={{ fontSize: 10, padding: "2px 7px" }}>High</span>
-          )}
-        </div>
-      </div>
-    </button>
-  );
-}
-
-/* ─── Conversation detail ─────────────────── */
-function ConvDetail({ conv, onClose, onUpdate, onReply }) {
-  const [text, setText] = useState("");
-  const [file, setFile] = useState(null);
-  const [replyAs, setReplyAs] = useState("admin");
-  const fileRef = useRef(null);
-  const bottomRef = useRef(null);
-  const isClosed = conv.status === "Closed" || conv.status === "Solved";
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conv.messages]);
-
-  const handleSend = (e) => {
-    e.preventDefault();
-    if (!text.trim() && !file) return;
-    onReply(conv.id, text, file ? { name: file.name, type: file.type?.startsWith("image") ? "image" : "file" } : null, replyAs);
-    setText(""); setFile(null);
-  };
-
-  return (
-    <div className={m.convPanel}>
-      {/* Header */}
-      <div className={m.convHeader}>
-        <div className={m.convHeaderInfo}>
-          <div className={m.convHeaderTop}>
-            <span className={m.convHeaderName}>{conv.subject}</span>
-            <PriorityBadge priority={conv.priority} />
-          </div>
-          <div className={m.convHeaderMeta}>
-            <RoleBadge role={conv.from.role} />
-            <span>{conv.from.name}</span>
-            {conv.relatedOrder && <span><Package size={12} /> {conv.relatedOrder}</span>}
-            <span style={{ background: "#f1f5f9", padding: "2px 8px", borderRadius: 20, fontSize: 11 }}><Filter size={10} style={{ marginRight: 3, verticalAlign: "middle" }} />{conv.category}</span>
-            <span><Clock size={12} /> {conv.updated}</span>
-          </div>
-        </div>
-        <div className={m.convHeaderActions}>
-          <button className={m.ctrlBtn + " " + m.ctrlBtnDanger} onClick={() => onUpdate(conv.id, "status", "Escalated to Admin")} style={{ display: "flex", alignItems: "center", gap: 5, border: "1.5px solid #fca5a5", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" }}>
-            <ShieldAlert size={13} /> Escalate
-          </button>
-          {!isClosed ? (
-            <button className={m.ctrlBtn + " " + m.ctrlBtnSuccess} onClick={() => onUpdate(conv.id, "status", "Solved")} style={{ display: "flex", alignItems: "center", gap: 5, border: "1.5px solid #86efac", borderRadius: 8, padding: "6px 12px", cursor: "pointer", background: "#dcfce7", color: "#15803d", fontFamily: "inherit" }}>
-              <CheckCircle2 size={13} /> Mark Solved
-            </button>
-          ) : (
-            <button className={m.ctrlBtn} onClick={() => onUpdate(conv.id, "status", "Open")} style={{ display: "flex", alignItems: "center", gap: 5, border: "1.5px solid var(--adm-border)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" }}>
-              <RefreshCw size={13} /> Reopen
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Controls strip */}
-      <div className={m.controlStrip}>
-        <select
-          value={conv.status}
-          onChange={e => onUpdate(conv.id, "status", e.target.value)}
-          style={{ padding: "6px 10px", border: "1.5px solid var(--adm-border, #e8e0d5)", borderRadius: 8, fontSize: 12, background: "var(--adm-surface, #fff)", color: "var(--adm-text, #1a1210)", fontFamily: "inherit" }}
-        >
-          {STATUSES.map(s => <option key={s}>{s}</option>)}
-        </select>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <UserCheck size={14} style={{ color: "var(--adm-text-muted, #7a6a60)" }} />
-          <select
-            value={conv.assignedTo || ""}
-            onChange={e => onUpdate(conv.id, "assignedTo", e.target.value || null)}
-            style={{ padding: "6px 10px", border: "1.5px solid var(--adm-border, #e8e0d5)", borderRadius: 8, fontSize: 12, background: "var(--adm-surface, #fff)", color: "var(--adm-text, #1a1210)", fontFamily: "inherit" }}
-          >
-            <option value="">Unassigned</option>
-            {AGENTS.filter(Boolean).map(a => <option key={a}>{a}</option>)}
-          </select>
-        </div>
-
-        {conv.assignedTo && (
-          <span style={{ fontSize: 12, color: "var(--adm-text-muted, #7a6a60)", display: "flex", alignItems: "center", gap: 5 }}>
-            <UserCheck size={12} /> Assigned to {conv.assignedTo}
-          </span>
-        )}
-      </div>
-
-      {/* Messages */}
-      <div className={m.messagesArea}>
-        <div className={m.sysEvent}>
-          <span className={m.sysEventLabel}>Thread started · {conv.messages[0]?.time}</span>
-        </div>
-
-        {conv.messages.map(msg => {
-          const isRight = msg.role === "admin";
-          const bubbleCls = BUBBLE_MAP[msg.role] || m.bubbleSupport;
-          return (
-            <div key={msg.id} className={`${m.msgRow} ${isRight ? m.msgRight : m.msgLeft}`}>
-              {!isRight && (
-                <div className={m.msgAvatar} style={{ background: ROLE_BG[msg.role] || "#059669" }}>
-                  {msg.role === "customer" ? <User size={14} /> : msg.role === "vendor" ? "V" : <Headphones size={14} />}
-                </div>
-              )}
-              <div className={m.msgContent}>
-                <span className={m.msgSenderLabel}>{msg.name} · <RoleBadge role={msg.role} /></span>
-                <div className={`${m.bubble} ${bubbleCls}`}>
-                  <p className={m.bubbleText}>{msg.text}</p>
-                  <FileAttachment att={msg.attachment} />
-                  <span className={m.bubbleTime}>{msg.time}</span>
-                </div>
-              </div>
-              {isRight && (
-                <div className={m.msgAvatar} style={{ background: "#dc2626", fontSize: 10, fontWeight: 800 }}>ADM</div>
-              )}
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Reply box */}
-      {!isClosed ? (
-        <form className={m.replyBox} onSubmit={handleSend}>
-          <div className={m.replyToSelect}>
-            <span className={m.replyToLabel}>Reply as:</span>
-            {[{ v: "admin", l: "Admin" }, { v: "support", l: "Support Agent" }].map(rt => (
-              <button
-                key={rt.v}
-                type="button"
-                className={`${m.replyToBtn} ${replyAs === rt.v ? m.replyToBtnActive : ""}`}
-                onClick={() => setReplyAs(rt.v)}
-              >
-                {rt.l}
-              </button>
-            ))}
-          </div>
-          {file && (
-            <div className={m.fileChip}>
-              <Paperclip size={12} />
-              <span>{file.name}</span>
-              <button type="button" onClick={() => setFile(null)}><X size={11} /></button>
-            </div>
-          )}
-          <div className={m.replyInputRow}>
-            <button type="button" className={m.attachBtn} onClick={() => fileRef.current?.click()}>
-              <Paperclip size={17} />
-            </button>
-            <input type="file" ref={fileRef} style={{ display: "none" }} onChange={e => setFile(e.target.files[0] || null)} />
-            <textarea
-              className={m.replyTextarea}
-              rows={2}
-              placeholder={`Reply as ${replyAs === "admin" ? "Admin" : "Support Agent"}…`}
-              value={text}
-              onChange={e => setText(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e); } }}
-            />
-            <button type="submit" className={m.sendBtn} style={{ background: "#dc2626" }} disabled={!text.trim() && !file}>
-              <Send size={16} />
-            </button>
-          </div>
-          <p className={m.replyHint}>Press Enter to send · Shift+Enter for new line</p>
-        </form>
-      ) : (
-        <div className={m.closedBanner}>
-          <CheckCircle2 size={15} />
-          This ticket is {conv.status.toLowerCase()}.
-          <button className={m.reopenBtn} style={{ color: "#dc2626" }} onClick={() => onUpdate(conv.id, "status", "Open")}>Reopen</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Main page ───────────────────────────── */
 export default function AdminMessagesPage() {
-  const [convs, setConvs] = useState(SEED);
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [active, setActive] = useState(null);
   const [search, setSearch] = useState("");
-  const [catFilter, setCatFilter] = useState("All");
-  const [typeFilter, setTypeFilter] = useState("All");
-  const [prioFilter, setPrioFilter] = useState("All");
-  const [notification, setNotification] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [reply, setReply] = useState("");
+  const [file, setFile] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [resolveNote, setResolveNote] = useState("");
+  const [showResolve, setShowResolve] = useState(false);
+  const [error, setError] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
 
-  const showNotif = (msg, kind = "notifSuccess") => {
-    setNotification({ msg, kind });
-    setTimeout(() => setNotification(null), 3000);
+  const copyToClipboard = (value, key) => {
+    if (!value) return;
+    navigator.clipboard.writeText(value).then(() => {
+      setCopiedId(key);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
   };
 
-  const unread = convs.filter(c => c.unread).length;
-  const escalated = convs.filter(c => c.status === "Escalated to Admin").length;
+  const fileRef = useRef(null);
+  const bottomRef = useRef(null);
 
-  const filtered = convs.filter(c => {
-    const qs = c.subject.toLowerCase().includes(search.toLowerCase()) || c.from.name.toLowerCase().includes(search.toLowerCase());
-    const qcat = catFilter === "All" || c.category === catFilter;
-    const qtype = typeFilter === "All" || c.from.role.toLowerCase() === typeFilter.toLowerCase();
-    const qprio = prioFilter === "All" || c.priority === prioFilter;
-    return qs && qcat && qtype && qprio;
-  });
+  const fetchTickets = useCallback(() => {
+    setLoading(true);
+    const params = { claimedByMe: true, limit: 50 };
+    if (statusFilter) params.status = statusFilter;
+    apiClient
+      .get("/admin/support/tickets", { params })
+      .then((r) => {
+        const data = r.data.data || r.data || [];
+        setTickets(data.filter((tk) => !TERMINAL_STATUSES.includes(tk.status)));
+      })
+      .catch(() => setError("Failed to load claimed tickets."))
+      .finally(() => setLoading(false));
+  }, [statusFilter]);
 
-  const openConv = (conv) => {
-    setActive(conv);
-    if (conv.unread) setConvs(prev => prev.map(c => c.id === conv.id ? { ...c, unread: false } : c));
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
+
+  useEffect(() => {
+    if (active) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [active?.messages]);
+
+  const openTicket = async (tk) => {
+    try {
+      const res = await apiClient.get(`/admin/support/tickets/${tk.id}`);
+      setActive({ ...res.data, messages: mapMessages(res.data) });
+      setShowResolve(false);
+      setResolveNote("");
+    } catch {
+      setError("Failed to load ticket.");
+    }
   };
 
-  const handleUpdate = (id, field, value) => {
-    const updated = convs.map(c => c.id === id ? { ...c, [field]: value, updated: "Just now" } : c);
-    setConvs(updated);
-    setActive(updated.find(c => c.id === id));
-    showNotif(`Updated: ${field} → ${value}`);
+  const refetchActive = async (id) => {
+    const res = await apiClient.get(`/admin/support/tickets/${id}`);
+    setActive({ ...res.data, messages: mapMessages(res.data) });
+    fetchTickets();
   };
 
-  const handleReply = (id, text, attachment, replyAs) => {
-    const names = { admin: "Admin", support: "Support Agent" };
-    const now = new Date();
-    const timeStr = `${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-    const msg = { id: Date.now(), from: replyAs, name: names[replyAs] || "Admin", role: replyAs, text, time: timeStr, attachment };
-    const updated = convs.map(c => c.id === id ? {
-      ...c,
-      messages: [...c.messages, msg],
-      updated: "Just now",
-      status: c.status === "Open" ? "In Progress" : c.status,
-    } : c);
-    setConvs(updated);
-    setActive(updated.find(c => c.id === id));
-    showNotif("Reply sent!");
+  const sendReply = async () => {
+    if (!active || (!reply.trim() && !file)) return;
+    setSending(true);
+    try {
+      let attachmentUrl = null;
+      if (file) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await multipartClient.post(
+          `/admin/support/tickets/${active.id}/messages/attachments`,
+          fd,
+        );
+        attachmentUrl = res.data?.url || null;
+      }
+      await apiClient.post(`/admin/support/tickets/${active.id}/messages`, {
+        content: reply.trim() || "Attachment",
+        attachments: attachmentUrl ? [attachmentUrl] : undefined,
+      });
+      setReply("");
+      setFile(null);
+      await refetchActive(active.id);
+    } catch {
+      setError("Failed to send message.");
+    } finally {
+      setSending(false);
+    }
   };
+
+  const handleResolve = async () => {
+    if (!active) return;
+    setActionLoading(true);
+    try {
+      await apiClient.patch(`/admin/support/tickets/${active.id}/resolve`, {
+        resolutionNote: resolveNote || undefined,
+      });
+      setShowResolve(false);
+      await refetchActive(active.id);
+    } catch {
+      setError("Failed to resolve ticket.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleClose = async () => {
+    if (!active) return;
+    setActionLoading(true);
+    try {
+      await apiClient.patch(`/admin/support/tickets/${active.id}/close`);
+      setActive(null);
+      fetchTickets();
+    } catch {
+      setError("Failed to close ticket.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const isTerminal = active ? TERMINAL_STATUSES.includes(active.status) : false;
+
+  const filtered = tickets.filter(
+    (tk) =>
+      !search ||
+      tk.subject?.toLowerCase().includes(search.toLowerCase()) ||
+      tk.id?.toLowerCase().includes(search.toLowerCase()),
+  );
 
   return (
-    <AdminLayout pageTitle="Messages & Tickets" pageSubtitle="Full oversight of all system communications." breadcrumb="Messages">
-
-      {notification && (
-        <div className={`${m.notifBanner} ${m[notification.kind]}`} style={{ marginBottom: 12 }}>
-          <Bell size={15} /> {notification.msg}
+    <AdminLayout
+      pageTitle="Live Chat"
+      pageSubtitle="Active ticket threads claimed by you."
+      breadcrumb="Live Chat"
+    >
+      {error && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 16px",
+            borderRadius: 8,
+            background: "#fee2e2",
+            color: "#dc2626",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            fontSize: 13,
+          }}
+        >
+          {error}
+          <button
+            onClick={() => setError(null)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "#dc2626",
+            }}
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 
-      {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
-        {[
-          { label: "Unread", value: unread, color: "#7c3aed", bg: "#f3e8ff" },
-          { label: "Escalated", value: escalated, color: "#dc2626", bg: "#fff1f2" },
-          { label: "Open", value: convs.filter(c => c.status === "Open").length, color: "#ef4444", bg: "#fee2e2" },
-          { label: "In Progress", value: convs.filter(c => c.status === "In Progress").length, color: "#f59e0b", bg: "#fef3c7" },
-        ].map(s => (
-          <div key={s.label} style={{ background: s.bg, border: `1.5px solid ${s.color}30`, borderRadius: 12, padding: "14px 18px" }}>
-            <p style={{ margin: "0 0 4px", fontSize: 26, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</p>
-            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: s.color, opacity: 0.75 }}>{s.label}</p>
-          </div>
+      {/* Status filter tabs */}
+      <div
+        style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}
+      >
+        {STATUS_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => {
+              setStatusFilter(f.value);
+              setActive(null);
+            }}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 20,
+              border: `1.5px solid ${statusFilter === f.value ? "var(--adm-accent, #8B4852)" : "var(--adm-border, #e8e0d5)"}`,
+              background:
+                statusFilter === f.value
+                  ? "var(--adm-accent, #8B4852)"
+                  : "var(--adm-surface, #fff)",
+              color:
+                statusFilter === f.value ? "white" : "var(--adm-text, #1a1210)",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {f.label}
+          </button>
         ))}
+        <button
+          onClick={fetchTickets}
+          style={{
+            marginLeft: "auto",
+            padding: "6px 12px",
+            borderRadius: 20,
+            border: "1.5px solid var(--adm-border, #e8e0d5)",
+            background: "var(--adm-surface, #fff)",
+            color: "var(--adm-text-muted, #7a6a60)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            fontSize: 12,
+            fontFamily: "inherit",
+          }}
+        >
+          <RefreshCw size={13} /> Refresh
+        </button>
       </div>
 
-      {/* Toolbar */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <div className={m.threadSearch} style={{ flex: 1, minWidth: 220 }}>
-          <Search size={14} style={{ color: "var(--adm-text-muted, #7a6a60)" }} />
-          <input
-            className={m.threadSearchInput}
-            placeholder="Search messages by subject or name…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-        <select style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid var(--adm-border, #e8e0d5)", fontSize: 12, fontFamily: "inherit", background: "var(--adm-surface, #fff)", color: "var(--adm-text, #1a1210)" }} value={catFilter} onChange={e => setCatFilter(e.target.value)}>
-          {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-        </select>
-        <select style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid var(--adm-border, #e8e0d5)", fontSize: 12, fontFamily: "inherit", background: "var(--adm-surface, #fff)", color: "var(--adm-text, #1a1210)" }} value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-          {USER_TYPES.map(u => <option key={u}>{u}</option>)}
-        </select>
-        <select style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid var(--adm-border, #e8e0d5)", fontSize: 12, fontFamily: "inherit", background: "var(--adm-surface, #fff)", color: "var(--adm-text, #1a1210)" }} value={prioFilter} onChange={e => setPrioFilter(e.target.value)}>
-          {PRIORITIES.map(p => <option key={p}>{p}</option>)}
-        </select>
-        <span style={{ fontSize: 12, color: "var(--adm-text-muted, #7a6a60)", whiteSpace: "nowrap" }}>{filtered.length} threads</span>
-      </div>
-
-      <div className={`${m.msgShell} ${m.msgShellAdmin}`} style={{ "--vdr-accent": "var(--adm-accent, #8B4852)" }}>
+      <div
+        className={`${m.msgShell} ${m.msgShellAdmin}`}
+        style={{ height: "calc(100vh - 130px)" }}
+      >
         {/* Thread sidebar */}
         <div className={m.threadSidebar}>
           <div className={m.threadSidebarHead}>
             <p className={m.threadSidebarTitle}>
-              All Conversations
-              {unread > 0 && (
-                <span style={{ marginLeft: 8, background: "#dc2626", color: "white", borderRadius: 20, fontSize: 10, fontWeight: 800, padding: "2px 7px" }}>
-                  {unread} new
-                </span>
-              )}
+              My Claimed Tickets{" "}
+              <span
+                style={{
+                  background: "var(--adm-accent, #8B4852)",
+                  color: "white",
+                  borderRadius: 20,
+                  fontSize: 10,
+                  fontWeight: 800,
+                  padding: "2px 7px",
+                  marginLeft: 6,
+                }}
+              >
+                {filtered.length}
+              </span>
             </p>
+            <div style={{ position: "relative", marginTop: 8 }}>
+              <Search
+                size={13}
+                style={{
+                  position: "absolute",
+                  left: 8,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "var(--adm-text-muted, #7a6a60)",
+                }}
+              />
+              <input
+                style={{
+                  width: "100%",
+                  padding: "6px 8px 6px 28px",
+                  border: "1.5px solid var(--adm-border, #e8e0d5)",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  background: "var(--adm-surface, #fff)",
+                  color: "var(--adm-text, #1a1210)",
+                  boxSizing: "border-box",
+                }}
+                placeholder="Search…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
           </div>
+
           <div className={m.threadList}>
-            {filtered.length === 0 ? (
-              <div style={{ padding: 24, textAlign: "center", color: "var(--adm-text-muted, #7a6a60)", fontSize: 13 }}>
-                <MessageSquare size={28} style={{ opacity: 0.4, marginBottom: 8 }} />
-                <p>No conversations found</p>
+            {loading ? (
+              <div
+                style={{
+                  padding: 24,
+                  textAlign: "center",
+                  color: "var(--adm-text-muted, #7a6a60)",
+                  fontSize: 13,
+                }}
+              >
+                Loading…
+              </div>
+            ) : filtered.length === 0 ? (
+              <div
+                style={{
+                  padding: 24,
+                  textAlign: "center",
+                  color: "var(--adm-text-muted, #7a6a60)",
+                }}
+              >
+                <MessageSquare
+                  size={28}
+                  style={{ opacity: 0.4, marginBottom: 8 }}
+                />
+                <p style={{ fontSize: 13, margin: 0 }}>
+                  No active claimed tickets
+                </p>
+                <p style={{ fontSize: 11, margin: "4px 0 0", opacity: 0.7 }}>
+                  Claim escalated tickets from the Tickets tab
+                </p>
               </div>
             ) : (
-              filtered.map(conv => (
-                <ThreadItem
-                  key={conv.id}
-                  conv={conv}
-                  active={active?.id === conv.id}
-                  onClick={() => openConv(conv)}
-                />
-              ))
+              filtered.map((tk) => {
+                const cfg = STATUS_CFG[tk.status] || STATUS_CFG.OPEN;
+                const isSelected = active?.id === tk.id;
+                return (
+                  <button
+                    key={tk.id}
+                    className={`${m.threadItem} ${isSelected ? m.threadActive : ""}`}
+                    onClick={() => openTicket(tk)}
+                    style={{
+                      width: "100%",
+                      border: "none",
+                      background: "none",
+                      textAlign: "left",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div
+                      className={m.threadAvatar}
+                      style={{
+                        background: "var(--adm-accent, #8B4852)",
+                        color: "white",
+                        fontSize: 12,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {(tk.subject || "T").slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className={m.threadItemBody}>
+                      <div className={m.threadItemTop}>
+                        <span
+                          className={m.threadItemName}
+                          style={{
+                            fontSize: 12,
+                            maxWidth: 140,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            display: "block",
+                          }}
+                        >
+                          {tk.subject}
+                        </span>
+                        <span className={m.threadItemTime}>
+                          {new Date(
+                            tk.updatedAt || tk.createdAt,
+                          ).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 4,
+                          marginTop: 4,
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <span
+                          style={{
+                            background: cfg.bg,
+                            color: cfg.color,
+                            fontSize: 10,
+                            padding: "1px 6px",
+                            borderRadius: 20,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {cfg.label}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            color: "var(--adm-text-muted, #7a6a60)",
+                          }}
+                        >
+                          {TICKET_TYPES[tk.type] || tk.type}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
 
         {/* Detail panel */}
         {active ? (
-          <ConvDetail
-            conv={active}
-            onClose={() => setActive(null)}
-            onUpdate={handleUpdate}
-            onReply={handleReply}
-          />
+          <div className={m.convPanel} style={{ flexDirection: "row" }}>
+            <div className={m.convPanelMain}>
+            {/* Header */}
+            <div
+              className={m.convHeader}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div>
+                <h3
+                  style={{
+                    margin: "0 0 6px",
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: "var(--adm-text, #1a1210)",
+                  }}
+                >
+                  {active.subject}
+                </h3>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <StatusBadge status={active.status} />
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "var(--adm-text-muted, #7a6a60)",
+                    }}
+                  >
+                    {TICKET_TYPES[active.type] || active.type}
+                  </span>
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  flexShrink: 0,
+                  alignItems: "center",
+                }}
+              >
+                {!isTerminal && (
+                  <>
+                    {showResolve ? (
+                      <>
+                        <button
+                          onClick={() => setShowResolve(false)}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: 8,
+                            border: "1.5px solid var(--adm-border, #e8e0d5)",
+                            background: "none",
+                            cursor: "pointer",
+                            fontSize: 12,
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleResolve}
+                          disabled={actionLoading}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: 8,
+                            border: "none",
+                            background: "#16a34a",
+                            color: "white",
+                            cursor: "pointer",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            fontFamily: "inherit",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 5,
+                          }}
+                        >
+                          <CheckCircle size={13} />{" "}
+                          {actionLoading ? "Resolving…" : "Confirm Resolve"}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setShowResolve(true)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: 8,
+                          border: "1.5px solid #86efac",
+                          background: "#dcfce7",
+                          color: "#15803d",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          fontFamily: "inherit",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 5,
+                        }}
+                      >
+                        <CheckCircle size={13} /> Resolve
+                      </button>
+                    )}
+                    <button
+                      onClick={handleClose}
+                      disabled={actionLoading}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 8,
+                        border: "1.5px solid #fca5a5",
+                        background: "#fee2e2",
+                        color: "#dc2626",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        fontFamily: "inherit",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
+                      <XCircle size={13} />{" "}
+                      {actionLoading ? "Closing…" : "Force Close"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {showResolve && (
+              <div
+                style={{
+                  padding: "8px 20px",
+                  borderBottom: "1px solid var(--adm-border, #e8e0d5)",
+                }}
+              >
+                <input
+                  style={{
+                    width: "100%",
+                    padding: "7px 11px",
+                    border: "1.5px solid var(--adm-border, #e8e0d5)",
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontFamily: "inherit",
+                    boxSizing: "border-box",
+                  }}
+                  placeholder="Resolution note (optional)…"
+                  value={resolveNote}
+                  onChange={(e) => setResolveNote(e.target.value)}
+                />
+              </div>
+            )}
+
+            {/* Messages */}
+            <div className={m.messagesArea}>
+              <div className={m.sysEvent}>
+                <span className={m.sysEventLabel}>
+                  Thread opened ·{" "}
+                  {new Date(active.createdAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+              </div>
+
+              {active.messages.length === 0 && (
+                <p
+                  style={{
+                    textAlign: "center",
+                    color: "var(--adm-text-muted, #7a6a60)",
+                    fontSize: 13,
+                    padding: "20px 0",
+                  }}
+                >
+                  No messages yet.
+                </p>
+              )}
+
+              {active.messages.map((msg, i) => {
+                const isAdmin = msg.from === "admin";
+                return (
+                  <div
+                    key={i}
+                    className={`${m.msgRow} ${isAdmin ? m.msgRight : m.msgLeft}`}
+                  >
+                    {!isAdmin && (
+                      <div
+                        className={m.msgAvatar}
+                        style={{ background: "#4f46e5" }}
+                      >
+                        {msg.senderAvatar ? (
+                          <img
+                            src={msg.senderAvatar}
+                            alt={msg.senderName}
+                            className={m.msgAvatarImg}
+                          />
+                        ) : (
+                          getInitials(msg.senderName)
+                        )}
+                      </div>
+                    )}
+                    <div className={m.msgContent}>
+                      <div className={m.msgSenderLabel}>
+                        {msg.senderName}
+                        {msg.senderId && (
+                          <span className={m.msgSenderId} title={msg.senderId}>
+                            {shortId(msg.senderId)}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`${m.bubble} ${isAdmin ? m.bubbleAdmin : m.bubbleCustomer}`}
+                      >
+                        <p className={m.bubbleText}>{msg.text}</p>
+                        {msg.attachments?.map((att) =>
+                          att.isImage ? (
+                            <a
+                              key={att.url}
+                              href={att.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <img
+                                src={att.url}
+                                alt={att.name}
+                                style={{
+                                  display: "block",
+                                  maxWidth: 180,
+                                  maxHeight: 130,
+                                  marginTop: 6,
+                                  borderRadius: 6,
+                                  objectFit: "cover",
+                                }}
+                              />
+                            </a>
+                          ) : (
+                            <a
+                              key={att.url}
+                              href={att.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                display: "block",
+                                fontSize: 11,
+                                opacity: 0.8,
+                                marginTop: 4,
+                              }}
+                            >
+                              📎 {att.name}
+                            </a>
+                          ),
+                        )}
+                        <span className={m.bubbleTime}>{msg.time}</span>
+                      </div>
+                    </div>
+                    {isAdmin && (
+                      <div
+                        className={m.msgAvatar}
+                        style={{ background: "#8B4852" }}
+                      >
+                        {msg.senderAvatar ? (
+                          <img
+                            src={msg.senderAvatar}
+                            alt={msg.senderName}
+                            className={m.msgAvatarImg}
+                          />
+                        ) : (
+                          getInitials(msg.senderName)
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Reply box */}
+            {!isTerminal ? (
+              <form
+                className={m.replyBox}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  sendReply();
+                }}
+              >
+                {file && (
+                  <div className={m.fileChip}>
+                    <Paperclip size={12} />
+                    <span>{file.name}</span>
+                    <button type="button" onClick={() => setFile(null)}>
+                      <X size={11} />
+                    </button>
+                  </div>
+                )}
+                <div className={m.replyInputRow}>
+                  <button
+                    type="button"
+                    className={m.attachBtn}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Paperclip size={17} />
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileRef}
+                    style={{ display: "none" }}
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={(e) => setFile(e.target.files[0] || null)}
+                  />
+                  <textarea
+                    className={m.replyTextarea}
+                    rows={2}
+                    placeholder="Reply as Admin…"
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        sendReply();
+                      }
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    className={m.sendBtn}
+                    style={{ background: "var(--adm-accent, #8B4852)" }}
+                    disabled={(!reply.trim() && !file) || sending}
+                  >
+                    <Send size={16} />
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className={m.closedBanner}>
+                <CheckCircle size={15} />
+                This ticket is{" "}
+                {STATUS_CFG[active.status]?.label?.toLowerCase() || "closed"}.
+              </div>
+            )}
+            </div>
+            <div className={m.convMetaSidebar}>
+              <div className={m.convMetaCard}>
+                <div className={m.convMetaHead}>Ticket Details</div>
+                <div className={m.convMetaBody}>
+                  {[
+                    ["Status", <StatusBadge key="s" status={active.status} />],
+                    ["Type", <span key="t" style={{ fontSize: 12, color: "var(--adm-text-muted,#7a6a60)" }}>{TICKET_TYPES[active.type] || active.type}</span>],
+                    ["Created", <span key="cr" style={{ fontSize: 12, color: "var(--adm-text-muted,#7a6a60)" }}>{new Date(active.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>],
+                  ].map(([l, v]) => (
+                    <div key={l} className={m.convMetaRow}>
+                      <span className={m.convMetaLabel}>{l}</span>
+                      {v}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {(() => {
+                const parts = [
+                  active.creatorId ? { label: "Creator", role: roleLabel(active.creatorRole), rawRole: active.creatorRole, userId: active.creatorId, entityId: active.creator?.entityId } : null,
+                  active.counterpartyId ? { label: "Counterparty", role: roleLabel(active.counterpartyRole), rawRole: active.counterpartyRole, userId: active.counterpartyId, entityId: active.counterparty?.entityId } : null,
+                  active.assigneeId ? { label: "Assignee", role: roleLabel(active.assigneeRole), rawRole: active.assigneeRole, userId: active.assigneeId, entityId: active.assignee?.entityId } : null,
+                ].filter(Boolean);
+                if (!parts.length) return null;
+                return (
+                  <div className={m.convMetaCard}>
+                    <div className={m.convMetaHead}>Participants</div>
+                    <div className={`${m.convMetaBody} ${m.convParticipantsScroll}`}>
+                      {parts.map(pt => {
+                        const userKey = `${pt.label}-user`;
+                        const profileKey = `${pt.label}-profile`;
+                        return (
+                          <div key={pt.label} className={m.convParticipantEntry}>
+                            <span className={m.convParticipantTitle}>
+                              {pt.label} <span className={m.convParticipantRole}>{pt.role}</span>
+                            </span>
+                            <button className={`${m.convCopyIdBtn} ${copiedId === userKey ? m.convCopyIdBtnCopied : ""}`}
+                              onClick={() => copyToClipboard(pt.userId, userKey)}>
+                              <div className={m.convCopyIdHeader}>
+                                <span className={m.convCopyIdKey}>User ID</span>
+                                {copiedId === userKey ? <Check size={12} /> : <Copy size={12} />}
+                              </div>
+                              <span className={m.convCopyIdVal}>{pt.userId || "—"}</span>
+                            </button>
+                            {pt.entityId && (
+                              <button className={`${m.convCopyIdBtn} ${copiedId === profileKey ? m.convCopyIdBtnCopied : ""}`}
+                                onClick={() => copyToClipboard(pt.entityId, profileKey)}>
+                                <div className={m.convCopyIdHeader}>
+                                  <span className={m.convCopyIdKey}>{profileKeyLabel(pt.rawRole)}</span>
+                                  {copiedId === profileKey ? <Check size={12} /> : <Copy size={12} />}
+                                </div>
+                                <span className={m.convCopyIdVal}>{pt.entityId}</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
         ) : (
           <div className={m.emptyConv}>
             <div className={m.emptyConvIcon}>
               <MessageSquare size={30} />
             </div>
-            <h3 className={m.emptyConvTitle}>Select a thread</h3>
+            <h3 className={m.emptyConvTitle}>Select a ticket</h3>
             <p className={m.emptyConvText}>
-              Pick any message thread on the left to view the full conversation, reply, assign, or escalate.
+              Pick a claimed ticket on the left to view and continue the thread.
+              Claim escalated tickets from the Tickets tab.
             </p>
           </div>
         )}

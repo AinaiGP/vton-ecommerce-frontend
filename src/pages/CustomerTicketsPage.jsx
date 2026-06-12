@@ -1,151 +1,475 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  Plus, Search, MessageSquare, Clock, ChevronRight, ChevronLeft,
-  CheckCircle2, XCircle, ArrowUpDown, Paperclip, Send, X,
-  AlertTriangle, FileText, ImageIcon, Headphones, Tag,
-  RotateCcw, Package, ShoppingBag, Zap, User
+  Plus,
+  Search,
+  MessageSquare,
+  Clock,
+  ChevronRight,
+  ChevronLeft,
+  CheckCircle2,
+  ArrowUpDown,
+  Paperclip,
+  Send,
+  X,
+  AlertTriangle,
+  FileText,
+  Headphones,
+  Tag,
+  User,
 } from "lucide-react";
 import Header from "../components/common/Header";
 import Footer from "../components/common/Footer";
 import styles from "../styles/CustomerTickets.module.css";
+import apiClient, { multipartClient } from "../utils/apiClient";
 
-/* ─── Seed ── */
-const SEED = [
-  {
-    id: "TKT-5010", subject: "Order #ORD-2841 never arrived", category: "Order Issue",
-    priority: "High", status: "Open", created: "Apr 20, 2026", updated: "1 hour ago",
-    messages: [
-      { from: "customer", text: "My order was placed on April 12 and tracking hasn't updated in 8 days. Please help!", time: "Apr 20, 09:30 AM", attachment: null },
-      { from: "support", text: "Hi! We're sorry to hear that. We've flagged your order to our logistics team. You should receive an update within 24 hours.", time: "Apr 20, 10:15 AM", attachment: null },
-    ],
-  },
-  {
-    id: "TKT-5009", subject: "Virtual try-on not working on Safari", category: "Technical Support",
-    priority: "Medium", status: "In Progress", created: "Apr 18, 2026", updated: "3 hours ago",
-    messages: [
-      { from: "customer", text: "The VTON feature shows a blank screen on Safari 17 (macOS Sonoma). Chrome works fine.", time: "Apr 18, 02:00 PM", attachment: { name: "safari_screenshot.png", type: "image" } },
-      { from: "support", text: "Thank you for the screenshot! Our tech team is investigating a WebGL compatibility issue on Safari. We'll have a fix deployed by April 22.", time: "Apr 18, 04:30 PM", attachment: null },
-    ],
-  },
-  {
-    id: "TKT-5008", subject: "Refund request for Velvet Abaya", category: "Return / Refund",
-    priority: "High", status: "Waiting for Customer", created: "Apr 15, 2026", updated: "2 days ago",
-    messages: [
-      { from: "customer", text: "I received the wrong size. I ordered M but received L. I'd like a full refund.", time: "Apr 15, 11:00 AM", attachment: null },
-      { from: "support", text: "We're sorry for the mix-up! Could you please send us a photo of the item showing the size label? This will help us process the refund faster.", time: "Apr 15, 12:30 PM", attachment: null },
-    ],
-  },
-  {
-    id: "TKT-5007", subject: "Promo code AINAI20 not applying", category: "General Support",
-    priority: "Low", status: "Solved", created: "Apr 10, 2026", updated: "5 days ago",
-    messages: [
-      { from: "customer", text: "I'm trying to use AINAI20 at checkout but it says 'invalid promo code'.", time: "Apr 10, 03:00 PM", attachment: null },
-      { from: "support", text: "This code is valid for first-time purchases only. Since you have a previous order, it won't apply. We can offer you a one-time 15% discount. Would you like that?", time: "Apr 10, 04:00 PM", attachment: null },
-      { from: "customer", text: "Yes please! Thank you.", time: "Apr 10, 04:30 PM", attachment: null },
-      { from: "support", text: "Done! A 15% discount code NEW15AINAI has been added to your account. Enjoy! 🎉", time: "Apr 10, 05:00 PM", attachment: null },
-    ],
-  },
+/* ─── Mapping ─── */
+const TICKET_TYPES = [
+  { value: "GENERAL_SUPPORT", label: "General Support" },
+  { value: "SYSTEM_BUG", label: "Technical Support" },
+  { value: "ORDER_DISPUTE", label: "Order Issue" },
 ];
 
-const STATUSES = ["Open", "In Progress", "Waiting for Customer", "Solved", "Closed", "Escalated to Admin"];
-const STATUS_NEXT = { Open: "In Progress", "In Progress": "Solved", Solved: "Closed" };
-const CATEGORIES = ["General Support", "Technical Support", "Return / Refund", "Order Issue", "Product Issue"];
-
 const STATUS_CFG = {
-  "Open":                  { color: "#ef4444", bg: "#fee2e2" },
-  "In Progress":           { color: "#f59e0b", bg: "#fef3c7" },
-  "Waiting for Customer":  { color: "#8b5cf6", bg: "#f5f3ff" },
-  "Solved":                { color: "#16a34a", bg: "#dcfce7" },
-  "Closed":                { color: "#94a3b8", bg: "#f1f5f9" },
-  "Escalated to Admin":    { color: "#dc2626", bg: "#fff1f2" },
+  PENDING: { color: "#64748b", bg: "#f1f5f9", label: "Pending" },
+  OPEN: { color: "#ef4444", bg: "#fee2e2", label: "Open" },
+  IN_PROGRESS: { color: "#f59e0b", bg: "#fef3c7", label: "In Progress" },
+  AWAITING_RESPONSE: {
+    color: "#8b5cf6",
+    bg: "#f5f3ff",
+    label: "Awaiting Response",
+  },
+  ESCALATED: { color: "#dc2626", bg: "#fff1f2", label: "Escalated" },
+  RESOLVED: { color: "#16a34a", bg: "#dcfce7", label: "Resolved" },
+  CLOSED: { color: "#94a3b8", bg: "#f1f5f9", label: "Closed" },
+  CANCELED: { color: "#94a3b8", bg: "#f1f5f9", label: "Canceled" },
 };
 
+function getStatusLabel(status) {
+  return STATUS_CFG[status]?.label || status;
+}
+
+function getCategoryLabel(type) {
+  return TICKET_TYPES.find((t) => t.value === type)?.label || type;
+}
+
+function isImageUrl(url) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url);
+}
+
+function extractLegacyAttachment(content) {
+  if (!content) return { text: "", urls: [] };
+  const match = content.match(/\(attachment:\s*(https?:\/\/[^\s)]+)\)/i);
+  if (!match) return { text: content, urls: [] };
+  const cleaned = content.replace(match[0], "").trim();
+  return { text: cleaned || "Attachment", urls: [match[1]] };
+}
+
+function senderRoleLabel(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin": return "Admin";
+    case "technical_support": return "Support";
+    case "vendor": return "Vendor";
+    case "customer": return "Customer";
+    default: return "Support";
+  }
+}
+
+function getInitials(name) {
+  if (!name) return "S";
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase()).join("") || "S";
+}
+
+function supportAvatarColor(role) {
+  switch (String(role || "").toLowerCase()) {
+    case "admin": return "var(--burgundy, #4f46e5)";
+    case "technical_support": return "#0369a1";
+    default: return "#4f46e5";
+  }
+}
+
+/* ─── Map a backend ticket to UI ─── */
+function mapTicket(ticket) {
+  const messages = (ticket.messages || [])
+    .map((m) => {
+      const legacy = extractLegacyAttachment(m.content);
+      const attachmentUrls = [...(m.attachments || []), ...legacy.urls].filter(
+        Boolean,
+      );
+      const attachments = attachmentUrls.map((url) => ({
+        url,
+        name: url.split("/").pop() || "Attachment",
+        isImage: isImageUrl(url),
+      }));
+      const senderRole = String(m.senderRole || "").toLowerCase();
+      const sender = m.sender || null;
+      const senderName =
+        sender?.name || sender?.email || senderRoleLabel(senderRole);
+      const senderAvatar = sender?.avatarUrl || null;
+
+      return {
+        from: senderRole === "customer" ? "customer" : "support",
+        text: legacy.text || m.content,
+        time: new Date(m.createdAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        attachments,
+        senderName,
+        senderRole,
+        senderAvatar,
+        isSystemMessage: m.isSystemMessage,
+      };
+    });
+
+  return {
+    id: ticket.id,
+    subject: ticket.subject,
+    category: getCategoryLabel(ticket.type),
+    type: ticket.type,
+    status: ticket.status,
+    rawStatus: ticket.status,
+    created: new Date(ticket.createdAt).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+    updated: new Date(ticket.updatedAt).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    messages,
+    _raw: ticket,
+  };
+}
+
 function StatusBadge({ status }) {
-  const c = STATUS_CFG[status] || { color: "#94a3b8", bg: "#f1f5f9" };
+  const c = STATUS_CFG[status] || {
+    color: "#94a3b8",
+    bg: "#f1f5f9",
+    label: status,
+  };
   return (
     <span className={styles.badge} style={{ background: c.bg, color: c.color }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.color, display: "inline-block" }} />
-      {status}
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          background: c.color,
+          display: "inline-block",
+        }}
+      />
+      {c.label}
     </span>
   );
 }
-
-function PriorityBadge({ priority }) {
-  const cfg = { High: "#ef4444", Medium: "#f59e0b", Low: "#16a34a" };
-  return <span className={styles.priorityBadge} style={{ color: cfg[priority], background: cfg[priority] + "18" }}>{priority}</span>;
-}
-
-function FileAttachment({ att }) {
-  if (!att) return null;
+function AttachmentList({ attachments, onImageClick }) {
+  if (!attachments?.length) return null;
   return (
-    <div className={styles.attachment}>
-      {att.type === "image" ? <ImageIcon size={13} /> : <FileText size={13} />}
-      <span>{att.name}</span>
+    <div className={styles.attachmentList}>
+      {attachments.map((att) =>
+        att.isImage ? (
+          <div
+            key={att.url}
+            className={styles.attachmentImageLink}
+            onClick={() => onImageClick(att.url)}
+            style={{ cursor: "zoom-in" }}
+          >
+            <img
+              src={att.url}
+              alt={att.name}
+              className={styles.attachmentImage}
+            />
+          </div>
+        ) : (
+          <a
+            key={att.url}
+            href={att.url}
+            target="_blank"
+            rel="noreferrer"
+            className={styles.attachment}
+          >
+            <FileText size={13} />
+            <span>{att.name}</span>
+          </a>
+        ),
+      )}
     </div>
   );
 }
 
-/* ─── Create Ticket Modal ── */
+/* ─── Loading Spinner ─── */
+function LoadingSpinner() {
+  return (
+    <div
+      style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}
+    >
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          border: "3px solid var(--ivory-dark)",
+          borderTop: "3px solid var(--burgundy)",
+          borderRadius: "50%",
+          animation: "spin 0.8s linear infinite",
+        }}
+      />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+/* ─── Confirm Cancel Modal ─── */
+function ConfirmCancelModal({ onConfirm, onClose, loading }) {
+  return (
+    <div className={styles.backdrop} onClick={onClose}>
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <div className={styles.modalHead}>
+          <h2 className={styles.modalTitle}>Cancel Ticket</h2>
+          <button className={styles.modalClose} onClick={onClose}>
+            <X size={17} />
+          </button>
+        </div>
+        <div className={styles.modalBody}>
+          <p style={{ color: "var(--charcoal-muted)", fontSize: 14, margin: 0 }}>
+            Are you sure you want to cancel this ticket? This action cannot be undone.
+          </p>
+        </div>
+        <div className={styles.modalFoot}>
+          <button
+            className={`${styles.btn} ${styles.btnOutline}`}
+            onClick={onClose}
+            disabled={loading}
+          >
+            Keep Ticket
+          </button>
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={onConfirm}
+            disabled={loading}
+            style={{ background: "#dc2626", borderColor: "#dc2626" }}
+          >
+            {loading ? "Canceling…" : "Yes, Cancel It"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function CreateModal({ onClose, onSubmit }) {
-  const [form, setForm] = useState({ subject: "", category: "General Support", priority: "Medium", description: "", relatedOrder: "" });
+  const [form, setForm] = useState({
+    subject: "",
+    type: "GENERAL_SUPPORT",
+    description: "",
+    orderId: "",
+  });
   const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
   const fileRef = useRef(null);
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const sub = form.subject.trim();
+    const desc = form.description.trim();
+    
+    if (sub.length < 4 || sub.length > 100) {
+      return setError("Subject must be between 4 and 100 characters.");
+    }
+    if (desc.length < 5 || desc.length > 500) {
+      return setError("Description must be between 5 and 500 characters.");
+    }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit({ ...form, file });
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Failed to create ticket.";
+      setError(Array.isArray(msg) ? msg.join(", ") : msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className={styles.backdrop} onClick={onClose}>
-      <div className={styles.modal} onClick={e => e.stopPropagation()}>
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHead}>
           <h2 className={styles.modalTitle}>Create New Ticket</h2>
-          <button className={styles.modalClose} onClick={onClose}><X size={17} /></button>
+          <button className={styles.modalClose} onClick={onClose}>
+            <X size={17} />
+          </button>
         </div>
-        <form onSubmit={e => { e.preventDefault(); onSubmit({ ...form, file }); }}>
+        <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
             <div className={styles.formGroup}>
               <label className={styles.label}>Subject *</label>
-              <input className={styles.input} value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} required placeholder="Briefly describe your issue…" />
+              <input
+                className={styles.input}
+                value={form.subject}
+                onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                required
+                placeholder="Briefly describe your issue…"
+              />
             </div>
             <div className={styles.formRow}>
-              <div className={styles.formGroup}>
+              <div className={styles.formGroup} style={{ width: "100%" }}>
                 <label className={styles.label}>Category</label>
-                <select className={styles.select} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
-                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                <select
+                  className={styles.select}
+                  value={form.type}
+                  onChange={(e) => setForm({ ...form, type: e.target.value })}
+                >
+                  {TICKET_TYPES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
                 </select>
               </div>
+            </div>
+            {form.type === "ORDER_DISPUTE" && (
               <div className={styles.formGroup}>
-                <label className={styles.label}>Priority</label>
-                <select className={styles.select} value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
-                  <option>Low</option><option>Medium</option><option>High</option>
-                </select>
+                <label className={styles.label}>Related Order ID *</label>
+                <input
+                  className={styles.input}
+                  value={form.orderId}
+                  onChange={(e) =>
+                    setForm({ ...form, orderId: e.target.value })
+                  }
+                  required
+                  placeholder="e.g. 123e4567-e89b-12d3-a456-426614174000"
+                />
               </div>
-            </div>
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Related Order ID <span style={{ fontWeight: 400, color: "var(--charcoal-muted)" }}>(optional)</span></label>
-              <input className={styles.input} value={form.relatedOrder} onChange={e => setForm({ ...form, relatedOrder: e.target.value })} placeholder="e.g. #ORD-2841" />
-            </div>
+            )}
             <div className={styles.formGroup}>
               <label className={styles.label}>Description *</label>
-              <textarea className={styles.textarea} rows={5} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} required placeholder="Describe your issue in detail…" />
+              <textarea
+                className={styles.textarea}
+                rows={5}
+                value={form.description}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
+                required
+                placeholder="Describe your issue in detail…"
+              />
             </div>
             {/* Attach */}
             <div className={styles.formGroup}>
-              <label className={styles.label}>Attachment <span style={{ fontWeight: 400, color: "var(--charcoal-muted)" }}>(optional)</span></label>
-              <div className={styles.attachZone} onClick={() => fileRef.current?.click()}>
+              <label className={styles.label}>
+                Attachment{" "}
+                <span
+                  style={{ fontWeight: 400, color: "var(--charcoal-muted)" }}
+                >
+                  (optional)
+                </span>
+              </label>
+              <div
+                className={styles.attachZone}
+                onClick={() => fileRef.current?.click()}
+              >
                 <Paperclip size={20} style={{ color: "var(--burgundy)" }} />
                 <div>
-                  <p className={styles.attachTitle}>{file ? file.name : "Click to attach a file or image"}</p>
-                  <p className={styles.attachSub}>{file ? `${(file.size / 1024).toFixed(1)} KB` : "PNG, JPG, PDF — Max 10 MB"}</p>
+                  <p className={styles.attachTitle}>
+                    {file ? file.name : "Click to attach a file or image"}
+                  </p>
+                  <p className={styles.attachSub}>
+                    {file
+                      ? `${(file.size / 1024).toFixed(1)} KB`
+                      : "PNG, JPG, PDF — Max 10 MB"}
+                  </p>
                 </div>
-                {file && <button type="button" className={styles.attachRemove} onClick={e => { e.stopPropagation(); setFile(null); }}><X size={13} /></button>}
+                {file && (
+                  <button
+                    type="button"
+                    className={styles.attachRemove}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFile(null);
+                    }}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
-              <input ref={fileRef} type="file" style={{ display: "none" }} onChange={e => setFile(e.target.files[0] || null)} />
+              <input
+                ref={fileRef}
+                type="file"
+                style={{ display: "none" }}
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(e) => setFile(e.target.files[0] || null)}
+              />
+              {file && (
+                <div className={styles.attachmentPreview}>
+                  {file.type?.startsWith("image/") && previewUrl && (
+                    <img
+                      src={previewUrl}
+                      alt={file.name}
+                      className={styles.attachmentPreviewImage}
+                    />
+                  )}
+                  <div className={styles.attachmentPreviewInfo}>
+                    <span className={styles.attachmentPreviewName}>
+                      {file.name}
+                    </span>
+                    <span className={styles.attachmentPreviewMeta}>
+                      {(file.size / 1024).toFixed(1)} KB
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.attachmentPreviewRemove}
+                    onClick={() => setFile(null)}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
             </div>
-            {form.priority === "High" && (
-              <div className={styles.highCallout}><AlertTriangle size={15} /> High priority tickets are reviewed within 2 business hours.</div>
-            )}
+            {error && <p style={{ color: "#dc2626", fontSize: 12 }}>{error}</p>}
+            {form.priority === "HIGH" || form.priority === "URGENT" ? (
+              <div className={styles.highCallout}>
+                <AlertTriangle size={15} /> High priority tickets are reviewed
+                within 2 business hours.
+              </div>
+            ) : null}
           </div>
           <div className={styles.modalFoot}>
-            <button type="button" className={`${styles.btn} ${styles.btnOutline}`} onClick={onClose}>Cancel</button>
-            <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`}><Send size={14} /> Submit Ticket</button>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnOutline}`}
+              onClick={onClose}
+              disabled={submitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              disabled={submitting}
+            >
+              <Send size={14} /> {submitting ? "Submitting…" : "Submit Ticket"}
+            </button>
           </div>
         </form>
       </div>
@@ -153,63 +477,182 @@ function CreateModal({ onClose, onSubmit }) {
   );
 }
 
-/* ─── Ticket Detail (Chat) ── */
-function TicketDetail({ ticket, onBack, onReply, onClose }) {
+/* ─── Ticket Detail (Chat) ─── */
+function TicketDetail({ ticket, onBack, onReply, onCancel, onImageClick }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
-  const [confirmClose, setConfirmClose] = useState(false);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [ticket.messages]);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [ticket.messages]);
 
-  const handleSend = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
     if (!text.trim() && !file) return;
-    onReply(ticket.id, text, file ? { name: file.name, type: file.type.startsWith("image") ? "image" : "file" } : null);
-    setText(""); setFile(null);
+    setSending(true);
+    try {
+      await onReply(ticket.id, text, file);
+      setText("");
+      setFile(null);
+    } catch (err) {
+      console.error("Message send failed:", err);
+      // addToast or other UI feedback is handled inside onReply if it's an attachment issue.
+      // We just need to catch the error here so finally block runs properly.
+    } finally {
+      setSending(false);
+    }
   };
 
-  const isClosed = ticket.status === "Closed" || ticket.status === "Solved";
+  const isClosed =
+    ticket.status === "CLOSED" ||
+    ticket.status === "RESOLVED" ||
+    ticket.status === "CANCELED";
+  const canCancel = ["PENDING", "OPEN", "AWAITING_RESPONSE"].includes(
+    ticket.status,
+  );
 
   return (
     <div className={styles.detailShell}>
       <div className={styles.detailHeader}>
-        <button className={styles.backBtn} onClick={onBack}><ChevronLeft size={16} /> All Tickets</button>
+        <button className={styles.backBtn} onClick={onBack}>
+          <ChevronLeft size={16} /> All Tickets
+        </button>
         <div className={styles.detailTitleGroup}>
-          <span className={styles.detailId}>{ticket.id}</span>
+          <span className={styles.detailId}>{ticket.id.slice(0, 8)}…</span>
           <h2 className={styles.detailTitle}>{ticket.subject}</h2>
         </div>
         <div className={styles.detailBadges}>
-          <span className={styles.catTag}><Tag size={11} />{ticket.category}</span>
-          <PriorityBadge priority={ticket.priority} />
+          <span className={styles.catTag}>
+            <Tag size={11} />
+            {ticket.category}
+          </span>
           <StatusBadge status={ticket.status} />
         </div>
-        {!isClosed && (
-          <button className={`${styles.btn} ${styles.btnDanger} ${styles.btnSm}`} onClick={() => setConfirmClose(true)}>
-            <XCircle size={13} /> Close Ticket
-          </button>
+        {!isClosed && canCancel && (
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              className={`${styles.btn} ${styles.btnOutline} ${styles.btnSm}`}
+              onClick={() => setShowCancelModal(true)}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        {showCancelModal && (
+          <ConfirmCancelModal
+            loading={canceling}
+            onClose={() => setShowCancelModal(false)}
+            onConfirm={async () => {
+              setCanceling(true);
+              await onCancel(ticket.id);
+              setCanceling(false);
+              setShowCancelModal(false);
+            }}
+          />
         )}
       </div>
 
       <div className={styles.chatArea}>
-        <div className={styles.sysEvent}><span>Ticket created · {ticket.created}</span></div>
+        <div className={styles.sysEvent}>
+          <span>Ticket created · {ticket.created}</span>
+        </div>
         {ticket.messages.map((msg, i) => {
+          if (msg.isSystemMessage) {
+            return (
+              <div key={i} className={styles.sysEvent}>
+                <span>{msg.text}</span>
+              </div>
+            );
+          }
           const isMe = msg.from === "customer";
+          const avatarBg = isMe
+            ? "var(--burgundy, #7c3aed)"
+            : supportAvatarColor(msg.senderRole);
           return (
-            <div key={i} className={`${styles.msgRow} ${isMe ? styles.msgRight : styles.msgLeft}`}>
-              {!isMe && <div className={styles.msgAvatar} style={{ background: "#4f46e5" }}><Headphones size={14} /></div>}
-              <div className={`${styles.bubble} ${isMe ? styles.bubbleCustomer : styles.bubbleSupport}`}>
+            <div
+              key={i}
+              className={`${styles.msgRow} ${isMe ? styles.msgRight : styles.msgLeft}`}
+            >
+              {!isMe && (
+                <div
+                  className={styles.msgAvatar}
+                  style={{ background: avatarBg }}
+                >
+                  {msg.senderAvatar ? (
+                    <img
+                      src={msg.senderAvatar}
+                      alt={msg.senderName}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                  ) : (
+                    getInitials(msg.senderName)
+                  )}
+                </div>
+              )}
+              <div
+                className={`${styles.bubble} ${isMe ? styles.bubbleCustomer : styles.bubbleSupport}`}
+              >
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    marginBottom: 4,
+                    opacity: 0.75,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                  }}
+                >
+                  {isMe ? "You" : msg.senderName}
+                  {!isMe && (
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        padding: "1px 5px",
+                        borderRadius: 4,
+                        background: "rgba(0,0,0,0.08)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.03em",
+                      }}
+                    >
+                      {senderRoleLabel(msg.senderRole)}
+                    </span>
+                  )}
+                </div>
                 <p className={styles.bubbleText}>{msg.text}</p>
-                <FileAttachment att={msg.attachment} />
+                <AttachmentList attachments={msg.attachments} onImageClick={onImageClick} />
                 <span className={styles.bubbleTime}>{msg.time}</span>
               </div>
-              {isMe && <div className={styles.msgAvatar} style={{ background: "var(--burgundy)" }}><User size={14} /></div>}
+              {isMe && (
+                <div
+                  className={styles.msgAvatar}
+                  style={{ background: avatarBg }}
+                >
+                  <User size={14} />
+                </div>
+              )}
             </div>
           );
         })}
-        {ticket.status !== "Open" && (
-          <div className={styles.sysEvent}><span>Status changed to <strong>{ticket.status}</strong> · {ticket.updated}</span></div>
+        {ticket.status !== "OPEN" && (
+          <div className={styles.sysEvent}>
+            <span>
+              Status is <strong>{getStatusLabel(ticket.status)}</strong> ·{" "}
+              {ticket.updated}
+            </span>
+          </div>
         )}
         <div ref={bottomRef} />
       </div>
@@ -218,113 +661,400 @@ function TicketDetail({ ticket, onBack, onReply, onClose }) {
         <form className={styles.replyBox} onSubmit={handleSend}>
           {file && (
             <div className={styles.replyFileChip}>
-              <Paperclip size={12} /><span>{file.name}</span>
-              <button type="button" onClick={() => setFile(null)}><X size={11} /></button>
+              <Paperclip size={12} />
+              <span>{file.name}</span>
+              <button type="button" onClick={() => setFile(null)}>
+                <X size={11} />
+              </button>
             </div>
           )}
           <div className={styles.replyInputRow}>
-            <button type="button" className={styles.replyAttachBtn} onClick={() => fileRef.current?.click()} title="Attach file"><Paperclip size={17} /></button>
-            <input type="file" ref={fileRef} style={{ display: "none" }} onChange={e => setFile(e.target.files[0] || null)} />
+            <button
+              type="button"
+              className={styles.replyAttachBtn}
+              onClick={() => fileRef.current?.click()}
+              title="Attach file"
+            >
+              <Paperclip size={17} />
+            </button>
+            <input
+              type="file"
+              ref={fileRef}
+              style={{ display: "none" }}
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={(e) => setFile(e.target.files[0] || null)}
+            />
             <textarea
               className={styles.replyInput}
               rows={2}
               placeholder="Write a reply…"
               value={text}
-              onChange={e => setText(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e); } }}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend(e);
+                }
+              }}
             />
-            <button type="submit" className={styles.sendBtn} disabled={!text.trim() && !file}><Send size={16} /></button>
+            <button
+              type="submit"
+              className={styles.sendBtn}
+              disabled={(!text.trim() && !file) || sending}
+            >
+              <Send size={16} />
+            </button>
           </div>
-          <p className={styles.replyHint}>Press Enter to send · Shift+Enter for new line</p>
+          <p className={styles.replyHint}>
+            Press Enter to send · Shift+Enter for new line
+          </p>
         </form>
       ) : (
         <div className={styles.closedBanner}>
-          <CheckCircle2 size={16} /> This ticket is {ticket.status.toLowerCase()}.
-        </div>
-      )}
-
-      {confirmClose && (
-        <div className={styles.backdrop} onClick={() => setConfirmClose(false)}>
-          <div className={styles.modalSm} onClick={e => e.stopPropagation()}>
-            <div style={{ textAlign: "center", padding: "28px 24px" }}>
-              <XCircle size={36} style={{ color: "#ef4444" }} />
-              <h3 style={{ marginTop: 10, fontFamily: "var(--font-serif)" }}>Close Ticket?</h3>
-              <p style={{ color: "var(--charcoal-muted)", fontSize: 14, marginBottom: 20 }}>
-                Are you sure your issue is resolved? You can always open a new ticket if needed.
-              </p>
-              <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-                <button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => setConfirmClose(false)}>Cancel</button>
-                <button className={`${styles.btn} ${styles.btnDanger}`} onClick={() => { onClose(ticket.id); setConfirmClose(false); }}>
-                  <XCircle size={14} /> Close Ticket
-                </button>
-              </div>
-            </div>
-          </div>
+          <CheckCircle2 size={16} /> This ticket is{" "}
+          {getStatusLabel(ticket.status).toLowerCase()}.
         </div>
       )}
     </div>
   );
 }
 
-/* ─── Main page ── */
-let nextId = 5011;
-
+/* ─── Main page ─── */
 export default function CustomerTicketsPage() {
-  const [tickets, setTickets] = useState(SEED);
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState("list");
   const [selected, setSelected] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [sortDir, setSortDir] = useState("desc");
+  const [fullscreenImage, setFullscreenImage] = useState(null);
+
+  const [toasts, setToasts] = useState([]);
+  const addToast = (text, type = "success") => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, text, type }]);
+    setTimeout(
+      () => setToasts((prev) => prev.filter((t) => t.id !== id)),
+      3500,
+    );
+  };
+
+  /* ── Fetch tickets ── */
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchTickets() {
+      setLoading(true);
+      try {
+        const res = await apiClient.get("/customers/support/tickets", {
+          params: { limit: 50, page: 1 },
+        });
+        if (!cancelled) {
+          const raw = res.data?.data || res.data || [];
+          // filter out returns
+          const nonReturns = raw.filter((t) => t.type !== "RETURN_REQUEST");
+          setTickets(nonReturns.map(mapTicket));
+        }
+      } catch {
+        if (!cancelled) setTickets([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchTickets();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const refetchTickets = async () => {
+    try {
+      const res = await apiClient.get("/customers/support/tickets", {
+        params: { limit: 50, page: 1 },
+      });
+      const raw = res.data?.data || res.data || [];
+      const nonReturns = raw.filter((t) => t.type !== "RETURN_REQUEST");
+      setTickets(nonReturns.map(mapTicket));
+    } catch {
+      // silent
+    }
+  };
+
+  /* ── Create ticket ── */
+  const handleCreate = async (form) => {
+    const payload = {
+      type: form.type,
+      subject: form.subject,
+      description: form.description,
+      priority: form.priority,
+    };
+    if (form.orderId) payload.orderId = form.orderId;
+
+    const res = await apiClient.post("/customers/support/tickets", payload);
+
+    if (form.file) {
+      try {
+        const formData = new FormData();
+        formData.append("file", form.file);
+        const uploadRes = await multipartClient.post(
+          `/customers/support/tickets/${res.data.id}/messages/attachments`,
+          formData,
+        );
+        const attachmentUrl = uploadRes.data?.url || null;
+        if (attachmentUrl) {
+          await apiClient.post(
+            `/customers/support/tickets/${res.data.id}/messages`,
+            {
+              content: "Attachment",
+              attachments: [attachmentUrl],
+            },
+          );
+        }
+      } catch (err) {
+        addToast("Ticket created, but attachment failed (must be image < 5MB).", "error");
+        setShowCreate(false);
+        await refetchTickets();
+        const newTk = (
+          await apiClient.get(`/customers/support/tickets/${res.data.id}`)
+        ).data;
+        if (newTk) {
+          setSelected(mapTicket(newTk));
+          setView("detail");
+        }
+        return;
+      }
+    }
+
+    setShowCreate(false);
+    addToast("Ticket created successfully!");
+    await refetchTickets();
+    // find newly created ticket to open
+    const newTk = (
+      await apiClient.get(`/customers/support/tickets/${res.data.id}`)
+    ).data;
+    if (newTk) {
+      setSelected(mapTicket(newTk));
+      setView("detail");
+    }
+  };
+
+  /* ── Reply to ticket ── */
+  const handleReply = async (id, text, file) => {
+    let attachmentUrl = null;
+    if (file) {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadRes = await multipartClient.post(
+          `/customers/support/tickets/${id}/messages/attachments`,
+          formData,
+        );
+        attachmentUrl = uploadRes.data?.url || null;
+      } catch (err) {
+        addToast("Failed to upload attachment. It must be an image under 5MB.", "error");
+        throw err; // Stop reply process
+      }
+    }
+
+    const content = text?.trim() || "Attachment";
+    await apiClient.post(`/customers/support/tickets/${id}/messages`, {
+      content,
+      attachments: attachmentUrl ? [attachmentUrl] : undefined,
+    });
+
+    const res = await apiClient.get(`/customers/support/tickets/${id}`);
+    const updated = mapTicket(res.data);
+    setSelected(updated);
+    setTickets((prev) => prev.map((t) => (t.id === id ? updated : t)));
+  };
+
+  /* ── Cancel ticket ── */
+  const handleCancel = async (id) => {
+    try {
+      await apiClient.patch(`/customers/support/tickets/${id}/cancel`);
+      // Try to refetch the updated ticket; if it fails, still update local state
+      try {
+        const res = await apiClient.get(`/customers/support/tickets/${id}`);
+        const updated = mapTicket(res.data);
+        setSelected(updated);
+        setTickets((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      } catch {
+        // GET failed — update status optimistically so UI reflects the cancel
+        setTickets((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, status: "CANCELED" } : t))
+        );
+        setSelected((prev) =>
+          prev?.id === id ? { ...prev, status: "CANCELED" } : prev
+        );
+      }
+      addToast("Ticket canceled.");
+    } catch {
+      addToast("Failed to cancel ticket.", "error");
+    }
+  };
+
+  // Limit one active ticket constraint handling
+  // Wait, the prompt says: "Requirement: Implement one-active-ticket limit logic using status checks (!CLOSED_STATUSES). UX: 'New Ticket' button must be conditionally disabled when an open ticket exists."
+  const activeTickets = tickets.filter(
+    (t) =>
+      t.status !== "CLOSED" &&
+      t.status !== "RESOLVED" &&
+      t.status !== "CANCELED",
+  );
+  const hasActiveTicket = activeTickets.length > 0;
 
   const counts = {};
-  tickets.forEach(t => { counts[t.status] = (counts[t.status] || 0) + 1; });
+  tickets.forEach((t) => {
+    let stat = "Pending";
+    if (t.status === "RESOLVED") stat = "Resolved";
+    else if (t.status === "CLOSED") stat = "Closed";
+    else if (t.status === "CANCELED") stat = "Canceled";
+    else if (t.status === "IN_PROGRESS" || t.status === "AWAITING_RESPONSE" || t.status === "ESCALATED") {
+      stat = "In Progress";
+    } else {
+      stat = "Pending"; // PENDING or OPEN
+    }
+    counts[stat] = (counts[stat] || 0) + 1;
+  });
 
   const filtered = tickets
-    .filter(t => {
-      const ms = t.subject.toLowerCase().includes(search.toLowerCase()) || t.id.toLowerCase().includes(search.toLowerCase());
-      const mv = statusFilter === "All" || t.status === statusFilter;
+    .filter((t) => {
+      const ms =
+        t.subject.toLowerCase().includes(search.toLowerCase()) ||
+        t.id.toLowerCase().includes(search.toLowerCase());
+      
+      const st = t.status;
+      const mv =
+        statusFilter === "All" ||
+        (statusFilter === "Pending" && (st === "PENDING" || st === "OPEN")) ||
+        (statusFilter === "In Progress" && (st === "IN_PROGRESS" || st === "AWAITING_RESPONSE" || st === "ESCALATED")) ||
+        (statusFilter === "Resolved" && st === "RESOLVED") ||
+        (statusFilter === "Closed" && st === "CLOSED") ||
+        (statusFilter === "Canceled" && st === "CANCELED");
+      
       return ms && mv;
     })
-    .sort((a, b) => sortDir === "desc" ? (b.id > a.id ? 1 : -1) : (a.id > b.id ? 1 : -1));
+    .sort((a, b) =>
+      sortDir === "desc" ? (b.id > a.id ? 1 : -1) : a.id > b.id ? 1 : -1,
+    );
 
-  const openDetail = (ticket) => { setSelected(ticket); setView("detail"); };
-
-  const handleReply = (id, text, attachment) => {
-    const now = new Date();
-    const msg = { from: "customer", text, time: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), attachment };
-    const updated = tickets.map(t => t.id === id ? { ...t, messages: [...t.messages, msg], updated: "Just now" } : t);
-    setTickets(updated);
-    setSelected(updated.find(t => t.id === id));
-  };
-
-  const handleClose = (id) => {
-    const updated = tickets.map(t => t.id === id ? { ...t, status: "Closed", updated: "Just now" } : t);
-    setTickets(updated);
-    setSelected(updated.find(t => t.id === id));
-  };
-
-  const handleCreate = (form) => {
-    const newTicket = {
-      id: `TKT-${nextId++}`,
-      subject: form.subject, category: form.category,
-      priority: form.priority, status: "Open",
-      created: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      updated: "Just now",
-      messages: [{ from: "customer", text: form.description, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), attachment: form.file ? { name: form.file.name, type: form.file.type?.startsWith("image") ? "image" : "file" } : null }],
-    };
-    setTickets([newTicket, ...tickets]);
-    setShowCreate(false);
-    openDetail(newTicket);
+  const openDetail = async (ticket) => {
+    try {
+      const res = await apiClient.get(
+        `/customers/support/tickets/${ticket.id}`,
+      );
+      setSelected(mapTicket(res.data));
+      setView("detail");
+    } catch (err) {
+      addToast("Failed to load ticket details", "error");
+    }
   };
 
   if (view === "detail" && selected) {
     return (
       <div style={{ minHeight: "100vh", background: "var(--ivory)" }}>
         <Header />
+        {/* Fullscreen Image Modal */}
+        {fullscreenImage && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.9)",
+              zIndex: 10000,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "zoom-out",
+              padding: 40,
+              animation: "fadeIn 0.2s ease",
+            }}
+            onClick={() => setFullscreenImage(null)}
+          >
+            <button
+              style={{
+                position: "absolute",
+                top: 30,
+                right: 30,
+                background: "rgba(255,255,255,0.1)",
+                border: "none",
+                color: "white",
+                padding: 12,
+                borderRadius: "50%",
+                cursor: "pointer",
+                display: "flex",
+                backdropFilter: "blur(10px)",
+              }}
+              onClick={() => setFullscreenImage(null)}
+            >
+              <X size={24} />
+            </button>
+            <img
+              src={fullscreenImage}
+              alt="Fullscreen Preview"
+              style={{
+                maxWidth: "100%",
+                maxHeight: "100%",
+                objectFit: "contain",
+                borderRadius: 8,
+                boxShadow: "0 20px 80px rgba(0,0,0,0.5)",
+                animation: "zoomIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <style>{`
+              @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+            `}</style>
+          </div>
+        )}
+        {/* Toasts */}
+        <div
+          style={{
+            position: "fixed",
+            top: 80,
+            right: 20,
+            zIndex: 9999,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              style={{
+                background: toast.type === "error" ? "#fee2e2" : "#dcfce7",
+                border: `1px solid ${toast.type === "error" ? "#fca5a5" : "#86efac"}`,
+                color: toast.type === "error" ? "#dc2626" : "#15803d",
+                padding: "12px 18px",
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
+                animation: "fadeIn 0.2s ease",
+              }}
+            >
+              {toast.type === "error" ? (
+                <AlertTriangle size={15} />
+              ) : (
+                <CheckCircle2 size={15} />
+              )}{" "}
+              {toast.text}
+            </div>
+          ))}
+        </div>
         <div className={styles.pageContent}>
-          <TicketDetail ticket={selected} onBack={() => setView("list")} onReply={handleReply} onClose={handleClose} />
+          <TicketDetail
+            ticket={selected}
+            onBack={() => setView("list")}
+            onReply={handleReply}
+            onCancel={handleCancel}
+            onImageClick={setFullscreenImage}
+          />
         </div>
         <Footer />
       </div>
@@ -332,32 +1062,111 @@ export default function CustomerTicketsPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--ivory)", display: "flex", flexDirection: "column" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "var(--ivory)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <Header />
+      {/* Toasts */}
+      <div
+        style={{
+          position: "fixed",
+          top: 80,
+          right: 20,
+          zIndex: 9999,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}
+      >
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            style={{
+              background: toast.type === "error" ? "#fee2e2" : "#dcfce7",
+              border: `1px solid ${toast.type === "error" ? "#fca5a5" : "#86efac"}`,
+              color: toast.type === "error" ? "#dc2626" : "#15803d",
+              padding: "12px 18px",
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
+              animation: "fadeIn 0.2s ease",
+            }}
+          >
+            {toast.type === "error" ? (
+              <AlertTriangle size={15} />
+            ) : (
+              <CheckCircle2 size={15} />
+            )}{" "}
+            {toast.text}
+          </div>
+        ))}
+      </div>
+
       <div className={styles.pageContent} style={{ flex: 1 }}>
         <div className={styles.pageHead}>
           <div>
             <h1 className={styles.pageTitle}>My Support Tickets</h1>
-            <p className={styles.pageSubtitle}>Track and manage all your support requests with AINAI.</p>
+            <p className={styles.pageSubtitle}>
+              Track and manage all your support requests with AINAI.
+            </p>
           </div>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setShowCreate(true)}>
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={() => setShowCreate(true)}
+            disabled={hasActiveTicket}
+            title={hasActiveTicket ? "You already have an active ticket" : ""}
+            style={
+              hasActiveTicket ? { opacity: 0.6, cursor: "not-allowed" } : {}
+            }
+          >
             <Plus size={15} /> New Ticket
           </button>
         </div>
+        {hasActiveTicket && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: 12,
+              background: "#eff6ff",
+              color: "#1d4ed8",
+              borderRadius: 8,
+              fontSize: 13,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <AlertTriangle size={16} /> You currently have an open support
+            ticket. Please wait for it to be resolved or close it before opening
+            a new one.
+          </div>
+        )}
 
         {/* Summary cards */}
         <div className={styles.summaryRow}>
           {[
-            { label: "Open", color: "#ef4444", bg: "#fee2e2" },
+            { label: "Pending", color: "#64748b", bg: "#f1f5f9" },
             { label: "In Progress", color: "#f59e0b", bg: "#fef3c7" },
-            { label: "Solved", color: "#16a34a", bg: "#dcfce7" },
+            { label: "Resolved", color: "#16a34a", bg: "#dcfce7" },
             { label: "Closed", color: "#94a3b8", bg: "#f1f5f9" },
+            { label: "Canceled", color: "#94a3b8", bg: "#f1f5f9" },
           ].map(({ label, color, bg }) => (
             <button
               key={label}
               className={`${styles.summaryCard} ${statusFilter === label ? styles.sumActive : ""}`}
               style={{ "--sum-color": color, "--sum-bg": bg }}
-              onClick={() => setStatusFilter(p => p === label ? "All" : label)}
+              onClick={() =>
+                setStatusFilter((p) => (p === label ? "All" : label))
+              }
             >
               <span className={styles.sumCount}>{counts[label] || 0}</span>
               <span className={styles.sumLabel}>{label}</span>
@@ -369,56 +1178,101 @@ export default function CustomerTicketsPage() {
         <div className={styles.toolbar}>
           <div className={styles.searchBox}>
             <Search size={14} className={styles.searchIcon} />
-            <input className={styles.searchInput} placeholder="Search tickets by subject or ID…" value={search} onChange={e => setSearch(e.target.value)} />
+            <input
+              className={styles.searchInput}
+              placeholder="Search tickets by subject or ID…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
-          <select className={styles.filterSelect} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <select
+            className={styles.filterSelect}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
             <option value="All">All Status</option>
-            {STATUSES.map(s => <option key={s}>{s}</option>)}
+            {[
+              "Open",
+              "In Progress",
+              "Waiting for Customer",
+              "Escalated to Admin",
+              "Solved",
+              "Closed",
+              "Canceled",
+            ].map((s) => (
+              <option key={s}>{s}</option>
+            ))}
           </select>
-          <button className={`${styles.btn} ${styles.btnOutline} ${styles.btnSm}`} onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")}>
+          <button
+            className={`${styles.btn} ${styles.btnOutline} ${styles.btnSm}`}
+            onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
+          >
             <ArrowUpDown size={13} /> {sortDir === "desc" ? "Newest" : "Oldest"}
           </button>
           <span className={styles.pageInfo}>{filtered.length} tickets</span>
         </div>
 
         {/* Ticket list */}
-        {filtered.length === 0 ? (
+        {loading ? (
+          <LoadingSpinner />
+        ) : filtered.length === 0 ? (
           <div className={styles.emptyState}>
-            <MessageSquare size={36} style={{ color: "var(--charcoal-muted)" }} />
+            <MessageSquare
+              size={36}
+              style={{ color: "var(--charcoal-muted)" }}
+            />
             <h3>No tickets found</h3>
-            <p>You haven't raised any support tickets yet. We're here to help!</p>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setShowCreate(true)}>
+            <p>
+              You haven't raised any support tickets yet. We're here to help!
+            </p>
+            <button
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={() => setShowCreate(true)}
+              disabled={hasActiveTicket}
+            >
               <Plus size={14} /> Create Your First Ticket
             </button>
           </div>
         ) : (
           <div className={styles.ticketList}>
-            {filtered.map(tk => (
+            {filtered.map((tk) => (
               <article
                 key={tk.id}
-                className={`${styles.ticketCard} ${tk.priority === "High" && tk.status === "Open" ? styles.cardHighlight : ""}`}
+                className={styles.ticketCard}
                 onClick={() => openDetail(tk)}
               >
-                {tk.priority === "High" && tk.status === "Open" && (
-                  <div className={styles.urgentStrip}><AlertTriangle size={11} /> Urgent</div>
-                )}
                 <div className={styles.cardMain}>
                   <div className={styles.cardLeft}>
                     <div className={styles.cardTopRow}>
-                      <span className={styles.ticketId}>{tk.id}</span>
-                      <PriorityBadge priority={tk.priority} />
-                      <span className={styles.catTag}><Tag size={10} />{tk.category}</span>
+                      <span className={styles.ticketId}>
+                        {tk.id.slice(0, 8)}…
+                      </span>
+                      <span className={styles.catTag}>
+                        <Tag size={10} />
+                        {tk.category}
+                      </span>
                     </div>
                     <h3 className={styles.ticketSubject}>{tk.subject}</h3>
                     <div className={styles.ticketMeta}>
-                      <span><Clock size={11} /> Created {tk.created}</span>
-                      <span><MessageSquare size={11} /> {tk.messages.length} message{tk.messages.length !== 1 ? "s" : ""}</span>
+                      <span>
+                        <Clock size={11} /> Created {tk.created}
+                      </span>
+                      <span>
+                        <MessageSquare size={11} /> {tk.messages.length} message
+                        {tk.messages.length !== 1 ? "s" : ""}
+                      </span>
                       <span>Updated {tk.updated}</span>
                     </div>
                   </div>
                   <div className={styles.cardRight}>
                     <StatusBadge status={tk.status} />
-                    <button className={styles.viewBtn} onClick={e => { e.stopPropagation(); openDetail(tk); }}>
+                    <button
+                      className={styles.viewBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDetail(tk);
+                      }}
+                    >
                       View <ChevronRight size={13} />
                     </button>
                   </div>
@@ -429,7 +1283,12 @@ export default function CustomerTicketsPage() {
         )}
       </div>
 
-      {showCreate && <CreateModal onClose={() => setShowCreate(false)} onSubmit={handleCreate} />}
+      {showCreate && (
+        <CreateModal
+          onClose={() => setShowCreate(false)}
+          onSubmit={handleCreate}
+        />
+      )}
       <Footer />
     </div>
   );

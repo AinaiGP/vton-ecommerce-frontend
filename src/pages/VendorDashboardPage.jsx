@@ -1,72 +1,80 @@
-import { useState, useEffect } from "react";
-import { Line, Bar } from "react-chartjs-2";
-import {
-  Chart as ChartJS, CategoryScale, LinearScale, PointElement,
-  LineElement, BarElement, Tooltip, Legend, Filler
-} from "chart.js";
-import { Package, ShoppingCart, DollarSign, Clock, ArrowUpRight, ArrowRight, Zap } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Package, ArrowRight, ArrowUpRight, Zap, DollarSign, Clock, ShoppingBag, CheckCircle2, AlertCircle } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import VendorLayout from "../components/vendor/VendorLayout";
 import p from "../styles/VendorPage.module.css";
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip, Legend, Filler);
-
-const MONTHS = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"];
-const SALES = [4200, 5800, 7200, 6400, 8100, 9500, 11200];
-const ORDERS_DATA = [18, 24, 31, 26, 39, 44, 52];
-
-const STATS = [
-  { label: "Total Revenue", value: "EGP 52,400", change: "+18.2%", up: true, icon: DollarSign, color: "#7c3aed", bg: "#f5f3ff" },
-  { label: "Total Orders", value: "234", change: "+12.5%", up: true, icon: ShoppingCart, color: "#0891b2", bg: "#ecfeff" },
-  { label: "Active Products", value: "48", change: "+3", up: true, icon: Package, color: "#16a34a", bg: "#dcfce7" },
-  { label: "Pending Orders", value: "7", change: "+2", up: false, icon: Clock, color: "#dc2626", bg: "#fee2e2" },
-];
-
-const RECENT_ORDERS = [
-  { id: "#ORD-2841", customer: "Sara Al-Rashid", product: "Silk Evening Gown", amount: "EGP 389", status: "Processing" },
-  { id: "#ORD-2840", customer: "Layla Hassan", product: "Cashmere Wrap Dress", amount: "EGP 275", status: "Shipped" },
-  { id: "#ORD-2839", customer: "Nour Khalil", product: "Embroidered Kaftan", amount: "EGP 450", status: "Delivered" },
-  { id: "#ORD-2838", customer: "Amira Fayed", product: "Linen Palazzo Set", amount: "EGP 195", status: "Pending" },
-  { id: "#ORD-2837", customer: "Dina Mansour", product: "Beaded Clutch Bag", amount: "EGP 120", status: "Delivered" },
-];
+import apiClient from "../utils/apiClient";
+import { formatPrice } from "../utils/formatPrice";
 
 const STATUS_BADGE = {
-  Pending: p.badgePending, Processing: p.badgeProcessing,
-  Shipped: p.badgeShipped, Delivered: p.badgeDelivered, Cancelled: p.badgeCancelled,
-};
-
-function getInitials(name) { return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2); }
-
-const chartOpts = {
-  responsive: true, maintainAspectRatio: false,
-  plugins: { legend: { display: false }, tooltip: { mode: "index", intersect: false } },
-  scales: {
-    x: { grid: { display: false }, border: { display: false }, ticks: { color: "#9ca3af", font: { size: 11 } } },
-    y: { grid: { color: "rgba(0,0,0,0.04)" }, border: { display: false }, ticks: { color: "#9ca3af", font: { size: 11 } } },
-  },
+  pending: p.badgePending,
+  processing: p.badgeProcessing,
+  shipped: p.badgeShipped,
+  delivered: p.badgeDelivered,
+  canceled: p.badgeCancelled,
 };
 
 export default function VendorDashboardPage() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 800); return () => clearTimeout(t); }, []);
+  const [stats, setStats] = useState(null);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [lowStock, setLowStock] = useState([]);
 
-  const lineData = {
-    labels: MONTHS,
-    datasets: [{
-      label: "Revenue", data: SALES,
-      borderColor: "#8b4852", backgroundColor: "rgba(139,72,82,0.08)",
-      borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: "#8b4852",
-      fill: true, tension: 0.45,
-    }],
-  };
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const profileRes = await apiClient.get("/vendors/profile");
+        const threshold = profileRes.data?.lowStockThreshold || 10;
 
-  const barData = {
-    labels: MONTHS,
-    datasets: [{
-      label: "Orders", data: ORDERS_DATA,
-      backgroundColor: "rgba(212,175,122,0.8)", borderRadius: 6, borderSkipped: false,
-    }],
-  };
+        const [statsRes, ordersRes, stockRes] = await Promise.all([
+          apiClient.get("/vendors/orders/stats"),
+          apiClient.get("/vendors/orders", { params: { page: 1, limit: 5 } }),
+          apiClient.get("/inventory", { params: { isLowStock: true, limit: 3, threshold } }),
+        ]);
+
+        setStats(statsRes.data);
+        setRecentOrders(ordersRes.data?.data || []);
+        setLowStock(stockRes.data?.data || []);
+      } catch (err) {
+        console.error("Failed to fetch dashboard data", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  const kpis = [
+    {
+      label: "Net Revenue",
+      value: formatPrice(stats?.netRevenue ?? stats?.totalRevenue ?? 0),
+      icon: DollarSign,
+      color: "#8b4852",
+      bg: "rgba(139,72,82,0.1)",
+    },
+    {
+      label: "Pending / Processing",
+      value: (stats?.pending || 0) + (stats?.processing || 0),
+      icon: Clock,
+      color: "#f59e0b",
+      bg: "rgba(245,158,11,0.1)",
+    },
+    {
+      label: "Shipped Items",
+      value: stats?.shipped || 0,
+      icon: ShoppingBag,
+      color: "#8b5cf6",
+      bg: "rgba(139,92,246,0.1)",
+    },
+    {
+      label: "Completed",
+      value: stats?.delivered || 0,
+      icon: CheckCircle2,
+      color: "#16a34a",
+      bg: "rgba(22,163,74,0.1)",
+    },
+  ];
 
   const addBtn = (
     <Link to="/vendor/products" className={`${p.btn} ${p.btnPrimary}`}>
@@ -75,105 +83,143 @@ export default function VendorDashboardPage() {
   );
 
   return (
-    <VendorLayout pageTitle="Dashboard" pageSubtitle="Welcome back! Here's your store overview." headerAction={addBtn}>
+    <VendorLayout
+      pageTitle="Dashboard"
+      pageSubtitle="Welcome back! Here's your store overview."
+      headerAction={addBtn}
+    >
       {/* KPI Cards */}
-      {loading ? (
-        <div className={p.statsGrid}>
-          {[1,2,3,4].map(i => <span key={i} className={`${p.skeleton} ${p.skeletonStat}`} />)}
-        </div>
-      ) : (
-        <div className={p.statsGrid}>
-          {STATS.map((s) => {
-            const Icon = s.icon;
+      <div className={p.statsGrid}>
+        {loading ? (
+          [1, 2, 3, 4].map((i) => (
+            <span key={i} className={`${p.skeleton} ${p.skeletonStat}`} />
+          ))
+        ) : (
+          kpis.map((kpi) => {
+            const Icon = kpi.icon;
             return (
-              <div key={s.label} className={p.statCard} style={{ "--stat-color": s.color, "--stat-bg": s.bg }}>
+              <div
+                key={kpi.label}
+                className={p.statCard}
+                style={{ "--stat-color": kpi.color, "--stat-bg": kpi.bg }}
+              >
                 <div className={p.statTop}>
                   <div>
-                    <p className={p.statLabel}>{s.label}</p>
-                    <p className={p.statValue}>{s.value}</p>
+                    <p className={p.statLabel}>{kpi.label}</p>
+                    <p className={p.statValue}>{kpi.value}</p>
                   </div>
-                  <div className={p.statIcon}><Icon size={20} /></div>
-                </div>
-                <div className={p.statFoot}>
-                  <span className={`${p.statChange} ${s.up ? p.up : p.down}`}>
-                    <ArrowUpRight size={12} />{s.change}
-                  </span>
-                  <span className={p.statMeta}>vs last month</span>
+                  <div className={p.statIcon}>
+                    <Icon size={20} />
+                  </div>
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
 
-      {/* Charts */}
-      <div className={p.chartsGrid2}>
-        <div className={p.chartCard}>
-          <div className={p.chartHead}>
-            <div>
-              <h3 className={p.chartTitle}>Revenue Trend</h3>
-              <p className={p.chartSub}>Last 7 months · EGP</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24, marginTop: 24 }}>
+        {/* Recent Orders */}
+        <div className={p.tableCard} style={{ margin: 0 }}>
+          <div className={p.chartHead} style={{ padding: "16px 20px" }}>
+            <h3 className={p.chartTitle}>Recent Orders</h3>
+            <Link
+              to="/vendor/orders"
+              className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}
+            >
+              View All <ArrowRight size={13} />
+            </Link>
+          </div>
+          <div className={p.tableWrap}>
+            <table className={p.table}>
+              <thead>
+                <tr>
+                  <th>Order #</th>
+                  <th>Customer</th>
+                  <th>Items</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="5" className={p.skeleton} style={{ height: 40 }}></td></tr>
+                ) : recentOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan="5">
+                      <div className={p.emptyState} style={{ padding: 40 }}>
+                        <p className={p.emptyText}>No orders yet.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  recentOrders.map((ord) => (
+                    <tr 
+                      key={ord.id}
+                      onClick={() => navigate('/vendor/orders', { state: { openOrderId: ord.id } })}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>
+                        #{ord.orderNumber}
+                      </td>
+                      <td>{ord.shippingName || "Guest"}</td>
+                      <td>{ord.itemCount} items</td>
+                      <td style={{ fontWeight: 600 }}>{formatPrice(ord.vendorSubtotal)}</td>
+                      <td>
+                        <span className={`${p.badge} ${STATUS_BADGE[(ord.displayFulfillmentStatus || ord.status || "pending").toLowerCase()] || p.badgePending}`}>
+                          <span className={p.badgeDot} />
+                          {ord.displayFulfillmentStatus || ord.status || "pending"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Alerts & Tips */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Low Stock Alerts */}
+          <div className={p.chartCard} style={{ padding: 20, margin: 0 }}>
+            <h3 className={p.chartTitle} style={{ marginBottom: 12, fontSize: 14 }}>
+              Low Stock Alerts
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {loading ? (
+                <div className={p.skeleton} style={{ height: 60 }}></div>
+              ) : lowStock.length === 0 ? (
+                <p style={{ fontSize: 12, color: "var(--vdr-text-muted)" }}>All stock levels healthy.</p>
+              ) : (
+                lowStock.map(item => (
+                  <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, background: "#fffaf0", border: "1px solid #feebc8", borderRadius: 8 }}>
+                    <div style={{ width: 32, height: 32, background: "#fbd38d", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "#975a16" }}>
+                      <AlertCircle size={16} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 12, fontWeight: 700, margin: 0 }}>{item.product?.name}</p>
+                      <p style={{ fontSize: 11, color: "#975a16", margin: 0 }}>Only {item.availableQuantity} left</p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-          <div className={p.chartBody} style={{ height: 220 }}>
-            <Line data={lineData} options={chartOpts} />
-          </div>
-        </div>
-        <div className={p.chartCard}>
-          <div className={p.chartHead}>
-            <h3 className={p.chartTitle}>Monthly Orders</h3>
-          </div>
-          <div className={p.chartBody} style={{ height: 220 }}>
-            <Bar data={barData} options={chartOpts} />
-          </div>
-        </div>
-      </div>
 
-      {/* Recent Orders */}
-      <div className={p.chartCard}>
-        <div className={p.chartHead}>
-          <h3 className={p.chartTitle}>Recent Orders</h3>
-          <Link to="/vendor/orders" className={`${p.btn} ${p.btnOutline} ${p.btnSm}`}>
-            View All <ArrowRight size={13} />
-          </Link>
-        </div>
-        <div className={p.tableWrap}>
-          <table className={p.table}>
-            <thead>
-              <tr>
-                <th>Order ID</th>
-                <th>Customer</th>
-                <th>Product</th>
-                <th>Amount</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {RECENT_ORDERS.map((o) => (
-                <tr key={o.id}>
-                  <td style={{ fontWeight: 700, color: "var(--vdr-accent)" }}>{o.id}</td>
-                  <td>
-                    <div className={p.productCell}>
-                      <div className={p.avatar}>{getInitials(o.customer)}</div>
-                      <span style={{ fontWeight: 500 }}>{o.customer}</span>
-                    </div>
-                  </td>
-                  <td style={{ color: "var(--vdr-text-muted)" }}>{o.product}</td>
-                  <td style={{ fontWeight: 700 }}>{o.amount}</td>
-                  <td><span className={`${p.badge} ${STATUS_BADGE[o.status]}`}><span className={p.badgeDot} />{o.status}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* VTON tip */}
-      <div className={p.insightCallout}>
-        <div className={p.insightCalloutIcon}><Zap size={20} /></div>
-        <div>
-          <p className={p.insightCalloutTitle}>💡 Boost Sales with Virtual Try-On</p>
-          <p className={p.insightCalloutText}>Products with VTON enabled convert 3.2× more than standard listings. Enable try-on for your top products in the Products page.</p>
+          <div className={p.insightCallout} style={{ margin: 0, padding: 24, background: "linear-gradient(135deg, var(--vdr-accent), #a78bfa)", color: "white" }}>
+            <div className={p.insightCalloutIcon} style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
+              <Zap size={20} />
+            </div>
+            <div>
+              <p className={p.insightCalloutTitle} style={{ color: "white" }}>
+                Sales Tip
+              </p>
+              <p className={p.insightCalloutText} style={{ color: "white", opacity: 0.9 }}>
+                Optimize your product titles with relevant keywords to increase search visibility by up to 40%.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </VendorLayout>
